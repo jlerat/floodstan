@@ -1,0 +1,64 @@
+// ------- Copula functions -----------------------------
+// 1=Gumbel, 2=Clayton, 3=Gaussian
+
+
+real copula_lcdf(matrix uv, int copula, real rho){
+    int N = rows(uv);
+    if(copula==1) {
+        real m = rho+1;
+        vector[N] logu = log(uv[:, 1]);
+        vector[N] logv = log(uv[:, 2]);
+        vector[N] a = pow(logu, m)+pow(logv, m);
+        return sum(-pow(a, 1/m));
+    }
+    else if (copula==2) {
+        real theta = rho-1;
+        vector[N] powu = pow(u, -theta);
+        vector[N] powv = pow(v, -theta);
+        return sum(-log(powu+powv-1)/theta);
+    }
+    else if (copula==3) {
+   }
+}
+
+real copula_lpdf(matrix uv, int copula, real rho){
+    int N = rows(uv);
+    if(copula==1) {
+        real m = rho+1;
+        vector[N] logu = log(uv[:, 1]);
+        vector[N] logv = log(uv[:, 2]);
+        vector[N] a = pow(logu, m)+pow(logv, m);
+        // CHECK THAT!!
+        return sum(-pow(a, 1/m)
+                        -m*(logu+logv)
+                        +(1/m-2)*log(a)
+                        +log(m-1+pow(a, 1/m))
+                    );
+    }
+    else if (copula==2) {
+    }
+    else if (copula==3) {
+        matrix[N, 2] q;
+        q[:, 1] = inv_Phi(uv[:, 1]);
+        q[:, 2] = inv_Phi(uv[:, 2]);
+        vector[N] mu = zeros_vector(N);
+        matrix[N,N] Sigma = identify_matrix(N);
+        return multi_normal_lpdf(q | mu, Sigma);
+    }
+}
+
+real copula_lpdf_ucensored(real ucensor, vector v, int copula, real rho){
+    if(copula==1) {
+        int N=rows(v);
+        vector[N] a = pow(log(ucensor), m)+pow(log(v), m);
+        return sum(-pow(a, 1/m)
+                    +(1/m-1)*log(a)
+                    -m*v
+                );
+    }
+    else if (copula==2) {
+    }
+    else if (copula==3) {
+    }
+}
+
