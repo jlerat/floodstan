@@ -1,11 +1,35 @@
+
+// ------- Gaussian copula functions -----------------------------
+
+// see  Zvi Drezner & G. O. Wesolowsky (1990) On the computation of the
+// bivariate normal integral, 
+// Journal of Statistical Computation and Simulation, 35:1-2, 101-107, DOI: 10.1080/00949659008811236
+// https://www.tandfonline.com/doi/pdf/10.1080/00949659008811236?needAccess=true
+// 
+//FUNCTION BV(H 1 ,H2,R) 
+//DIMENSION X(5),W(5) 
+//DATA X/.04691008,.23076534,.5,.76923466,.95308992/ 
+//DATA W/.O18854042,.038088059,.0452707394,.038088059,.018854042/ 
+//H12 =(Hl*Hl+ H2*H2)/2. 
+//H3 = H1 *H2 
+//BV = 0. 
+//DO 1 I= 1,5 
+//RR = R*X(I) 
+//RR2= 1.-RR*RR 
+//1 BV = BV + W(I)*EXP((RR*H3 - H12)/RR2)/SQRT(RR2) 
+//BV = BV*R + GAUSS(H 1)*GAUSS(H2) 
+//RETURN 
+//END
+
+
 // ------- Copula functions -----------------------------
 // 1=Gumbel, 2=Clayton, 3=Gaussian
 
-
 real copula_lcdf(matrix uv, int copula, real rho){
     int N = rows(uv);
+
     if(copula==1) {
-        real m = rho+1;
+        real m = 1/(1-rho);
         vector[N] logu = log(uv[:, 1]);
         vector[N] logv = log(uv[:, 2]);
         vector[N] a = pow(logu, m)+pow(logv, m);
@@ -23,6 +47,7 @@ real copula_lcdf(matrix uv, int copula, real rho){
 
 real copula_lpdf(matrix uv, int copula, real rho){
     int N = rows(uv);
+
     if(copula==1) {
         real m = rho+1;
         vector[N] logu = log(uv[:, 1]);
@@ -41,13 +66,15 @@ real copula_lpdf(matrix uv, int copula, real rho){
         matrix[N, 2] q;
         q[:, 1] = inv_Phi(uv[:, 1]);
         q[:, 2] = inv_Phi(uv[:, 2]);
-        vector[N] mu = zeros_vector(N);
-        matrix[N,N] Sigma = identify_matrix(N);
+        vector[2] mu = zeros_vector(2);
+        matrix[2, 2] Sigma = [[1, rho], [rho, 1]];
         return multi_normal_lpdf(q | mu, Sigma);
     }
 }
 
 real copula_lpdf_ucensored(real ucensor, vector v, int copula, real rho){
+    int N = rows(v);
+
     if(copula==1) {
         int N=rows(v);
         vector[N] a = pow(log(ucensor), m)+pow(log(v), m);
@@ -59,6 +86,9 @@ real copula_lpdf_ucensored(real ucensor, vector v, int copula, real rho){
     else if (copula==2) {
     }
     else if (copula==3) {
+        real qcensor = inv_Phi(ucensor);
+        vector[N] q = inv_Phi(v);
+        return Phi((q-rho*qcensor)/sqrt(1-rho*rho));
     }
 }
 

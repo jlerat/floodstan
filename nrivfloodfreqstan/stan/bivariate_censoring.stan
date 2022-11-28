@@ -65,8 +65,8 @@ data {
   real<lower=shape_lower> shape_upper;
 
   vector[2] rho_prior; 
-  real<lower=0> rho_lower;
-  real<lower=rho_lower> rho_upper;
+  real<lower=1e-3> rho_lower;
+  real<lower=rho_lower, upper=1-1e-3> rho_upper;
 
   // Censoring thresholds 
   real<lower=0> ycensor;
