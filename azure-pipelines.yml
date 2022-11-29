@@ -46,7 +46,7 @@ steps:
 - task: Cache@2
   displayName: Use cached Anaconda environment
   inputs:
-    key: conda | $(BUILD_DIR)/nrivfloodfreq/env_nriv_v2.yml
+    key: conda | $(BUILD_DIR)/nrivfloodfreqstan/env_nriv_v2.yml
     path: $(CONDA_HOME)
     cacheHitVar: CONDA_CACHE_RESTORED
 
