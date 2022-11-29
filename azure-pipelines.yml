@@ -1,0 +1,100 @@
+# Pipeline to create ananconda environment and run my tests
+
+resources:
+    repositories:
+
+    - repository: hydrodiy
+      type: git
+      name: hydrodiy/hydrodiy
+      ref: refs/heads/master
+      trigger:
+        branches:
+            include:
+            - master
+        paths:
+            exclude:
+            - azure-pipelines.yml
+            - env_nriv_v2.yml
+
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+strategy:
+  matrix:
+    Python38:
+      python.version: '3.8'
+
+variables:
+  CONDA_ENV_NAME: env_nriv_v2
+  CONDA_HOME: /usr/share/miniconda/envs/$(CONDA_ENV_NAME)/
+  BUILD_DIR: $(System.DefaultWorkingDirectory)
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '$(python.version)'
+  displayName: 'Use Python $(python.version)'
+
+- checkout: self
+- checkout: hydrodiy
+- checkout: hyzarr
+- checkout: nrivdata
+
+- bash: echo "##vso[task.prependpath]$CONDA/bin"
+  displayName: Add conda to PATH
+
+- task: Cache@2
+  displayName: Use cached Anaconda environment
+  inputs:
+    key: conda | $(BUILD_DIR)/nrivfloodfreq/env_nriv_v2.yml
+    path: $(CONDA_HOME)
+    cacheHitVar: CONDA_CACHE_RESTORED
+
+- bash: conda env create --file $(BUILD_DIR)/nrivfloodfreqstan/env_nriv_v2.yml
+  displayName: Create Anaconda environment (if not restored from cache)
+  condition: eq(variables.CONDA_CACHE_RESTORED, 'false')
+
+- script: |
+    source activate $(CONDA_ENV_NAME)
+    cd $(BUILD_DIR)/hydrodiy
+    python setup.py develop
+  displayName: hydrodiy_install
+
+- script: |
+    source activate $(CONDA_ENV_NAME)
+    cd $(BUILD_DIR)/nrivfloodfreqstan
+    python setup.py develop
+  displayName: package_install
+
+- script: |
+    source activate $(CONDA_ENV_NAME)
+    cd $(BUILD_DIR)/nrivfloodfreqstan
+    pytest --junitxml=junit/test-results.xml --cov=nrivfloodfreqstan --cov-config=.coveragerc --cov-report=xml 
+  displayName: test
+
+- task: CopyFiles@2
+  inputs:
+    sourceFolder: '$(BUILD_DIR)/nrivfloodfreqstan/tests'
+    contents: '*.log'
+    targetFolder: '$(Build.ArtifactStagingDirectory)'
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: '$(Build.ArtifactStagingDirectory)'
+    artifactName: stan_outputs
+
+- task: PublishTestResults@2
+  condition: succeededOrFailed()
+  inputs:
+    testResultsFiles: '**/test-*.xml'
+    testRunTitle: 'Publish test results for Python $(python.version)'
+
+- task: PublishCodeCoverageResults@1
+  displayName: 'Publish Cobertura Coverage Report'
+  inputs:
+    codeCoverageTool: Cobertura
+    summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/coverage.xml'
+    reportDirectory: '$(System.DefaultWorkingDirectory)/**/htmlcov'
+
