@@ -54,7 +54,7 @@ def test_get_copula_prior():
 
 def test_get_marginal_prior():
     prior_variables = {"area": 100}
-    prior = sample.get_marginal_priors("streamflow_obs", "GEV", \
+    prior = sample.get_marginal_prior("streamflow_obs", "GEV", \
                                 prior_variables, "uninformative")
 
     expected = {\
@@ -79,12 +79,12 @@ def test_prepare():
     assert np.allclose(Ncases, [[55, 0], [0, 0], [10, 0]])
 
     i11 = stan_data["i11"]
-    assert pd.notnull(df.y[i11]).all()
-    assert pd.notnull(df.z[i11]).all()
+    assert pd.notnull(df.y.iloc[i11-1]).all()
+    assert pd.notnull(df.z.iloc[i11-1]).all()
 
     i31 = stan_data["i31"]
-    assert pd.isnull(df.y[i31]).all()
-    assert pd.notnull(df.z[i31]).all()
+    assert pd.isnull(df.y.iloc[i31-1]).all()
+    assert pd.notnull(df.z.iloc[i31-1]).all()
 
 
 def test_marginals():
