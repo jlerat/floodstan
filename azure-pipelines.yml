@@ -16,6 +16,46 @@ resources:
             - azure-pipelines.yml
             - env_nriv_v2.yml
 
+    - repository: hyzarr
+      type: git
+      name: hyzarr/hyzarr
+      ref: refs/heads/master
+      trigger:
+        branches:
+            include:
+            - master
+        paths:
+            exclude:
+            - azure-pipelines.yml
+            - env_nriv_v2.yml
+
+    - repository: nrivdata
+      type: git
+      name: northern_rivers/nrivdata
+      ref: refs/heads/master
+      trigger:
+        branches:
+            include:
+            - master
+        paths:
+            exclude:
+            - azure-pipelines.yml
+            - env_nriv_v2.yml
+
+    - repository: nrivfloodfreq
+      type: git
+      name: northern_rivers/nrivfloodfreq
+      ref: refs/heads/master
+      trigger:
+        branches:
+            include:
+            - master
+        paths:
+            exclude:
+            - azure-pipelines.yml
+            - env_nriv_v2.yml
+
+
 trigger:
 - master
 
@@ -39,6 +79,9 @@ steps:
 
 - checkout: self
 - checkout: hydrodiy
+- checkout: hyzarr
+- checkout: nrivdata
+- checkout: nrivfloodfreq
 
 - bash: echo "##vso[task.prependpath]$CONDA/bin"
   displayName: Add conda to PATH
@@ -62,9 +105,28 @@ steps:
 
 - script: |
     source activate $(CONDA_ENV_NAME)
+    cd $(BUILD_DIR)/hyzarr
+    python setup.py develop
+  displayName: hyzarr_install
+
+- script: |
+    source activate $(CONDA_ENV_NAME)
+    cd $(BUILD_DIR)/nrivdata
+    python setup.py develop
+  displayName: nrivdata_install
+
+- script: |
+    source activate $(CONDA_ENV_NAME)
+    cd $(BUILD_DIR)/nrivfloodfreq
+    python setup.py develop
+  displayName: package_install
+
+- script: |
+    source activate $(CONDA_ENV_NAME)
     cd $(BUILD_DIR)/nrivfloodfreqstan
     python setup.py develop
   displayName: package_install
+
 
 - script: |
     source activate $(CONDA_ENV_NAME)
