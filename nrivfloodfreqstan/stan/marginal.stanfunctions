@@ -231,9 +231,11 @@ real marginal_lpdf(vector x, int marginal, real loc, real scale, real shape)
     else if(marginal==4){
         return logpearson3_lpdf(x | loc, scale, shape);
     }
+
+    return not_a_number();
 }
 
-real marginal_cdf(vector x, int marginal, real loc, real scale, real shape)
+real marginal_cdf(real x, int marginal, real loc, real scale, real shape)
 {
     if(marginal==1){
         return gumbel_cdf(x | loc, scale);
@@ -242,19 +244,13 @@ real marginal_cdf(vector x, int marginal, real loc, real scale, real shape)
         return lognormal_cdf(x | loc, scale);
     }
     else if(marginal==3){
-        int N=rows(x);
-        vector[N] cdf;
-        for(i in 1:N)
-            cdf[i] = exp(gev_lcdf(x[i] | loc, scale, shape));
-        return cdf;
+        return exp(gev_lcdf(x | loc, scale, shape));
     }
     else if(marginal==4){
-        int N=rows(x);
-        vector[N] cdf;
-        for(i in 1:N)
-            x[i] = pearson3_cdf(log(x[i]) | loc, scale, shape);
-        return cdf;
+        return pearson3_cdf(log(x) | loc, scale, shape);
     }
+
+    return not_a_number();
 }
 
 real marginal_lcdf(real x, int marginal, real loc, real scale, real shape)
@@ -271,28 +267,10 @@ real marginal_lcdf(real x, int marginal, real loc, real scale, real shape)
     else if(marginal==4){
         return log(pearson3_cdf(log(x) | loc, scale, shape));
     }
+
+    return not_a_number();
 }
 
 
-real marginal_logjac(vector x, int marginal, real loc, real scale, real shape)
-{
-    int N = rows(x);
-    vector[N] logjac;
-
-    if(marginal==1){
-        // TODO
-    }
-    else if(marginal==2){
-        // TODO
-    }
-    else if(marginal==3){
-        // TODO
-    }
-    else if(marginal==4){
-        // TODO
-    }
-
-    return sum(logjac);
-}
 
 

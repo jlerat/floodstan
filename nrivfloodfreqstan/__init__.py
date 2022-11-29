@@ -39,10 +39,11 @@ def load_stan_model(name: str) -> cmdstanpy.CmdStanModel:
     return model
 
 
+univariate_censoring = load_stan_model("univariate_censoring")
 
-UNIVARIATE_CENSORING = load_stan_model("univariate_censoring")
+bivariate_censoring = load_stan_model("bivariate_censoring")
 
-BIVARIATE_CENSORING = load_stan_model("bivariate_censoring")
+test_stan_functions = load_stan_model("test")
 
 
 # example: just print the info of the model
