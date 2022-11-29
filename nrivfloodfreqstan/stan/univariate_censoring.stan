@@ -5,7 +5,14 @@
 *  Throughout the code:
 *   - Obs variable is y
 *
-*  The 2 different cases depending on data availability are referred as follows:
+*  Marginal codes:
+*   - 1=Gumbel
+*   - 2=LogNormal
+*   - 3=GEV
+*   - 4=LogPearson3
+*   - 5=Normal
+*
+*  The 2 different cases depending on data availability are coded as follows:
 *  11: y observed         
 *  21: y censored
 *
@@ -21,8 +28,8 @@ functions {
 
 data {
   // Defines marginal distributions
-  // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3
-  int<lower=1, upper=4> ymarginal; 
+  // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal
+  int<lower=1, upper=5> ymarginal; 
 
   int N; // total number of values
   vector[N] y; // Data for first variable (ams streamflow)

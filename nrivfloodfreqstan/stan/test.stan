@@ -15,9 +15,9 @@ functions {
 
 data {
   // Defines marginal distributions
-  // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3
-  int<lower=1, upper=4> ymarginal; 
-  int<lower=1, upper=4> zmarginal; 
+  // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal
+  int<lower=1, upper=5> ymarginal; 
+  int<lower=1, upper=5> zmarginal; 
 
   // Defines copula model
   // 1=Gumbel, 2=Clayton, 3=Gaussian

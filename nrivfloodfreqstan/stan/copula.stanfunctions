@@ -118,6 +118,7 @@ real copula_lpdf(matrix uv, int copula, real rho){
         real theta = correlation(copula, rho);
 
         // TODO
+        reject("Clayton lpdf not implemented.");
         return 0;
     }
 
@@ -151,6 +152,7 @@ real copula_lpdf_ucensored(real ucensor, vector v, int copula, real rho){
         real theta = correlation(copula, rho);
 
         // TODO
+        reject("Clayton lpdf_ucensored not implemented.");
         return 0;
     }
 

@@ -1,0 +1,142 @@
+{
+    "marginal": {
+        "streamflow_obs": {
+            "Gumbel": {
+                "loc": ["200+{area}/3", "400+2*{area}/3"], 
+                "logscale": [5, 4],
+                "shape": [0, 1]
+            },
+            "LogNormal": {
+                "loc": ["200+{area}/3", "400+2*{area}/3"], 
+                "logscale": [5, 4],
+                "shape": [0, 1]
+            },
+            "Normal": {
+                "loc": ["200+{area}/3", "400+2*{area}/3"], 
+                "logscale": [0, 10],
+                "shape": [0, 1]
+            },
+            "GEV": {
+                "loc": ["200+{area}/3", "400+2*{area}/3"], 
+                "logscale": [5, 4],
+                "shape": [0, 4]
+            },
+            "LogPearson3": {
+                "loc": ["200+{area}/3", "400+2*{area}/3"], 
+                "logscale": [5, 4],
+                "shape": [0, 4]
+            }
+        },
+        "streamflow_awra": {
+            "Gumbel": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 1]
+            },
+            "LogNormal": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 1]
+            },
+            "Normal": {
+                "loc": ["200+{area}/3", "400+2*{area}/3"], 
+                "logscale": [0, 10],
+                "shape": [0, 1]
+            },
+            "GEV": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 4]
+            },
+            "LogPearson3": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 4]
+            }
+        },
+        "volumne_awra": {
+            "Gumbel": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 1]
+            },
+            "LogNormal": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 1]
+            },
+            "Normal": {
+                "loc": [17, 50],
+                "logscale": [0, 10],
+                "shape": [0, 1]
+            },
+            "GEV": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 4]
+            },
+            "LogPearson3": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 4]
+            }
+        },
+        "rootzone_awra": {
+            "Gumbel": {
+                "loc": [0.8, 1], 
+                "logscale": [0.5, 0.5],
+                "shape": [0, 1]
+            },
+            "LogNormal": {
+                "loc": [0.8, 1], 
+                "logscale": [0.5, 0.5],
+                "shape": [0, 1]
+            },
+            "Normal": {
+                "loc": [0.8, 1], 
+                "logscale": [0, 10],
+                "shape": [0, 1]
+            },
+            "GEV": {
+                "loc": [0.8, 1], 
+                "logscale": [0.5, 0.5],
+                "shape": [0, 4]
+            },
+            "LogPearson3": {
+                "loc": [0.8, 1], 
+                "logscale": [0.5, 0.5],
+                "shape": [0, 4]
+            }
+        },
+        "rainfall": {
+            "Gumbel": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 1]
+            },
+            "LogNormal": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 1]
+            },
+            "Normal": {
+                "loc": [17, 50], 
+                "logscale": [0, 10],
+                "shape": [0, 1]
+            },
+            "GEV": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 4]
+            },
+            "LogPearson3": {
+                "loc": [17, 50], 
+                "logscale": [5, 4],
+                "shape": [0, 4]
+            }
+        }
+    },
+    "copula": {
+        "rho": [0.8, 1]
+    }
+}

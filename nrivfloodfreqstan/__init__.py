@@ -45,6 +45,3 @@ bivariate_censoring = load_stan_model("bivariate_censoring")
 
 test_stan_functions = load_stan_model("test")
 
-
-# example: just print the info of the model
-print(UNIVARIATE_CENSORING.exe_info())
