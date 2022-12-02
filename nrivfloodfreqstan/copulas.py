@@ -5,6 +5,7 @@ import pandas as pd
 
 from scipy.stats import norm, mvn
 from scipy.stats import multivariate_normal
+from scipy.special import lambertw
 
 import pytest
 
@@ -15,7 +16,7 @@ def factory(name):
     if name == "Gaussian":
         return GaussianCopula()
     elif name == "Gumbel":
-        return GaussianCopula()
+        return GumbelCopula()
     else:
         raise ValueError(f"Cannot find copula {name}")
 
@@ -206,6 +207,7 @@ class GaussianCopula(Copula):
 class GumbelCopula(Copula):
     def __init__(self, approx=True):
         super(GumbelCopula, self).__init__("Gumbel")
+        self.theta = np.nan
 
     @Copula.rho.setter
     def rho(self, val):
@@ -214,15 +216,15 @@ class GumbelCopula(Copula):
         errmsg = f"Expected rho in [{RHO_MIN}, {RHO_MAX}], got {rho}."
         assert rho>=RHO_MIN and rho<=RHO_MAX, errmsg
         self._rho = rho
-        self.theta = rho/(1-rho)
+        self.theta = 1/(1-rho)
 
 
     def pdf(self, uv):
         uv = to2d(uv)
         xy = -np.log(uv)
         theta = self.theta
-        expsum = np.power(-luv, theta).sum(axis=1)
-        exppow = np.power(expsum, 1/theta)
+        expsum = np.power(xy, theta).sum(axis=1)
+        exppow = np.power(expsum, 1./theta)
         F = np.exp(-exppow)
 
         return F*(exppow+theta-1)*np.power(expsum, 1/theta-2)\
@@ -239,9 +241,34 @@ class GumbelCopula(Copula):
         xy = -np.log(uv)
         theta = self.theta
         expsum = np.power(xy, theta).sum(axis=1)
-        return np.exp(-np.power(expsum, 1/theta))
+        return np.exp(-np.power(expsum, 1./theta))
 
 
-    def ppf_conditional(self, ucond, b):
-        pass
+    def sample(self, nsamples):
+        # Sample first variable
+        delta = 1/nsamples/2
+        u = np.linspace(delta, 1-delta, nsamples)
+        k1 = np.random.permutation(nsamples)
+        p = u[k1]+np.random.uniform(-delta/2, delta/2, size=nsamples)
+
+        # From cdf to exponential reduced var
+        expu = -np.log(p)
+
+        # Sample second variable
+        k2 = np.random.permutation(nsamples)
+        q = u[k2]+np.random.uniform(-delta/2, delta/2, size=nsamples)
+
+        # solve for z in z+(m-1)*log(z) = x+(m-1)*log(x)+log(q)
+        # See joe (2014), equation 4.15 page 172
+        m = self.theta
+        A = expu+(m-1)*np.log(expu)-np.log(q)
+        B = A/(m-1)-math.log(m-1)
+
+        # Solve with analytical solution obtained from lambertW function
+        z = lambertw(np.exp(B))*(m-1)
+
+        # Convert from z to exponential of reduced var 2
+        expv = np.power(np.power(z, m)-np.power(expu, m), 1/m)
+
+        return np.column_stack([p, np.exp(-expv)])
 
