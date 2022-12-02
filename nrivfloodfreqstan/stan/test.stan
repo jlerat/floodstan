@@ -60,7 +60,7 @@ data {
 }  
 
 
-transformed data {
+generated quantities {
   real yscale = exp(ylogscale);
   real zscale = exp(zlogscale);
 

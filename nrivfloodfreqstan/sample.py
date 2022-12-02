@@ -1,4 +1,4 @@
-import re, math, json
+import sys, re, math, json
 from pathlib import Path
 import logging
 import numbers
@@ -36,13 +36,55 @@ RHO_UPPER = 0.99
 FPRIORS = Path(__file__).resolve().parent / "priors"
 
 # Setup logger with a write function to use contextlib
-LOGGER = logging.getLogger("cmdstanpy")
 
 # List of stan model
 STAN_MODEL_NAMES = ["bivariate_censoring", \
                         "univariate_censoring"]
 
 STAN_SEED = 5446
+
+LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
+
+def get_logger(level, flog=None, stan_logger=True):
+    """ Get logger object.
+
+    Parameters
+    ----------
+    level : str
+        Logger level. See https://docs.python.org/3/howto/logging.html#logging-levels
+    flog : str or Path
+        Path to log file
+    stan_logger : bool
+        Use stan logger or not (to remove all stan messages)
+    """
+    if stan_logger:
+        LOGGER = logging.getLogger("cmdstanpy")
+    else:
+        STAN_LOGGER = logging.getLogger("cmdstanpy")
+        STAN_LOGGER.disabled = True
+        LOGGER = logging.getLogger(Path(__file__).resolve().stem)
+
+    # Set logging level
+    if not level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
+        raise ValueError(f"{level} not a valid level")
+
+    LOGGER.setLevel(getattr(logging, level))
+
+    # Set logging format
+    ft = logging.Formatter(LOGGER_FORMAT)
+
+    # log to console
+    LOGGER.handlers = []
+    if flog is None:
+        sh = logging.StreamHandler(sys.stdout)
+        sh.setFormatter(ft)
+        LOGGER.addHandler(sh)
+    else:
+        fh = logging.FileHandler(flog)
+        fh.setFormatter(ft)
+        LOGGER.addHandler(fh)
+
+    return LOGGER
 
 
 def get_copula_prior(prior_name="uninformative"):
@@ -135,6 +177,8 @@ def prepare(y, z=None, \
         "N": N, \
         "y": y, \
         "z": z, \
+        "ycensor": ycensor, \
+        "zcensor": zcensor, \
         "Ncases": Ncases, \
         "i11": i11, \
         "i21": i21, \

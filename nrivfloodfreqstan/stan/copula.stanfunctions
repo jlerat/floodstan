@@ -1,11 +1,12 @@
 
-// Parameterisation
+// Correlation parameterisation
 // 1=Gumbel, 2=Clayton, 3=Gaussian
-real correlation(int copula, real rho) {
-    if(rho < -0.999)
-        reject("rho (", rho, ") <-0.999");
+real corr2param(int copula, real rho) {
+
+    if(rho < 0.001)
+        reject("rho (", rho, ") < 0.001");
     if(rho > 0.999)
-        reject("rho (", rho, ") >0.999");
+        reject("rho (", rho, ") > 0.999");
 
     if(copula==1) {
         // Using Kendall Tau as parameter
@@ -20,34 +21,12 @@ real correlation(int copula, real rho) {
     }
 
     else if (copula==3) {
-        // Gaussian correlation - no re-parameterisation
+        // Gaussian corr2param - no re-parameterisation
         return rho;
     }
 
     return not_a_number();
 }
-
-
-// Gaussian copula functions:
-// see  Zvi Drezner & G. O. Wesolowsky (1990) On the computation of the
-// bivariate normal integral, 
-// Journal of Statistical Computation and Simulation, 35:1-2, 101-107, DOI: 10.1080/00949659008811236
-// https://www.tandfonline.com/doi/pdf/10.1080/00949659008811236?needAccess=true
-// 
-//FUNCTION BV(H 1 ,H2,R) 
-//DIMENSION X(5),W(5) 
-//DATA X/.04691008,.23076534,.5,.76923466,.95308992/ 
-//DATA W/.O18854042,.038088059,.0452707394,.038088059,.018854042/ 
-//H12 =(Hl*Hl+ H2*H2)/2. 
-//H3 = H1 *H2 
-//BV = 0. 
-//DO 1 I= 1,5 
-//RR = R*X(I) 
-//RR2= 1.-RR*RR 
-//1 BV = BV + W(I)*EXP((RR*H3 - H12)/RR2)/SQRT(RR2) 
-//BV = BV*R + GAUSS(H 1)*GAUSS(H2) 
-//RETURN 
-//END
 
 
 // ------- Copula functions -----------------------------
@@ -57,7 +36,7 @@ real copula_lcdf(matrix uv, int copula, real rho){
     int N = rows(uv);
 
     if(copula==1) {
-        real m = correlation(copula, rho);
+        real m = corr2param(copula, rho);
         vector[N] logu = log(uv[:, 1]);
         vector[N] logv = log(uv[:, 2]);
         vector[N] a = pow(logu, m)+pow(logv, m);
@@ -65,16 +44,36 @@ real copula_lcdf(matrix uv, int copula, real rho){
     }
 
     else if (copula==2) {
-        real theta = correlation(copula, rho);
+        real theta = corr2param(copula, rho);
         vector[N] powu = pow(uv[:, 1], -theta);
         vector[N] powv = pow(uv[:, 2], -theta);
         return sum(-log(powu+powv-1)/theta);
     }
 
     else if (copula==3) {
-        real corr = correlation(copula, rho);
+        real corr = corr2param(copula, rho);
 
-        // See copula function above
+        // Gaussian copula functions:
+        // see  Zvi Drezner & G. O. Wesolowsky (1990) On the computation of the
+        // bivariate normal integral, 
+        // Journal of Statistical Computation and Simulation, 35:1-2, 101-107, DOI: 10.1080/00949659008811236
+        // https://www.tandfonline.com/doi/pdf/10.1080/00949659008811236?needAccess=true
+        // 
+        //FUNCTION BV(H 1 ,H2,R) 
+        //DIMENSION X(5),W(5) 
+        //DATA X/.04691008,.23076534,.5,.76923466,.95308992/ 
+        //DATA W/.O18854042,.038088059,.0452707394,.038088059,.018854042/ 
+        //H12 =(Hl*Hl+ H2*H2)/2. 
+        //H3 = H1 *H2 
+        //BV = 0. 
+        //DO 1 I= 1,5 
+        //RR = R*X(I) 
+        //RR2= 1.-RR*RR 
+        //1 BV = BV + W(I)*EXP((RR*H3 - H12)/RR2)/SQRT(RR2) 
+        //BV = BV*R + GAUSS(H 1)*GAUSS(H2) 
+        //RETURN 
+        //END
+
         array[5] real A = {0.04691008, 0.23076534, 0.5, 0.76923466, 0.95308992};
         array[5] real B = {0.018854042, 0.038088059, 0.0452707394, 0.038088059, 0.018854042};
 
@@ -102,11 +101,10 @@ real copula_lpdf(matrix uv, int copula, real rho){
     int N = rows(uv);
 
     if(copula==1) {
-        real m = correlation(copula, rho);
+        real m = corr2param(copula, rho);
         vector[N] logu = log(uv[:, 1]);
         vector[N] logv = log(uv[:, 2]);
         vector[N] a = pow(logu, m)+pow(logv, m);
-        // CHECK THAT!!
         return sum(-pow(a, 1/m)
                         -m*(logu+logv)
                         +(1/m-2)*log(a)
@@ -115,22 +113,23 @@ real copula_lpdf(matrix uv, int copula, real rho){
     }
 
     else if (copula==2) {
-        real theta = correlation(copula, rho);
+        real theta = corr2param(copula, rho);
 
         // TODO
         reject("Clayton lpdf not implemented.");
-        return 0;
     }
 
     else if (copula==3) {
-        real corr = correlation(copula, rho);
-        matrix[N, 2] q = inv_Phi(uv);
-        vector[2] mu = zeros_vector(2);
-        matrix[2, 2] Sigma = [[1, corr], [corr, 1]];
-        real lp = 0;
-        for(i in 1:N)
-            lp += multi_normal_lpdf(q[i, :] | mu, Sigma);
-        return lp;
+        real corr = corr2param(copula, rho);
+        real corr2 = 1-corr*corr;
+        vector[N] p = inv_Phi(uv[:, 1]);
+        vector[N] q = inv_Phi(uv[:, 2]);
+        vector[N] psq = p.*p;
+        vector[N] qsq = q.*q;
+
+        return sum(-log(corr2)*N/2
+                    +corr*corr2*(p.*q)
+                    +1/2*(psq+qsq)*(1-corr2));
     }
     
     return not_a_number();
@@ -140,7 +139,7 @@ real copula_lpdf_ucensored(real ucensor, vector v, int copula, real rho){
     int N = rows(v);
 
     if(copula==1) {
-        real m = correlation(copula, rho);
+        real m = corr2param(copula, rho);
         vector[N] a = pow(log(ucensor), m)+pow(log(v), m);
         return sum(-pow(a, 1/m)
                     +(1/m-1)*log(a)
@@ -149,18 +148,17 @@ real copula_lpdf_ucensored(real ucensor, vector v, int copula, real rho){
     }
 
     else if (copula==2) {
-        real theta = correlation(copula, rho);
+        real theta = corr2param(copula, rho);
 
         // TODO
         reject("Clayton lpdf_ucensored not implemented.");
-        return 0;
     }
 
     else if (copula==3) {
-        real corr = correlation(copula, rho);
-        real qcensor = inv_Phi(ucensor);
+        real corr = corr2param(copula, rho);
+        real pcensor = inv_Phi(ucensor);
         vector[N] q = inv_Phi(v);
-        return sum(log(Phi((q-corr*qcensor)/sqrt(1-corr*corr))));
+        return sum(log(Phi((q-corr*pcensor)/sqrt(1-corr*corr))));
     }
 
     return not_a_number();
