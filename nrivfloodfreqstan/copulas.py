@@ -17,6 +17,10 @@ def factory(name):
         return GaussianCopula()
     elif name == "Gumbel":
         return GumbelCopula()
+    elif name == "Clayton":
+        return ClaytonCopula()
+    elif name == "Frank":
+        return FrankCopula()
     else:
         raise ValueError(f"Cannot find copula {name}")
 
@@ -115,11 +119,22 @@ class GaussianCopula(Copula):
         return uv, pq
 
 
+    @Copula.rho.setter
+    def rho(self, val):
+        """ Set theta parameter """
+        rho = float(val)
+        errmsg = f"Expected rho in [{RHO_MIN}, {RHO_MAX}], got {rho}."
+        assert rho>=RHO_MIN and rho<=RHO_MAX, errmsg
+        self._rho = rho
+        # Kendal Tau of Gaussian copula. See Joe (2014) Page 164.
+        self.theta = math.sin(math.pi*rho/2)
+
+
     def pdf(self, uv):
         uv, pq = self._transform(uv)
         mu = np.zeros(2)
-        rho = self.rho
-        Sigma = np.array([[1, rho], [rho, 1]])
+        theta = self.theta
+        Sigma = np.array([[1, theta], [theta, 1]])
         # See Jones (2014), eq. 4.3 page 163
         A = norm.pdf(pq).prod(axis=1)
         return multivariate_normal.pdf(pq, mean=mu, cov=Sigma)/A
@@ -128,8 +143,9 @@ class GaussianCopula(Copula):
     def pdf_ucensored(self, ucensor, v):
         pcensor = norm.ppf(ucensor)
         q = norm.ppf(v)
-        rho = self.rho
-        return norm.cdf((rho*pcensor-q)/math.sqrt(1-rho*rho))/rho
+        theta = self.theta
+        sqr = math.sqrt(1-theta*theta)
+        return norm.cdf((pcensor-theta*q)/sqr)
 
 
     def cdf(self, uv):
@@ -145,7 +161,7 @@ class GaussianCopula(Copula):
             W = np.array([0.018854042, 0.038088059, 0.0452707394, 0.038088059,0.018854042])
 
             H1, H2 = pq.T
-            R = self.rho
+            R = self.theta
             BV = np.zeros_like(H1)
 
             H3 = H1*H2
@@ -200,12 +216,12 @@ class GaussianCopula(Copula):
 
     def ppf_conditional(self, ucond, b):
         pcond = norm.ppf(ucond)
-        rho = self.rho
-        return norm.cdf(rho*pcond+norm.ppf(b)*math.sqrt(1-rho*rho))
+        theta = self.theta
+        return norm.cdf(theta*pcond+norm.ppf(b)*math.sqrt(1-theta*theta))
 
 
 class GumbelCopula(Copula):
-    def __init__(self, approx=True):
+    def __init__(self):
         super(GumbelCopula, self).__init__("Gumbel")
         self.theta = np.nan
 
@@ -233,7 +249,7 @@ class GumbelCopula(Copula):
 
 
     def pdf_ucensored(self, ucensor, v):
-        pass
+        raise NotImplementedError()
 
 
     def cdf(self, uv):
@@ -271,4 +287,95 @@ class GumbelCopula(Copula):
         expv = np.power(np.power(z, m)-np.power(expu, m), 1/m)
 
         return np.column_stack([p, np.exp(-expv)])
+
+
+
+class ClaytonCopula(Copula):
+    def __init__(self):
+        super(ClaytonCopula, self).__init__("Clayton")
+        self.theta = np.nan
+
+    @Copula.rho.setter
+    def rho(self, val):
+        """ Set theta parameter """
+        rho = float(val)
+        errmsg = f"Expected rho in [{RHO_MIN}, {RHO_MAX}], got {rho}."
+        assert rho>=RHO_MIN and rho<=RHO_MAX, errmsg
+        self._rho = rho
+        self.theta = 2*rho/(1-rho)
+
+
+    def pdf(self, uv):
+        uv = to2d(uv)
+        theta = self.theta
+        expsum = np.power(uv, -theta).sum(axis=1)-1
+        return (1+theta)\
+                    *np.power(uv.prod(axis=1), -theta-1) \
+                    *np.power(expsum, -2-1/theta)
+
+
+    def pdf_ucensored(self, ucensor, v):
+        pass
+
+
+    def cdf(self, uv):
+        uv = to2d(uv)
+        theta = self.theta
+        expsum = np.power(uv, -theta).sum(axis=1)-1
+        return np.power(expsum, -1./theta)
+
+
+    def ppf_conditional(self, ucond, b):
+        theta = self.theta
+        # see Joe (2014), eq 4.10 page 168
+        bb = np.power(b, -theta/(1+theta))-1
+        cc = bb*np.power(ucond, -theta)+1
+        return np.power(cc, -1/theta)
+
+
+
+class FrankCopula(Copula):
+    def __init__(self):
+        super(FrankCopula, self).__init__("Frank")
+        self.theta = np.nan
+
+    @Copula.rho.setter
+    def rho(self, val):
+        """ Set theta parameter """
+        rho = float(val)
+        errmsg = f"Expected rho in [{RHO_MIN}, {RHO_MAX}], got {rho}."
+        assert rho>=RHO_MIN and rho<=RHO_MAX, errmsg
+        self._rho = rho
+        self.theta = 2*rho/(1-rho)
+
+
+    def pdf(self, uv):
+        uv = to2d(uv)
+        theta = self.theta
+        x = np.exp(-theta*uv[:, 0])
+        y = np.exp(-theta*uv[:, 1])
+        w = 1-math.exp(-theta)
+        z = w-(1-x)*(1-y)
+        return theta*w*x*y/z/z
+
+
+    def pdf_ucensored(self, ucensor, v):
+        pass
+
+
+    def cdf(self, uv):
+        theta = self.theta
+        x = np.exp(-theta*uv[:, 0])
+        y = np.exp(-theta*uv[:, 1])
+        w = 1-math.exp(-theta)
+        z = w-(1-x)*(1-y)
+        return -1/theta*np.log(z/w)
+
+
+    def ppf_conditional(self, ucond, b):
+        theta = self.theta
+        # see Joe (2014), eq 4.7 page 165
+        w = 1-math.exp(-theta)
+        x = np.exp(-theta*ucond)
+        return -1/theta*np.log(1-w/((1/b-1)*x+1))
 
