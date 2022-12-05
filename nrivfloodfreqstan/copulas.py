@@ -76,11 +76,11 @@ class Copula():
     def logpdf(self, uv):
         return np.log(self.pdf(uv))
 
-    def pdf_ucensored(self, ucensor, v):
+    def conditional_density(self, ucond, v):
         return NotImplementedError()
 
-    def logpdf_ucensored(self, ucensor, v):
-        return np.log(self.logpdf_ucensored(ucensor, v))
+    def logconditional_density(self, ucond, v):
+        return np.log(self.logconditional_density(ucond, v))
 
     def cdf(self, uv):
         return NotImplementedError()
@@ -118,7 +118,6 @@ class GaussianCopula(Copula):
         pq = norm.ppf(uv)
         return uv, pq
 
-
     @Copula.rho.setter
     def rho(self, val):
         """ Set theta parameter """
@@ -129,24 +128,23 @@ class GaussianCopula(Copula):
         # Kendal Tau of Gaussian copula. See Joe (2014) Page 164.
         self.theta = math.sin(math.pi*rho/2)
 
-
     def pdf(self, uv):
         uv, pq = self._transform(uv)
         mu = np.zeros(2)
         theta = self.theta
-        Sigma = np.array([[1, theta], [theta, 1]])
+        #Sigma = np.array([[1, theta], [theta, 1]])
         # See Jones (2014), eq. 4.3 page 163
-        A = norm.pdf(pq).prod(axis=1)
-        return multivariate_normal.pdf(pq, mean=mu, cov=Sigma)/A
+        s2 = (pq*pq).sum(axis=1)
+        z = s2-2*theta*pq.prod(axis=1)
+        r2 = 1-theta*theta
+        return 1/math.sqrt(r2)*np.exp(-z/r2/2+s2/2)
 
-
-    def pdf_ucensored(self, ucensor, v):
-        pcensor = norm.ppf(ucensor)
+    def conditional_density(self, ucond, v):
+        pcensor = norm.ppf(ucond)
         q = norm.ppf(v)
         theta = self.theta
         sqr = math.sqrt(1-theta*theta)
         return norm.cdf((pcensor-theta*q)/sqr)
-
 
     def cdf(self, uv):
         uv, pq = self._transform(uv)
@@ -213,11 +211,11 @@ class GaussianCopula(Copula):
 
             return csp
 
-
     def ppf_conditional(self, ucond, b):
         pcond = norm.ppf(ucond)
         theta = self.theta
         return norm.cdf(theta*pcond+norm.ppf(b)*math.sqrt(1-theta*theta))
+
 
 
 class GumbelCopula(Copula):
@@ -234,7 +232,6 @@ class GumbelCopula(Copula):
         self._rho = rho
         self.theta = 1/(1-rho)
 
-
     def pdf(self, uv):
         uv = to2d(uv)
         xy = -np.log(uv)
@@ -242,15 +239,17 @@ class GumbelCopula(Copula):
         expsum = np.power(xy, theta).sum(axis=1)
         exppow = np.power(expsum, 1./theta)
         F = np.exp(-exppow)
-
         return F*(exppow+theta-1)*np.power(expsum, 1/theta-2)\
                     *np.power(xy.prod(axis=1), theta-1)\
                     *1/uv.prod(axis=1)
 
-
-    def pdf_ucensored(self, ucensor, v):
-        raise NotImplementedError()
-
+    def conditional_density(self, ucond, v):
+        x = -np.log(ucond)
+        y = -np.log(v)
+        theta = self.theta
+        return 1/ucond\
+                 *np.exp(-np.power(np.power(x, theta)+np.power(y, theta), 1/theta))\
+                 *np.power(1+np.power(y/x, theta), 1/theta-1)
 
     def cdf(self, uv):
         uv = to2d(uv)
@@ -258,7 +257,6 @@ class GumbelCopula(Copula):
         theta = self.theta
         expsum = np.power(xy, theta).sum(axis=1)
         return np.exp(-np.power(expsum, 1./theta))
-
 
     def sample(self, nsamples):
         # Sample first variable
@@ -286,7 +284,7 @@ class GumbelCopula(Copula):
         # Convert from z to exponential of reduced var 2
         expv = np.power(np.power(z, m)-np.power(expu, m), 1/m)
 
-        return np.column_stack([p, np.exp(-expv)])
+        return np.column_stack([p, np.exp(-expv).real])
 
 
 
@@ -314,7 +312,7 @@ class ClaytonCopula(Copula):
                     *np.power(expsum, -2-1/theta)
 
 
-    def pdf_ucensored(self, ucensor, v):
+    def conditional_density(self, ucond, v):
         pass
 
 
@@ -359,7 +357,7 @@ class FrankCopula(Copula):
         return theta*w*x*y/z/z
 
 
-    def pdf_ucensored(self, ucensor, v):
+    def conditional_density(self, ucond, v):
         pass
 
 
