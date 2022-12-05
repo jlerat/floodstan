@@ -1,4 +1,4 @@
-name: env_nriv_v2
+name: env_nriv_v3
 channels:
   - conda-forge
   - defaults
@@ -29,6 +29,7 @@ dependencies:
   - requests
   - rpy2=3.5.1
   - scipy=1.9.0
+  - statsmodels=0.13.2
   - tqdm
   - zarr=2.12.0
   - pip:
