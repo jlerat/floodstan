@@ -110,10 +110,9 @@ class Copula():
 
 
 class GaussianCopula(Copula):
-    def __init__(self, approx=True):
+    def __init__(self):
         super(GaussianCopula, self).__init__("Gaussian")
-        self.approx = approx
-        #self.rho_max = 0.6
+        self.rho_max = 0.8
 
     def _transform(self, uv):
         uv = to2d(uv)
@@ -152,67 +151,52 @@ class GaussianCopula(Copula):
     def cdf(self, uv):
         uv, pq = self._transform(uv)
 
-        if self.approx:
-            # -- Alternative fast approx from
-            # Zvi Drezner & G. O. Wesolowsky (1990) On the computation of the
-            # bivariate normal integral,
-            # Journal of Statistical Computation and Simulation, 35:1-2, 101-107, DOI: 10.1080/00949659008811236
-            # https://www.tandfonline.com/doi/pdf/10.1080/00949659008811236?needAccess=true
-            X = np.array([0.04691008, 0.23076534, 0.5, 0.76923466, 0.95308992])
-            W = np.array([0.018854042, 0.038088059, 0.0452707394, 0.038088059,0.018854042])
+        # Translation of the matlab code from Alan Genz
+        # https://www.math.wsu.edu/faculty/genz/software/matlab/bvn.m
+        # Note that this code was supposed to work for correlation < 0.925
+        # we are using it upto correlation = 0.951
+        tp = 2*math.pi
+        h = -norm.ppf(uv[:, 0][:, None])
+        k = -norm.ppf(uv[:, 1][:, None])
+        hk = h*k
+        bvn = 0
+        r = self.theta
 
-            H1, H2 = pq.T
-            R = self.theta
-            BV = np.zeros_like(H1)
+        w = np.zeros(10)
+        x = np.zeros(10)
+        if abs(r) < 0.3:
+            # Gauss Legendre points and weights, n =  6
+            w[:3] = np.array([0.1713244923791705, 0.3607615730481384, 0.4679139345726904])
+            x[:3] = np.array([0.9324695142031522, 0.6612093864662647, 0.2386191860831970])
 
-            H12 = (H1*H1+H2*H2)/2.
+        elif abs(r) < 0.75:
+            # Gauss Legendre points and weights, n = 12
+            w[:3] = [.04717533638651177, 0.1069393259953183, 0.1600783285433464]
+            w[3:6] = [0.2031674267230659, 0.2334925365383547, 0.2491470458134029]
 
-            if R<0.7:
-                H3 = H1*H2
-                for i in range(len(X)):
-                    R1 = R*X[i]
-                    RR2 = 1.-R1*R1
-                    BV += W[i]*np.exp((R1*H3 - H12)/RR2)/math.sqrt(RR2)
-
-                return BV*R+uv.prod(axis=1)
-            else:
-                # Translation of Drezner fortran code for case where rho>0.7
-                R2 = 1.-R*R
-                R3 = math.sqrt(R2)
-                H2 *= np.sign(R)
-                H3 = H1*H2
-                H7 = np.exp(-H3/2.)
-                if R2>1e-10:
-                    H6 = np.abs(H1- H2)
-                    H5 = H6*H6/2.
-                    H6 = H6/R3
-                    AA = 0.5-H3/8.
-                    AB = 3.-2.*AA*H5
-                    BV = .13298076*H6*AB*norm.cdf(H6)-np.exp(-H5/R2)*(AB+AA*R2)*0.053051647
-                    for i in range(5):
-                        R1 = R3*X[i]
-                        RR = R1*R1
-                        R2 = math.sqrt(1.-RR)
-                        BV += -W[i]*np.exp(-H5/RR)*(np.exp(-H3/(1.+R2))/R2/H7-1.- AA*RR)
-
-                if R>0:
-                    BV = BV*R3*H7+norm.cdf(np.maximum(H1, H2))
-                else:
-                    BV = np.maximum(0, norm.cdf(H1)-norm.cdf(H2))-BV*R3*H7
-
-                return BV
-
+            x[:3] = [0.9815606342467191, 0.9041172563704750, 0.7699026741943050]
+            x[3:6] = [0.5873179542866171, 0.3678314989981802, 0.1252334085114692]
         else:
-            # -- Very accurate method using scipy mvn --
-            lower = np.zeros(2) # Does not matter here
-            infin = np.zeros(2)
-            correl = np.array([self.rho])
-            nval = len(uv)
-            csp = np.zeros(nval)
-            for i in range(nval):
-                upper = pq[[i]]
-                err, csp[i], info = mvn.mvndst(lower, upper, infin, correl)
-            return csp
+            # Gauss Legendre points and weights, n = 20
+            w[:3] = [.01761400713915212, .04060142980038694, .06267204833410906]
+            w[3:6] = [.08327674157670475, 0.1019301198172404, 0.1181945319615184]
+            w[6:9] = [0.1316886384491766, 0.1420961093183821, 0.1491729864726037]
+            w[9] = 0.1527533871307259
+
+            x[:3] = [0.9931285991850949, 0.9639719272779138, 0.9122344282513259]
+            x[3:6] = [0.8391169718222188, 0.7463319064601508, 0.6360536807265150]
+            x[6:9] = [0.5108670019508271, 0.3737060887154196, 0.2277858511416451]
+            x[9] = 0.07652652113349733
+
+        w = np.concatenate([w, w])[None, :]
+        x = np.concatenate([1-x, 1+x])[None, :]
+
+        hs = ( h*h + k*k )/2
+        asr = np.arcsin(r)/2
+        sn = np.sin(asr*x)
+        bvn = (np.exp((sn*hk-hs)/(1-sn*sn))*w).sum(axis=1);
+        return bvn*asr/tp + norm.cdf(-h[:, 0])*norm.cdf(-k[:, 0])
+
 
     def ppf_conditional(self, ucond, q):
         pcond = norm.ppf(ucond)

@@ -43,7 +43,7 @@ class SMCopula(copulas.Copula):
         super(SMCopula, self).__init__(f"SM-{copula}")
         self.copula = copula
         self.rho_min = 0.01
-        self.rho_max = 0.99
+        self.rho_max = 0.95
 
     @copulas.Copula.rho.setter
     def rho(self, val):
@@ -101,29 +101,27 @@ def test_base_class():
 def test_vs_statsmodels(allclose):
     ndata = 1000
     nsamples = 100000
-    #for copula in ["Gaussian", "Gumbel", "Clayton", "Frank"]:
-    for copula in ["Gaussian"]:
+    for copula in ["Gaussian", "Gumbel", "Clayton", "Frank"]:
         cop1 = SMCopula(copula)
         cop2 = copulas.factory(copula)
-        #cop2.approx = False
+
         uv = np.random.uniform(0, 1, size=(ndata, 2))
 
-        rmin = 0.8
+        rmin = cop2.rho_min
         rmax = cop2.rho_max
-        tbar = tqdm(np.linspace(rmin, rmax, 10), \
-                        desc=f"Testing "+copula, total=10)
+        nval = 20
+        tbar = tqdm(np.linspace(rmin, rmax, nval), \
+                        desc=f"Testing "+copula+" vs statsmodels", total=nval)
         for rho in tbar:
             cop1.rho = rho
             cop2.rho = rho
 
             pdf1 = cop1.pdf(uv)
             pdf2 = cop2.pdf(uv)
-            #assert allclose(pdf1, pdf2, equal_nan=True)
+            assert allclose(pdf1, pdf2, equal_nan=True, atol=1e8)
 
             cdf1 = cop1.cdf(uv)
             cdf2 = cop2.cdf(uv)
-            import pdb; pdb.set_trace()
-
             assert allclose(cdf1, cdf2, atol=1e-5, equal_nan=True)
 
             # Statsmodels uses a random sample generator
@@ -181,7 +179,7 @@ def test_gaussian(allclose):
     uv = np.random.uniform(0, 1, size=(ndata, 2))
     pq = norm.ppf(uv)
     mu = np.zeros(2)
-    for rho in np.linspace(cop.rho_min, cop.rho_max, 6):
+    for rho in np.linspace(cop.rho_min, cop.rho_max, 10):
         cop.rho = rho
         theta = cop.theta
 
@@ -213,14 +211,13 @@ def test_gaussian(allclose):
         assert allclose(cdf, expected, rtol=0, atol=5e-6)
 
 
-
 def test_gumbel(allclose):
     cop = copulas.GumbelCopula()
 
     ndata = 100
     uv = np.random.uniform(0, 1, size=(ndata, 2))
 
-    for rho in np.linspace(cop.rho_min, cop.rho_max, 6):
+    for rho in np.linspace(cop.rho_min, cop.rho_max, 10):
         cop.rho = rho
         theta = cop.theta
 
@@ -296,8 +293,10 @@ def test_conditional_density(allclose):
         for rho in np.linspace(cop.rho_min, cop.rho_max, 10):
             cop.rho = rho
 
-            tbar = tqdm(np.linspace(0.1, 0.9, 5), \
-                    desc=f"Testing {copula} conditional density: rho={rho:0.3f}", total=5)
+            nval = 10
+            tbar = tqdm(np.linspace(0.1, 0.9, nval), \
+                    desc=f"Testing {copula} conditional density: rho={rho:0.3f}", \
+                    total=nval)
             for ucond in tbar:
                 pdfu = cop.conditional_density(uv[:, 1], ucond)
                 assert (pdfu<1).sum()>0

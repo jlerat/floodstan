@@ -223,12 +223,12 @@ def scipy_fun(x, y, rho):
 if __name__ == "__main__":
     # Test function
 
-    x0, x1 = -2, 2
+    x0, x1 = -3, 3
     x = np.linspace(x0, x1, 20)
     xx, yy = np.meshgrid(x, x)
     xx, yy = xx.ravel(), yy.ravel()
 
-    rmin, rmax = 0.95, 0.999
+    rmin, rmax = -0.92, 0.92
 
     for rho in np.linspace(rmin, rmax, 20):
         for x, y in zip(xx, yy):
