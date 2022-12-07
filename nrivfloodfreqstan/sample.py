@@ -21,16 +21,11 @@ COPULA_CODES = {"Gumbel": 1, \
                 "Clayton": 2, \
                 "Gaussian": 3}
 
-# Path to stan models
-FSTANFILES = Path(__file__).resolve().parent / "stan"
-FSTANEXE = FSTANFILES.parent / "stan_executables"
-FSTANEXE.mkdir(exist_ok=True)
-
 # BOUNDS
 SHAPE_LOWER = -2
 SHAPE_UPPER = 2
-RHO_LOWER = -0.1
-RHO_UPPER = 0.99
+RHO_LOWER = 0.01
+RHO_UPPER = 0.95
 
 # Path to priors
 FPRIORS = Path(__file__).resolve().parent / "priors"

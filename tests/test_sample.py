@@ -20,10 +20,12 @@ import importlib
 from tqdm import tqdm
 
 from nrivfloodfreq import fdist, fsample
-from nrivfloodfreqstan import sample, test_stan_functions
+from nrivfloodfreqstan import sample, test_marginal, test_copula
 from hydrodiy.io import csv
 
-#import data_reader
+from nrivfloodfreqstan import copulas
+
+from tqdm import tqdm
 
 np.random.seed(5446)
 
@@ -91,79 +93,68 @@ def test_prepare():
     assert pd.notnull(df.z.iloc[i31-1]).all()
 
 
-def test_marginals():
+def test_marginals(allclose):
     stationids = get_stationids()
     for stationid in stationids:
-        z = get_ams(stationid)
-        df = pd.DataFrame({"y": z, "z": z})
-        yz = df.values
+        y = get_ams(stationid)
         LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+        N = len(y)
 
-        zcensor = z.quantile(0.5)
-        N = len(df)
-        prior_variables = {"area": 500}
-
-        for marginal in ["LogNormal", "Gumbel", "GEV", "LogPearson3", "Normal"]:
-            LOGGER.info(f"[{stationid}] Testing marginal {marginal}")
+        #for marginal in ["LogNormal", "Gumbel", "GEV", "LogPearson3", "Normal"]:
+        for marginal in ["LogPearson3", "Normal"]:
             dist = fdist.factory(marginal)
-            params = dist.fit_lh_moments(df.z).loc[0]
-            dist.set_dict_params(params.to_dict())
+            params, _ = fsample.bootstrap_lh_moments(dist, y, 50)
+            tbar = tqdm(params.iterrows(), total=len(params), \
+                            desc=f"Testing {marginal} marginal")
+            for _, param in tbar:
+                dist.set_dict_params(param.to_dict())
 
-            if marginal == "LogNormal":
-                loc = dist.m
-                logscale = math.log(dist.s)
-                shape = 0
-            elif marginal == "Normal":
-                loc = dist.mu
-                logscale = dist.logsig
-                shape = 0
-            elif marginal == "Gumbel":
-                loc = dist.tau
-                logscale = dist.logalpha
-                shape = 0
-            elif marginal == "GEV":
-                loc = dist.tau
-                logscale = dist.logalpha
-                shape = dist.kappa
-            elif marginal == "LogPearson3":
-                loc = dist.s
-                logscale = math.log(dist.s)
-                shape = dist.g
+                if marginal == "LogNormal":
+                    loc = dist.m
+                    logscale = math.log(dist.s)
+                    shape = 0
+                elif marginal == "Normal":
+                    loc = dist.mu
+                    logscale = dist.logsig
+                    shape = 0
+                elif marginal == "Gumbel":
+                    loc = dist.tau
+                    logscale = dist.logalpha
+                    shape = 0
+                elif marginal == "GEV":
+                    loc = dist.tau
+                    logscale = dist.logalpha
+                    shape = dist.kappa
+                elif marginal == "LogPearson3":
+                    loc = dist.s
+                    logscale = math.log(dist.s)
+                    shape = dist.g
 
-            for i in range(N):
-                stan_data = sample.prepare([yz[i, 0]], [yz[i, 1]], \
-                                        ymarginal="Normal", \
-                                        zmarginal=marginal, \
-                                        zcensor=zcensor, \
-                                        prior_variables=prior_variables)
-                stan_data["yloc"] = 10
-                stan_data["ylogscale"] = 0
-                stan_data["yshape"] = 0
-                stan_data["rho"] = 0.5
-
-                # We use z variable because the test functions
-                # calls lpdf and lcdf for z
-                stan_data["zloc"] = loc
-                stan_data["zlogscale"] = logscale
-                stan_data["zshape"] = shape
+                stan_data = {
+                    "ymarginal": sample.MARGINAL_CODES[marginal], \
+                    "N": N, \
+                    "y": y.values, \
+                    "yloc": loc, \
+                    "ylogscale": logscale, \
+                    "yshape": shape
+                }
 
                 # Run stan
-                smp = test_stan_functions.sample(data=stan_data, \
+                smp = test_marginal.sample(data=stan_data, \
                                     chains=1, iter_warmup=0, iter_sampling=1, \
                                     fixed_param=True, show_progress=False)
                 smp = smp.draws_pd().squeeze()
+                import pdb; pdb.set_trace()
+
 
                 # Test
-                z = yz[i, 1]
-                n31 = stan_data["Ncases"][2, 0]
-                l31 = dist.logpdf(z)
-                if n31>0:
-                    assert np.isclose(smp.l31, l31)
+                luncens = smp.filter(regex="luncens").values
+                expected = dist.logpdf(y)
+                assert allclose(luncens, expected, atol=1e-5)
 
-                n32 = stan_data["Ncases"][2, 1]
-                l32 = dist.logcdf(zcensor)
-                if n32>0:
-                    assert np.isclose(smp.l32, l32)
+                lcens = smp.filter(regex="lcens").values
+                expected = dist.logcdf(y)
+                assert allclose(lcens, expected, atol=1e-5)
 
 
 def test_copulas():

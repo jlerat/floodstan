@@ -43,5 +43,7 @@ univariate_censoring = load_stan_model("univariate_censoring")
 
 bivariate_censoring = load_stan_model("bivariate_censoring")
 
-test_stan_functions = load_stan_model("test")
+# Stan test functions
+test_marginal = load_stan_model("test_marginal")
+test_copula = load_stan_model("test_copula")
 

@@ -17,8 +17,8 @@ from wheel.bdist_wheel import bdist_wheel
 
 MODEL_DIR = "nrivfloodfreqstan/stan"
 
-MODELS = ["univariate_censoring", "bivariate_censoring", "test"]
-
+MODELS = ["univariate_censoring", "bivariate_censoring", \
+            "test_marginal", "test_copula"]
 
 CMDSTAN_VERSION = "2.30.1"
 BINARIES_DIR = "bin"

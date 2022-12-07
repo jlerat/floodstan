@@ -216,7 +216,6 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
 // ------- Marginal functions -----------------------------
 // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal
 
-
 real marginal_lpdf(vector x, int marginal, real loc, real scale, real shape)
 {
     if(marginal==1){
@@ -229,12 +228,12 @@ real marginal_lpdf(vector x, int marginal, real loc, real scale, real shape)
         return gev_lpdf(x | loc, scale, shape);
     }
     else if(marginal==4){
+        print("x=", x, " loc=", loc, " scale=", scale, " shape=", shape);
         return logpearson3_lpdf(x | loc, scale, shape);
     }
     else if(marginal==5){
         return normal_lpdf(x | loc, scale);
     }
-
 
     return not_a_number();
 }
