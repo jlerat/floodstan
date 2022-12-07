@@ -116,7 +116,7 @@ from scipy.stats import norm, mvn
 def phid(x):
     return norm.cdf(x)
 
-def bvnu( dh, dk, r):
+def bvnu(dh, dk, r):
     tp = 2*math.pi
     h = dh
     k = dk
@@ -134,10 +134,10 @@ def bvnu( dh, dk, r):
     elif abs(r) < 0.75:
         # Gauss Legendre points and weights, n = 12
         w[:3] = [.04717533638651177, 0.1069393259953183, 0.1600783285433464]
-        w[3:] = [0.2031674267230659, 0.2334925365383547, 0.2491470458134029]
+        w[3:6] = [0.2031674267230659, 0.2334925365383547, 0.2491470458134029]
 
         x[:3] = [0.9815606342467191, 0.9041172563704750, 0.7699026741943050]
-        x[3:] = [0.5873179542866171, 0.3678314989981802, 0.1252334085114692]
+        x[3:6] = [0.5873179542866171, 0.3678314989981802, 0.1252334085114692]
     else:
         # Gauss Legendre points and weights, n = 20
         w[:3] = [.01761400713915212, .04060142980038694, .06267204833410906]
@@ -158,55 +158,54 @@ def bvnu( dh, dk, r):
         asr = np.arcsin(r)/2
         sn = np.sin(asr*x)
         bvn = (np.exp((sn*hk-hs)/(1-sn*sn))*w).sum();
-
         bvn = bvn*asr/tp + phid(-h)*phid(-k)
 
     else:
-        raise ValueError("Cannot do it...")
-        #if r < 0:
-        #    k = -k
-        #    hk = -hk
+        if r < 0:
+            k = -k
+            hk = -hk
 
-        #if abs(r) < 1:
-        #    as1 = 1-r*r
-        #    a = np.sqrt(as1)
-        #    bs = (h-k)*(h-k);
-        #    asr = -( bs/as1 + hk )/2
-        #    c = (4-hk)/8
-        #    d = (12-hk)/80
+        if abs(r) < 1-1e-10:
+            as1 = 1-r*r
+            a = math.sqrt(as1)
+            bs = (h-k)*(h-k);
+            asr = -(bs/as1+hk)/2
+            c = (4-hk)/8
+            d = (12-hk)/80
 
-        #    if asr > -100:
-        #        bvn = a*exp(asr)*(1-c*(bs-as1)*(1-d*bs)/3+c*d*as1^2)i
+            if asr > -100:
+                bvn = a*np.exp(asr)*(1-c*(bs-as1)*(1-d*bs)/3+c*d*as1*as1)
 
-        #    if hk  > -100:
-        #        b = np.sqrt(bs)
-        #        sp = np.sqrt(tp)*phid(-b/a)
-        #        bvn = bvn - exp(-hk/2)*sp*b*( 1 - c*bs*(1-d*bs)/3 );
+            if hk > -100:
+                b = np.sqrt(bs)
+                sp = math.sqrt(tp)*phid(-b/a)
+                bvn = bvn-np.exp(-hk/2)*sp*b*(1-c*bs*(1-d*bs)/3)
 
-        #a = a/2
-        #xs = (a*x)*(a*x)
-        #asr = -( bs./xs + hk )/2
-        #ix = find( asr > -100 )
-        #xs = xs(ix)
-        #sp = ( 1 + c*xs.*(1+5*d*xs) )
+        a = a/2
+        xs = (a*x)*(a*x)
+        asr = -(bs/xs+hk)/2
 
-        #rs = np.sqrt(1-xs)
-        #ep = exp( -(hk/2)*xs./(1+rs).^2 )./rs
-        #bvn = ( a*( (exp(asr(ix)).*(sp-ep))*w(ix)' ) - bvn )/tp;
+        ix = asr > -100
+        xs = xs[ix]
+        sp = 1+c*xs*(1+5*d*xs)
 
-    if r > 0:
-        bvn =  bvn + phid( -np.maximum( h, k ) )
+        rs = np.sqrt(1-xs)
+        ep = np.exp(-(hk/2)*xs/(1+rs)/(1+rs))/rs
+        bvn = np.sum(a*((np.exp(asr[ix])*(sp-ep))*w[ix])-bvn)/tp
 
-    elif h >= k:
-        bvn = -bvn
+        if r > 0:
+            bvn =  bvn + phid(-np.maximum(h,k))
 
-    else:
-        if h < 0:
-            L = phid(k)-phid(h)
+        elif h >= k:
+            bvn = -bvn
+
         else:
-            L = phid(-h)-phid(-k)
+            if h < 0:
+                L = phid(k)-phid(h)
+            else:
+                L = phid(-h)-phid(-k)
 
-        bvn =  L - bvn
+            bvn =  L - bvn
 
     return max( 0, min( 1, bvn ) )
 
@@ -224,14 +223,20 @@ def scipy_fun(x, y, rho):
 if __name__ == "__main__":
     # Test function
 
-    x = np.linspace(-0.1, 0.1, 20)
+    x0, x1 = -2, 2
+    x = np.linspace(x0, x1, 20)
     xx, yy = np.meshgrid(x, x)
     xx, yy = xx.ravel(), yy.ravel()
 
-    for rho in np.linspace(-0.92, 0.92, 20):
+    rmin, rmax = 0.95, 0.999
+
+    for rho in np.linspace(rmin, rmax, 20):
         for x, y in zip(xx, yy):
             v1 =  bvnu(-x, -y, rho)
             v2 = scipy_fun(x, y, rho)
+            try:
+                assert np.isclose(v1, v2)
+            except:
+                import pdb; pdb.set_trace()
 
-            import pdb; pdb.set_trace()
 
