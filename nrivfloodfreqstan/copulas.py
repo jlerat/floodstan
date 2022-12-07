@@ -9,8 +9,8 @@ from scipy.special import lambertw
 
 import pytest
 
-RHO_MIN = 0.001
-RHO_MAX = 0.999
+RHO_MIN = 0.01
+RHO_MAX = 0.95
 
 def factory(name):
     if name == "Gaussian":
@@ -46,18 +46,19 @@ def to2d(uv):
     return uv
 
 
-
 # Copula base class
 class Copula():
     def __init__(self, name):
         self.name = name
         self._rho = np.nan
+        self.rho_min = RHO_MIN
+        self.rho_max = RHO_MAX
 
     @property
     def rho(self):
         """ Get correlation parameter """
         rho = self._rho
-        if rho<RHO_MIN or rho>RHO_MAX or np.isnan(rho):
+        if rho<self.rho_min or rho>self.rho_max or np.isnan(rho):
             raise ValueError(f"Rho ({rho}) is not valid.")
         return rho
 
@@ -66,7 +67,7 @@ class Copula():
         """ Set correlation parameter """
         rho = float(val)
         errmsg = f"Expected rho in [{RHO_MIN}, {RHO_MAX}], got {rho}."
-        assert rho>=RHO_MIN and rho<=RHO_MAX, errmsg
+        assert rho>=self.rho_min and rho<=self.rho_max, errmsg
         self._rho = rho
 
 
@@ -88,7 +89,7 @@ class Copula():
     def logcdf(self, uv):
         return np.log(self.cdf(uv))
 
-    def ppf_conditional(self, ucond, b):
+    def ppf_conditional(self, ucond, q):
         return NotImplementedError()
 
     def sample(self, nsamples):
@@ -97,9 +98,9 @@ class Copula():
         uu = np.linspace(delta, 1-delta, nsamples)
         k1 = np.random.permutation(nsamples)
         k2 = np.random.permutation(nsamples)
-        uv = np.column_stack([uu[k1], uu[k2]])+np.random.uniform(-delta/2, delta/2, \
+        uv = np.column_stack([uu[k1], uu[k2]])\
+                    +np.random.uniform(-delta/2, delta/2, \
                                         size=(nsamples, 2))
-
         # Sampling from conditional copula
         # Considering that uv[:, 1] are probability samples
         uv[:, 1] = self.ppf_conditional(uv[:, 0], uv[:, 1])
@@ -112,6 +113,7 @@ class GaussianCopula(Copula):
     def __init__(self, approx=True):
         super(GaussianCopula, self).__init__("Gaussian")
         self.approx = approx
+        #self.rho_max = 0.6
 
     def _transform(self, uv):
         uv = to2d(uv)
@@ -122,8 +124,9 @@ class GaussianCopula(Copula):
     def rho(self, val):
         """ Set theta parameter """
         rho = float(val)
-        errmsg = f"Expected rho in [{RHO_MIN}, {RHO_MAX}], got {rho}."
-        assert rho>=RHO_MIN and rho<=RHO_MAX, errmsg
+        errmsg = f"Expected rho in [{self.rho_min}, "+\
+                    f"{self.rho_max}], got {rho}."
+        assert rho>=self.rho_min and rho<=self.rho_max, errmsg
         self._rho = rho
         # Kendal Tau of Gaussian copula. See Joe (2014) Page 164.
         self.theta = math.sin(math.pi*rho/2)
@@ -144,7 +147,7 @@ class GaussianCopula(Copula):
         q = norm.ppf(v)
         theta = self.theta
         sqr = math.sqrt(1-theta*theta)
-        return norm.cdf((pcensor-theta*q)/sqr)
+        return norm.cdf((q-theta*pcensor)/sqr)
 
     def cdf(self, uv):
         uv, pq = self._transform(uv)
@@ -162,41 +165,42 @@ class GaussianCopula(Copula):
             R = self.theta
             BV = np.zeros_like(H1)
 
-            H3 = H1*H2
             H12 = (H1*H1+H2*H2)/2.
-            for i in range(len(X)):
-                R1 = R*X[i]
-                RR2 = 1.-R1*R1
-                BV += W[i]*np.exp((R1*H3 - H12)/RR2)/math.sqrt(RR2)
 
-            return BV*R+uv.prod(axis=1)
+            if R<0.7:
+                H3 = H1*H2
+                for i in range(len(X)):
+                    R1 = R*X[i]
+                    RR2 = 1.-R1*R1
+                    BV += W[i]*np.exp((R1*H3 - H12)/RR2)/math.sqrt(RR2)
 
-            # Translation of Drezner fortran code for case where rho>0.7
-            #else:
-            #    R2 = 1.-R*R
-            #    R3 = math.sqrt(R2)
-            #    H2 *= np.sign(R)
-            #    H3 = H1*H2
-            #    H7 = np.exp(-H3/2.)
-            #    if R2>1e-10:
-            #        H6 = np.abs(H1- H2)
-            #        H5 = H6*H6/2.
-            #        H6 = H6/R3
-            #        AA = 0.5-H3/8.
-            #        AB = 3.-2.*AA*H5
-            #        BV = .13298076*H6*AB*norm.cdf(H6)-np.exp(-H5/R2)*(AB+AA*R2)*0.053051647
-            #        for i in range(5):
-            #            R1 = R3*X[i]
-            #            RR = R1*R1
-            #            R2 = math.sqrt(1.-RR)
-            #            BV += -W[i]*np.exp(-H5/RR)*(np.exp(-H3/(1.+R2))/R2/H7-1.- AA*RR)
+                return BV*R+uv.prod(axis=1)
+            else:
+                # Translation of Drezner fortran code for case where rho>0.7
+                R2 = 1.-R*R
+                R3 = math.sqrt(R2)
+                H2 *= np.sign(R)
+                H3 = H1*H2
+                H7 = np.exp(-H3/2.)
+                if R2>1e-10:
+                    H6 = np.abs(H1- H2)
+                    H5 = H6*H6/2.
+                    H6 = H6/R3
+                    AA = 0.5-H3/8.
+                    AB = 3.-2.*AA*H5
+                    BV = .13298076*H6*AB*norm.cdf(H6)-np.exp(-H5/R2)*(AB+AA*R2)*0.053051647
+                    for i in range(5):
+                        R1 = R3*X[i]
+                        RR = R1*R1
+                        R2 = math.sqrt(1.-RR)
+                        BV += -W[i]*np.exp(-H5/RR)*(np.exp(-H3/(1.+R2))/R2/H7-1.- AA*RR)
 
-            #    if R>0:
-            #        BV = BV*R3*H7+norm.cdf(np.maximum(H1, H2))
-            #    else:
-            #        BV = np.maximum(0, norm.cdf(H1)-norm.cdf(H2))-BV*R3*H7
+                if R>0:
+                    BV = BV*R3*H7+norm.cdf(np.maximum(H1, H2))
+                else:
+                    BV = np.maximum(0, norm.cdf(H1)-norm.cdf(H2))-BV*R3*H7
 
-            #    return BV
+                return BV
 
         else:
             # -- Very accurate method using scipy mvn --
@@ -208,13 +212,12 @@ class GaussianCopula(Copula):
             for i in range(nval):
                 upper = pq[[i]]
                 err, csp[i], info = mvn.mvndst(lower, upper, infin, correl)
-
             return csp
 
-    def ppf_conditional(self, ucond, b):
+    def ppf_conditional(self, ucond, q):
         pcond = norm.ppf(ucond)
         theta = self.theta
-        return norm.cdf(theta*pcond+norm.ppf(b)*math.sqrt(1-theta*theta))
+        return norm.cdf(theta*pcond+norm.ppf(q)*math.sqrt(1-theta*theta))
 
 
 
@@ -227,8 +230,9 @@ class GumbelCopula(Copula):
     def rho(self, val):
         """ Set theta parameter """
         rho = float(val)
-        errmsg = f"Expected rho in [{RHO_MIN}, {RHO_MAX}], got {rho}."
-        assert rho>=RHO_MIN and rho<=RHO_MAX, errmsg
+        errmsg = f"Expected rho in [{self.rho_min}, "+\
+                    f"{self.rho_max}], got {rho}."
+        assert rho>=self.rho_min and rho<=self.rho_max, errmsg
         self._rho = rho
         self.theta = 1/(1-rho)
 
@@ -279,11 +283,14 @@ class GumbelCopula(Copula):
         B = A/(m-1)-math.log(m-1)
 
         # Solve with analytical solution obtained from lambertW function
-        z = lambertw(np.exp(B))*(m-1)
+        # Using asymptotic expansion of LambertW for x->inf:
+        # LambertW(x) ~ ln(x)-ln(ln(x))
+        z = np.where(B<700, lambertw(np.exp(B)), B-np.log(B))*(m-1)
 
-        # Convert from z to exponential of reduced var 2
+        # Convert from z to exponential of reduced var
         expv = np.power(np.power(z, m)-np.power(expu, m), 1/m)
 
+        # Return non-reduced var
         return np.column_stack([p, np.exp(-expv).real])
 
 
@@ -297,11 +304,11 @@ class ClaytonCopula(Copula):
     def rho(self, val):
         """ Set theta parameter """
         rho = float(val)
-        errmsg = f"Expected rho in [{RHO_MIN}, {RHO_MAX}], got {rho}."
-        assert rho>=RHO_MIN and rho<=RHO_MAX, errmsg
+        errmsg = f"Expected rho in [{self.rho_min}, "+\
+                    f"{self.rho_max}], got {rho}."
+        assert rho>=self.rho_min and rho<=self.rho_max, errmsg
         self._rho = rho
         self.theta = 2*rho/(1-rho)
-
 
     def pdf(self, uv):
         uv = to2d(uv)
@@ -311,10 +318,10 @@ class ClaytonCopula(Copula):
                     *np.power(uv.prod(axis=1), -theta-1) \
                     *np.power(expsum, -2-1/theta)
 
-
     def conditional_density(self, ucond, v):
-        pass
-
+        theta = self.theta
+        # see Joe (2014), eq 4.10 page 168
+        return np.power(1+np.power(ucond, theta)*(np.power(v, -theta)-1),-1-1/theta)
 
     def cdf(self, uv):
         uv = to2d(uv)
@@ -322,11 +329,10 @@ class ClaytonCopula(Copula):
         expsum = np.power(uv, -theta).sum(axis=1)-1
         return np.power(expsum, -1./theta)
 
-
-    def ppf_conditional(self, ucond, b):
+    def ppf_conditional(self, ucond, q):
         theta = self.theta
         # see Joe (2014), eq 4.10 page 168
-        bb = np.power(b, -theta/(1+theta))-1
+        bb = np.power(q, -theta/(1+theta))-1
         cc = bb*np.power(ucond, -theta)+1
         return np.power(cc, -1/theta)
 
@@ -336,6 +342,7 @@ class FrankCopula(Copula):
     def __init__(self):
         super(FrankCopula, self).__init__("Frank")
         self.theta = np.nan
+        self.rho_max = 0.9
 
     @Copula.rho.setter
     def rho(self, val):
@@ -358,7 +365,12 @@ class FrankCopula(Copula):
 
 
     def conditional_density(self, ucond, v):
-        pass
+        theta = self.theta
+        # see Joe (2014), eq 4.7 page 165
+        w = 1-math.exp(-theta)
+        x = np.exp(-theta*ucond)
+        y = np.exp(-theta*v)
+        return x/(w/(1-y)-(1-x))
 
 
     def cdf(self, uv):
@@ -370,10 +382,10 @@ class FrankCopula(Copula):
         return -1/theta*np.log(z/w)
 
 
-    def ppf_conditional(self, ucond, b):
+    def ppf_conditional(self, ucond, q):
         theta = self.theta
         # see Joe (2014), eq 4.7 page 165
         w = 1-math.exp(-theta)
         x = np.exp(-theta*ucond)
-        return -1/theta*np.log(1-w/((1/b-1)*x+1))
+        return -1/theta*np.log(1-w/((1/q-1)*x+1))
 

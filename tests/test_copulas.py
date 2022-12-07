@@ -22,7 +22,7 @@ import warnings
 
 from nrivfloodfreqstan import copulas
 
-#from tqdm import tqdm
+from tqdm import tqdm
 
 FTESTS = Path(__file__).resolve().parent
 
@@ -38,21 +38,19 @@ class DummyCopula(copulas.Copula):
         return q
 
 
-# Wrapper around statsmodels copula
-RHO_MIN = copulas.RHO_MIN
-RHO_MAX = copulas.RHO_MAX
-
 class SMCopula(copulas.Copula):
     def __init__(self, copula):
         super(SMCopula, self).__init__(f"SM-{copula}")
         self.copula = copula
+        self.rho_min = 0.01
+        self.rho_max = 0.99
 
     @copulas.Copula.rho.setter
     def rho(self, val):
         """ Set correlation parameter """
         rho = float(val)
-        errmsg = f"Expected rho in [{RHO_MIN}, {RHO_MAX}], got {rho}."
-        assert rho>=0. and rho<=RHO_MAX, errmsg
+        errmsg = f"Expected rho in [{self.rho_min}, {self.rho_max}], got {rho}."
+        assert rho>=self.rho_min and rho<=self.rho_max, errmsg
         self._rho = rho
 
         if self.copula == "Gaussian":
@@ -103,51 +101,65 @@ def test_base_class():
 def test_vs_statsmodels(allclose):
     ndata = 1000
     nsamples = 100000
-    for copula in ["Gaussian", "Gumbel", "Clayton", "Frank"]:
-        print(f"\nTesting {copula}")
+    #for copula in ["Gaussian", "Gumbel", "Clayton", "Frank"]:
+    for copula in ["Gaussian"]:
         cop1 = SMCopula(copula)
         cop2 = copulas.factory(copula)
         #cop2.approx = False
         uv = np.random.uniform(0, 1, size=(ndata, 2))
 
-        rhomax = 0.6 # theta<0.8 for Gaussian copula
-        for rho in np.linspace(0.05, rhomax, 10):
+        rmin = 0.8
+        rmax = cop2.rho_max
+        tbar = tqdm(np.linspace(rmin, rmax, 10), \
+                        desc=f"Testing "+copula, total=10)
+        for rho in tbar:
             cop1.rho = rho
             cop2.rho = rho
 
             pdf1 = cop1.pdf(uv)
             pdf2 = cop2.pdf(uv)
-            assert allclose(pdf1, pdf2)
+            #assert allclose(pdf1, pdf2, equal_nan=True)
 
             cdf1 = cop1.cdf(uv)
             cdf2 = cop2.cdf(uv)
-            assert allclose(cdf1, cdf2, atol=1e-5)
+            import pdb; pdb.set_trace()
 
+            assert allclose(cdf1, cdf2, atol=1e-5, equal_nan=True)
+
+            # Statsmodels uses a random sample generator
+            # that is not based in inverse CDF for Clayton
+            if copula=="Clayton":
+                continue
+
+            nok = 0
             for itry in range(5):
                 uv1 = cop1.sample(nsamples)
                 uv2 = cop2.sample(nsamples)
                 if copula == "Gaussian":
                     pq = norm.ppf(uv2)
                     corr = np.corrcoef(pq.T)[0, 1]
-                    assert allclose(corr, cop2.theta, rtol=0, atol=1e-2)
+                    assert allclose(corr, cop2.theta, rtol=1e-2, atol=1e-2)
 
                 sa, pva = ks_2samp(uv1[:, 0], uv2[:, 0])
                 sb, pvb = ks_2samp(uv1[:, 1], uv2[:, 1])
-                if pva>0.2:
+                if pva>0.3:
+                    nok += 1
                     assert pvb>0.01
+
+            assert nok>0
+
 
 def test_plots():
     nsamples = 5000
     fimg = FTESTS / "images"
     fimg.mkdir(exist_ok=True)
 
-    #for copula in ["Gaussian", "Gumbel", "Clayton", "Frank"]:
-    for copula in ["Gumbel"]:
+    for copula in ["Gaussian", "Gumbel", "Clayton", "Frank"]:
         cop = copulas.factory(copula)
 
         plt.close("all")
         fig, axs = plt.subplots(ncols=2, nrows=2, figsize=(10, 10), layout="tight")
-        rhos = np.linspace(0.1, 0.6, 4)
+        rhos = np.linspace(cop.rho_min, cop.rho_max, 4)
         for iax, ax in enumerate(axs.flat):
             cop.rho = rhos[iax]
             samples = cop.sample(nsamples)
@@ -169,8 +181,7 @@ def test_gaussian(allclose):
     uv = np.random.uniform(0, 1, size=(ndata, 2))
     pq = norm.ppf(uv)
     mu = np.zeros(2)
-
-    for rho in np.linspace(0.1, 0.6, 6):
+    for rho in np.linspace(cop.rho_min, cop.rho_max, 6):
         cop.rho = rho
         theta = cop.theta
 
@@ -201,22 +212,6 @@ def test_gaussian(allclose):
 
         assert allclose(cdf, expected, rtol=0, atol=5e-6)
 
-        # Test conditional density
-        def fun2(u, y):
-            x = norm.ppf(u)
-            z = x*x-2*theta*x*y+y*y
-            return math.exp(-z/r2/2+(x*x+y*y)/2)/math.sqrt(r2)
-
-        for ucond in np.linspace(0.1, 0.9, 5):
-            pdfu = cop.conditional_density(ucond, uv[:, 1])
-
-            expected = np.zeros_like(pdfu)
-            for i in range(ndata):
-                y = pq[i, 1]
-                s, err = quad(fun2, 0, ucond, args=(y, ))
-                expected[i] = s
-
-            assert allclose(pdfu, expected, atol=1e-8)
 
 
 def test_gumbel(allclose):
@@ -224,12 +219,10 @@ def test_gumbel(allclose):
 
     ndata = 100
     uv = np.random.uniform(0, 1, size=(ndata, 2))
-    nsamples = 1000000
 
-    for rho in np.linspace(0.1, 0.6, 6):
+    for rho in np.linspace(cop.rho_min, cop.rho_max, 6):
         cop.rho = rho
         theta = cop.theta
-        samples = cop.sample(nsamples)
 
         x = -np.log(uv[:, 0])
         xth = np.power(x, theta)
@@ -243,7 +236,7 @@ def test_gumbel(allclose):
                     *np.power(xth+yth, 1/theta-2)\
                     *np.power(x*y, theta-1)\
                     *1/np.prod(uv, axis=1)
-        assert allclose(pdf, expected)
+        assert allclose(pdf, expected, equal_nan=True)
 
         # Test cdf
         cdf = cop.cdf(uv)
@@ -254,36 +247,88 @@ def test_gumbel(allclose):
         def fun(u, v):
             return cop.pdf(np.array([u, v])[None, :])[0]
 
-        for ucond in np.linspace(0.1, 0.9, 5):
-            pdfu = cop.conditional_density(ucond, uv[:, 1])
+        tbar = tqdm(np.linspace(0.1, 0.9, 5), \
+                desc=f"Testing gumbel rho={rho:0.3f}", total=5)
+        for ucond in tbar:
+            pdfu = cop.conditional_density(uv[:, 1], ucond)
 
-            expected = np.zeros_like(pdfu)
-            for i in range(ndata):
-                s, err = quad(fun, 0, ucond, args=(uv[i, 1], ))
-                expected[i] = s
+            # Compare with reduced variables formula
+            # Assumes x ~ GEV(kx, tx, ax) -> ux = F(x, kx, tx, ax)
+            #                                   = exp{-[1-kx(x-tx)/ax]^(1/kx)}
+            #         y ~ GEV(ky, ty, ay) -> uy = ...
+            # Reduced variables are obtained as:
+            #  wx = -1/kx log[1-kx(x-tx)/ax]
+            #  wy = ...
+            #
+            # jacy = -log(ay-ky*(y-ty))
+            # a = exp(-theta*wx)+exp(-theta*wy)
+            # logdensity_conditional = -a^(1/theta)+(1/theta-1)log(a)
+            #                          - theta wy
+            #                          + jacy
+            kx, tx, ax = -0.1, 100, 90
+            ky, ty, ay = 0.1, 100, 50
 
-            assert allclose(pdfu, expected, atol=1e-8)
+            xcens = ax*(1-np.power(-np.log(ucond), kx))/kx+tx
+            y = ay*(1-np.power(-np.log(uv[:, 1]), ky))/ky+ty
 
-        # Compare with reduced variables formula
-        # Assumes x ~ GEV(kx, tx, ax) -> ux = F(x, kx, tx, ax)
-        #                                   = exp{-[1-kx(x-tx)/ax]^(1/kx)}
-        #         y ~ GEV(ky, ty, ay) -> uy = ...
-        # Reduced variables are obtained as:
-        #  wx = -1/kx log[1-kx(x-tx)/ax]
-        #  wy = ...
-        #
-        # jy = -log(ay-ky*(y-ty))
-        # a = exp(-theta*wx)+exp(-theta*wy)
-        # logdensity_conditional = -a^(1/theta)+(1/theta-1)log(a)
-        #                          - theta wy
-        #                          + jy
-        kx, tx, ax = -0.1, 100, 10
-        ky, ty, ay = 0.1, 100, 20
+            wxcens = -1/kx*np.log(1-kx*(xcens-tx)/ax)
+            wy = -1/ky*np.log(1-ky*(y-ty)/ay)
 
-        x = ax*(1-np.power(-np.log(uv[:, 0]), kx))/kx+tx
-        y = ay*(1-np.power(-np.log(uv[:, 1]), ky))/ky+ty
+            logjacy = -np.log(ay-ky*(y-ty))
+            a = np.exp(-theta*wxcens)+np.exp(-theta*wy)
+            expected = -np.power(a, 1/theta)+(1/theta-1)*np.log(a)-theta*wy+logjacy
 
-        jy = -np.log(ay-ky*(y-ty))
-        a = np.exp(-theta*wx)+np.exp(-theta*wy)
-        import pdb; pdb.set_trace()
+            # Direct expression from copula
+            eta = 1-ky*(y-ty)/ay
+            fy = 1/ay*np.exp(-np.power(eta, 1/ky))*np.power(eta, 1/ky-1)
+            lpdf = np.log(fy)+np.log(pdfu)
+            iok = np.isfinite(lpdf)
+            assert allclose(lpdf[iok], expected[iok])
+
+
+
+def test_conditional_density(allclose):
+    ndata = 100
+    for copula in ["Gaussian", "Gumbel", "Clayton", "Frank"]:
+        cop = copulas.factory(copula)
+        uv = np.random.uniform(0, 1, size=(ndata, 2))
+
+        for rho in np.linspace(cop.rho_min, cop.rho_max, 10):
+            cop.rho = rho
+
+            tbar = tqdm(np.linspace(0.1, 0.9, 5), \
+                    desc=f"Testing {copula} conditional density: rho={rho:0.3f}", total=5)
+            for ucond in tbar:
+                pdfu = cop.conditional_density(uv[:, 1], ucond)
+                assert (pdfu<1).sum()>0
+
+                # test pdfu is reverse of ppf conditional
+                # except for Gumbel which does not use
+                # ppf_conditional for the sample function
+                if copula != "Gumbel":
+                    iok = pdfu<0.99
+                    qu = cop.ppf_conditional(uv[iok, 1], pdfu[iok])
+                    assert allclose(qu, ucond, atol=1e-3)
+
+                # Test conditional density vs integrating pdf
+                expected1 = np.zeros_like(pdfu)
+                def fun(u, v):
+                    return cop.pdf(np.array([u, v])[None, :])[0]
+
+                for i in range(ndata):
+                    s, err = quad(fun, 0, ucond, args=(uv[i, 1], ))
+                    expected1[i] = s
+
+                assert allclose(pdfu, expected1, atol=1e-4)
+
+                # Test conditional density vs derivating cdf
+                uvc = uv.copy()
+                uvc[:, 0] = ucond
+                c0 = cop.cdf(uvc)
+                eps = 1e-6
+                uvc[:, 1]+=eps
+                c1 = cop.cdf(uvc)
+                expected2 = (c1-c0)/eps
+                assert allclose(pdfu, expected2, atol=5e-4, rtol=5e-4)
+
 
