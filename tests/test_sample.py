@@ -95,17 +95,19 @@ def test_prepare():
 
 def test_marginals(allclose):
     stationids = get_stationids()
+    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+
     for stationid in stationids:
         y = get_ams(stationid)
-        LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+        ymin, ymax = y.min(), y.max()
         N = len(y)
 
         #for marginal in ["LogNormal", "Gumbel", "GEV", "LogPearson3", "Normal"]:
-        for marginal in ["LogPearson3", "Normal"]:
+        for marginal in ["LogPearson3"]:
             dist = fdist.factory(marginal)
             params, _ = fsample.bootstrap_lh_moments(dist, y, 50)
             tbar = tqdm(params.iterrows(), total=len(params), \
-                            desc=f"Testing {marginal} marginal")
+                            desc=f"[{stationid}] Testing {marginal} marginal")
             for _, param in tbar:
                 dist.set_dict_params(param.to_dict())
 
@@ -126,9 +128,13 @@ def test_marginals(allclose):
                     logscale = dist.logalpha
                     shape = dist.kappa
                 elif marginal == "LogPearson3":
-                    loc = dist.s
+                    loc = dist.m
                     logscale = math.log(dist.s)
                     shape = dist.g
+
+                y0, y1 = dist.support
+                if y0>ymin or y1<ymax:
+                    continue
 
                 stan_data = {
                     "ymarginal": sample.MARGINAL_CODES[marginal], \
@@ -144,8 +150,6 @@ def test_marginals(allclose):
                                     chains=1, iter_warmup=0, iter_sampling=1, \
                                     fixed_param=True, show_progress=False)
                 smp = smp.draws_pd().squeeze()
-                import pdb; pdb.set_trace()
-
 
                 # Test
                 luncens = smp.filter(regex="luncens").values
@@ -158,80 +162,44 @@ def test_marginals(allclose):
 
 
 def test_copulas():
-    stationids = get_stationids()
-    for stationid in stationids:
-        z = get_ams(stationid)
-        e = np.random.uniform(0, 10, len(z))
-        y = z+e
-        y.iloc[np.random.choice(np.arange(len(z)), len(z)//3)] = np.nan
-        df = pd.DataFrame({"y": y, "z": z})
-        yz = df.values
-        LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    N = 100
+    uv = np.random.uniform(0, 1, size=(N, 2))
+    LOGGER = sample.get_logger(level="INFO") #, stan_logger=False)
 
-        ycensor = y.quantile(0.5)
-        zcensor = z.quantile(0.5)
-        N = len(df)
-        prior_variables = {"area": 500}
-        ymarginal = "Normal"
-        zmarginal = "Normal"
+    #for copula in ["Gumbel", "Clayton", "Gaussian"]:
+    for copula in ["Gaussian"]:
+        cop = copulas.factory(copula)
 
-        #for copula in ["Gumbel", "Clayton", "Gaussian"]:
-        for copula in ["Gaussian"]:
-            LOGGER.info(f"[{stationid}] Testing copula {copula}")
+        rmin = cop.rho_min
+        rmax = cop.rho_max
+        nval = 20
+        tbar = tqdm(np.linspace(rmin, rmax, nval), \
+                        desc=f"Testing "+copula+" vs statsmodels", total=nval)
+        for rho in tbar:
+            cop.rho = rho
 
+            stan_data = {
+                "copula": sample.COPULA_CODES[copula], \
+                "N": N, \
+                "uv": uv, \
+                "rho": rho
+            }
 
-            for i in range(N):
-                stan_data = sample.prepare([yz[i, 0]], [yz[i, 1]], \
-                                        ymarginal=ymarginal, \
-                                        zmarginal=zmarginal, \
-                                        ycensor=ycensor, \
-                                        zcensor=zcensor, \
-                                        copula=copula, \
-                                        prior_variables=prior_variables)
-                yloc, ylogscale = df.y.mean(), math.log(df.y.std())
-                stan_data["yloc"] = yloc
-                stan_data["ylogscale"] = ylogscale
-                stan_data["yshape"] = 0
+            # Run stan
+            smp = test_copula.sample(data=stan_data, \
+                                chains=1, iter_warmup=0, iter_sampling=1, \
+                                fixed_param=True, show_progress=False)
+            smp = smp.draws_pd().squeeze()
 
-                zloc, zlogscale = df.z.mean(), math.log(df.z.std())
-                stan_data["zloc"] = zloc
-                stan_data["zlogscale"] = zlogscale
-                stan_data["zshape"] = 0
+            # Test lpdf
+            lpdf = smp.filter(regex="luncens")
+            expected = cop.logpdf(uv)
 
-                rho = np.random.uniform(-0.99, 0.99)
-                stan_data["rho"] = rho
+            # test lcdf
+            expected = cop.logcdf(uv)
 
-                # Run stan
-                smp = test_stan_functions.sample(data=stan_data, \
-                                    chains=1, iter_warmup=0, iter_sampling=1, \
-                                    fixed_param=True, show_progress=False)
-                smp = smp.draws_pd().squeeze()
-
-                # Test
-                cop = Copula(copula, rho)
-                ucensor = norm.cdf(ycensor, loc=yloc, scale=math.exp(ylogscale))
-                u = norm.cdf(stan_data["y"], loc=yloc, scale=math.exp(ylogscale))
-                vcensor = norm.cdf(zcensor, loc=zloc, scale=math.exp(zlogscale))
-                v = norm.cdf(stan_data["z"], loc=zloc, scale=math.exp(zlogscale))
-
-                n11 = stan_data["Ncases"][0, 0]
-                if n11>0:
-                    pass
-                #real l11_a = copula_lpdf(uv[i11,:] | copula, rho);
-
-                n21 = stan_data["Ncases"][1, 0]
-                if n21>0:
-                    pass
-                #real l21_a = copula_lpdf_ucensored(ucensor, uv[i21, 2], copula, rho);
-
-                n12 = stan_data["Ncases"][0, 1]
-                if n12>0:
-                    pass
-                #real l12_a = copula_lpdf_ucensored(vcensor, uv[i12, 1], copula, rho);
+            # test conditional density
+            expected = cop.logconditional_density(uv[:, 0], uv[:, 1])
 
 
-                n22 = stan_data["Ncases"][1, 1]
-                if n22>0:
-                    pass
-                #real l22 = Ncases[2,2]*copula_lcdf(uvcensors | copula, rho);
 

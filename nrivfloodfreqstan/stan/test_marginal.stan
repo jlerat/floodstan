@@ -30,7 +30,6 @@ data {
 
 generated quantities {
   real yscale = exp(ylogscale);
-  print("marginal=", ymarginal);
 
   // un censored case
   vector[N] luncens;
