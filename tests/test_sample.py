@@ -61,7 +61,7 @@ def test_get_marginal_prior():
                                 prior_variables, "uninformative")
 
     expected = {\
-        "loc": [700./3, 1400./3], \
+        "locn": [700./3, 1400./3], \
         "logscale": [5, 4], \
         "shape": [0, 4]
     }
