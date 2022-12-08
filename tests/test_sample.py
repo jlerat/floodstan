@@ -166,6 +166,8 @@ def test_copulas(allclose):
                                 fixed_param=True, show_progress=False)
             smp = smp.draws_pd().squeeze()
 
+            assert allclose(smp.rho_check, rho, atol=1e-6)
+
             # Test lpdf
             lpdf = smp.filter(regex="luncens")
             expected = cop.logpdf(uv)
@@ -175,13 +177,9 @@ def test_copulas(allclose):
             lcdf = smp.filter(regex="lcens")
             expected = cop.logcdf(uv)
             assert allclose(lcdf, expected, atol=1e-7)
-
-            # test conditional density
             lcond = smp.filter(regex="lcond")
             expected = np.log(cop.conditional_density(uv[:, 0], uv[:, 1]))
-            import pdb; pdb.set_trace()
-
-            #assert allclose(lcond, expected, atol=1e-7)
+            assert allclose(lcond, expected, atol=1e-7)
 
 
 

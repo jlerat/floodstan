@@ -36,9 +36,11 @@ generated quantities {
   matrix[1, 2] tmp2;
 
   for(i in 1:N){
-    tmp1[1] = uv[i, 2];
+    // Temporary vectors to match with function signature
+    tmp1[1] = uv[i, 1];
     tmp2[1, 1] = uv[i, 1];
     tmp2[1, 2] = uv[i, 2];
+
     luncens[i] = copula_lpdf(tmp2| copula, rho);
     lcond[i] = copula_lpdf_conditional(tmp1, uv[i, 2], copula, rho);
     lcens[i] = copula_lcdf(tmp2| copula, rho);

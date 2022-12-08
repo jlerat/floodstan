@@ -130,15 +130,16 @@ real copula_lpdf(matrix uv, int copula, real rho){
 
     if(copula==1) {
         // Gumbel copula
-        real m = corr2param(copula, rho);
-        vector[N] logu = log(uv[:, 1]);
-        vector[N] logv = log(uv[:, 2]);
-        vector[N] a = pow(logu, m)+pow(logv, m);
-        return sum(-pow(a, 1.0/m)
-                        -m*(logu+logv)
-                        +(1.0/m-2)*log(a)
-                        +log(m-1+pow(a, 1.0/m))
-                    );
+        real theta = corr2param(copula, rho);
+        vector[N] x = -log(uv[:, 1]);
+        vector[N] y = -log(uv[:, 2]);
+        vector[N] expsum = pow(x, theta)+pow(y, theta);
+        vector[N] exppow = pow(expsum, 1.0/theta);
+        return sum(-exppow
+                    +log(exppow+theta-1)
+                    +(1.0/theta-2)*expsum
+                    +(theta-1)*log(x.*y)
+                    -log(uv[:, 1])-log(uv[:, 2]));
     }
 
     else if (copula==2) {
