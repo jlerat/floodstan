@@ -19,11 +19,8 @@ from cmdstanpy import CmdStanModel
 import importlib
 from tqdm import tqdm
 
-from nrivfloodfreq import fdist, fsample
-from nrivfloodfreqstan import sample, test_marginal, test_copula
-from hydrodiy.io import csv
-
-from nrivfloodfreqstan import copulas
+from nrivfloodfreqstan import marginals, sample, copulas
+from nrivfloodfreqstan import test_marginal, test_copula
 
 from tqdm import tqdm
 
@@ -69,7 +66,7 @@ def test_get_marginal_prior():
         "shape": [0, 4]
     }
 
-    for key in ["loc", "logscale", "shape"]:
+    for key in ["locn", "logscale", "shape"]:
         assert np.allclose(prior[key], expected[key])
 
 
@@ -96,53 +93,31 @@ def test_prepare():
 def test_marginals(allclose):
     stationids = get_stationids()
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    nboot = 100
 
     for stationid in stationids:
         y = get_ams(stationid)
-        ymin, ymax = y.min(), y.max()
         N = len(y)
 
-        #for marginal in ["LogNormal", "Gumbel", "GEV", "LogPearson3", "Normal"]:
-        for marginal in ["LogPearson3"]:
-            dist = fdist.factory(marginal)
-            params, _ = fsample.bootstrap_lh_moments(dist, y, 50)
-            tbar = tqdm(params.iterrows(), total=len(params), \
-                            desc=f"[{stationid}] Testing {marginal} marginal")
-            for _, param in tbar:
-                dist.set_dict_params(param.to_dict())
+        for marginal in ["LogNormal", "Gumbel", "GEV", "LogPearson3", "Normal"]:
+            dist = marginals.factory(marginal)
+            desc = f"[{stationid}] Testing stan {marginal} marginal"
 
-                if marginal == "LogNormal":
-                    loc = dist.m
-                    logscale = math.log(dist.s)
-                    shape = 0
-                elif marginal == "Normal":
-                    loc = dist.mu
-                    logscale = dist.logsig
-                    shape = 0
-                elif marginal == "Gumbel":
-                    loc = dist.tau
-                    logscale = dist.logalpha
-                    shape = 0
-                elif marginal == "GEV":
-                    loc = dist.tau
-                    logscale = dist.logalpha
-                    shape = dist.kappa
-                elif marginal == "LogPearson3":
-                    loc = dist.m
-                    logscale = math.log(dist.s)
-                    shape = dist.g
-
+            for iboot in tqdm(range(nboot), desc=desc):
+                # Bootstrap fit
+                yboot = np.random.choice(y.values, N)
+                dist.fit_lh_moments(yboot)
                 y0, y1 = dist.support
-                if y0>ymin or y1<ymax:
+                if y0>yboot.min() or y1<yboot.max():
                     continue
 
                 stan_data = {
                     "ymarginal": sample.MARGINAL_CODES[marginal], \
                     "N": N, \
-                    "y": y.values, \
-                    "yloc": loc, \
-                    "ylogscale": logscale, \
-                    "yshape": shape
+                    "y": yboot, \
+                    "ylocn": dist.locn, \
+                    "ylogscale": dist.logscale, \
+                    "yshape1": dist.shape1
                 }
 
                 # Run stan
@@ -153,18 +128,18 @@ def test_marginals(allclose):
 
                 # Test
                 luncens = smp.filter(regex="luncens").values
-                expected = dist.logpdf(y)
+                expected = dist.logpdf(yboot)
                 assert allclose(luncens, expected, atol=1e-5)
 
                 lcens = smp.filter(regex="lcens").values
-                expected = dist.logcdf(y)
+                expected = dist.logcdf(yboot)
                 assert allclose(lcens, expected, atol=1e-5)
 
 
-def test_copulas():
+def test_copulas(allclose):
     N = 100
     uv = np.random.uniform(0, 1, size=(N, 2))
-    LOGGER = sample.get_logger(level="INFO") #, stan_logger=False)
+    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
 
     #for copula in ["Gumbel", "Clayton", "Gaussian"]:
     for copula in ["Gaussian"]:
@@ -174,7 +149,7 @@ def test_copulas():
         rmax = cop.rho_max
         nval = 20
         tbar = tqdm(np.linspace(rmin, rmax, nval), \
-                        desc=f"Testing "+copula+" vs statsmodels", total=nval)
+                        desc=f"Testing stan "+copula, total=nval)
         for rho in tbar:
             cop.rho = rho
 
@@ -194,12 +169,19 @@ def test_copulas():
             # Test lpdf
             lpdf = smp.filter(regex="luncens")
             expected = cop.logpdf(uv)
+            assert allclose(lpdf, expected, atol=1e-7)
 
             # test lcdf
+            lcdf = smp.filter(regex="lcens")
             expected = cop.logcdf(uv)
+            assert allclose(lcdf, expected, atol=1e-7)
 
             # test conditional density
-            expected = cop.logconditional_density(uv[:, 0], uv[:, 1])
+            lcond = smp.filter(regex="lcond")
+            expected = np.log(cop.conditional_density(uv[:, 0], uv[:, 1]))
+            import pdb; pdb.set_trace()
+
+            #assert allclose(lcond, expected, atol=1e-7)
 
 
 
