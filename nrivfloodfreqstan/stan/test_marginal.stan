@@ -21,14 +21,18 @@ data {
   vector[N] y; // Data for first variable (ams streamflow)
 
   // Parameter for observed streamflow
-  real yloc; 
+  real ylocn; 
   real ylogscale;
-  real yshape;
+  real yshape1;
 
 }  
 
 
 generated quantities {
+  real ylocn_check = ylocn;
+  real ylogscale_check = ylogscale;
+  real yshape1_check = yshape1;
+
   real yscale = exp(ylogscale);
 
   // un censored case
@@ -38,8 +42,8 @@ generated quantities {
 
   for(i in 1:N){
     tmp[1] = y[i];
-    luncens[i] = marginal_lpdf(tmp | ymarginal, yloc, yscale, yshape);
-    lcens[i] = marginal_lcdf(y[i] | ymarginal, yloc, yscale, yshape);
+    luncens[i] = marginal_lpdf(tmp | ymarginal, ylocn, yscale, yshape1);
+    lcens[i] = marginal_lcdf(y[i] | ymarginal, ylocn, yscale, yshape1);
   }
 
 

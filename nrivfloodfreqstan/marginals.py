@@ -146,7 +146,7 @@ class FloodFreqDistribution():
         self.name = name
         self._locn = np.nan
         self._logscale = np.nan
-        self._shape1 = np.nan
+        self._shape1 = 0. # Assume 0 shape for distribution that do not have shape
 
     def __str__(self):
         txt = f"{self.name} flood frequency distribution:\n"

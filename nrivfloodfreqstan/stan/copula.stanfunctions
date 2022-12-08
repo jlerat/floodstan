@@ -44,6 +44,7 @@ real copula_lcdf(matrix uv, int copula, real rho){
     int N = rows(uv);
 
     if(copula==1) {
+        // Gumbel copula
         real m = corr2param(copula, rho);
         vector[N] logu = log(uv[:, 1]);
         vector[N] logv = log(uv[:, 2]);
@@ -52,6 +53,7 @@ real copula_lcdf(matrix uv, int copula, real rho){
     }
 
     else if (copula==2) {
+        // Clayton copula
         real theta = corr2param(copula, rho);
         vector[N] powu = pow(uv[:, 1], -theta);
         vector[N] powv = pow(uv[:, 2], -theta);
@@ -59,6 +61,8 @@ real copula_lcdf(matrix uv, int copula, real rho){
     }
 
     else if (copula==3) {
+        // Gaussian copula
+
         // Translation of the matlab code from Alan Genz
         // https://www.math.wsu.edu/faculty/genz/software/matlab/bvn.m
         // Note that this code was supposed to work for correlation < 0.925
@@ -125,6 +129,7 @@ real copula_lpdf(matrix uv, int copula, real rho){
     int N = rows(uv);
 
     if(copula==1) {
+        // Gumbel copula
         real m = corr2param(copula, rho);
         vector[N] logu = log(uv[:, 1]);
         vector[N] logv = log(uv[:, 2]);
@@ -137,52 +142,52 @@ real copula_lpdf(matrix uv, int copula, real rho){
     }
 
     else if (copula==2) {
+        // Clayton copula
         real theta = corr2param(copula, rho);
-
-        // TODO
-        reject("Clayton lpdf not implemented.");
+        vector[N] expsum = pow(uv[:, 1], -theta)+pow(uv[:, 2], -theta);
+        vector[N] prod = uv[:, 1].*uv[:, 2];
+        return N*log(1+theta)+sum(log(-(theta-1)*prod-(2+1/theta)*expsum));
     }
 
     else if (copula==3) {
-        real corr = corr2param(copula, rho);
-        real corr2 = 1-corr*corr;
+        // Gaussian copula
+        real theta = corr2param(copula, rho);
+        real r2 = 1-theta*theta;
         vector[N] p = inv_Phi(uv[:, 1]);
         vector[N] q = inv_Phi(uv[:, 2]);
-        vector[N] psq = p.*p;
-        vector[N] qsq = q.*q;
-
-        return sum(-log(corr2)*N/2
-                    +corr*corr2*(p.*q)
-                    +0.5*(psq+qsq)*(1-corr2));
+        vector[N] s2 = p.*p+q.*q;
+        vector[N] z = s2-2*theta*p.*q;
+        return -log(r2)*N/2+sum(-z/r2/2+s2/2);
     }
     
     return not_a_number();
 }
 
-real copula_lpdf_ucensored(real ucensor, vector v, int copula, real rho){
-    int N = rows(v);
+real copula_lpdf_conditional(vector ucond, real v, int copula, real rho){
+    int N = rows(ucond);
 
     if(copula==1) {
-        real m = corr2param(copula, rho);
-        vector[N] a = pow(log(ucensor), m)+pow(log(v), m);
-        return sum(-pow(a, 1.0/m)
-                    +(1.0/m-1)*log(a)
-                    -m*v
-                );
+        // Gumbel copula
+        real theta = corr2param(copula, rho);
+        vector[N] x = -log(ucond);
+        real y = -log(v);
+        return sum(-log(ucond)-(pow(x, theta)+pow(y, theta))/theta
+                                 +(1/theta-1)*log(1+pow(y./x, theta)));
     }
 
     else if (copula==2) {
+        // Clayton copula
         real theta = corr2param(copula, rho);
-
-        // TODO
-        reject("Clayton lpdf_ucensored not implemented.");
+        vector[N] expm1 = 1+pow(ucond, theta)*(pow(v, -theta)-1);
+        return sum(-(1.0+1.0/theta)*log(expm1));
     }
 
     else if (copula==3) {
-        real corr = corr2param(copula, rho);
-        real pcensor = inv_Phi(ucensor);
-        vector[N] q = inv_Phi(v);
-        return sum(log(Phi((q-corr*pcensor)/sqrt(1-corr*corr))));
+        // Gaussian copula
+        real theta = corr2param(copula, rho);
+        vector[N] pcensor = inv_Phi(ucond);
+        real q = inv_Phi(v);
+        return sum(log(Phi((q-theta*pcensor)/sqrt(1-theta*theta))));
     }
 
     return not_a_number();

@@ -63,13 +63,13 @@ data {
   array[Ncases[3,2]] int<lower=1, upper=N> i32;
 
   // Prior parameters
-  vector[2] yloc_prior;
+  vector[2] ylocn_prior;
   vector[2] ylogscale_prior;
-  vector[2] yshape_prior;
+  vector[2] yshape1_prior;
   
-  vector[2] zloc_prior;
+  vector[2] zlocn_prior;
   vector[2] zlogscale_prior;
-  vector[2] zshape_prior;
+  vector[2] zshape1_prior;
   
   real shape_lower;
   real<lower=shape_lower> shape_upper;
@@ -85,14 +85,14 @@ data {
 
 parameters {
   // Parameter for observed streamflow
-  real yloc; 
+  real ylocn; 
   real ylogscale;
-  real yshape;
+  real yshape1;
 
   // Parameter for covariate
-  real zloc; 
+  real zlocn; 
   real zlogscale;
-  real zshape;
+  real zshape1;
 
   // Parameter for copula correlation
   real rho;
@@ -104,8 +104,8 @@ transformed parameters {
   real zscale = exp(zlogscale);
 
   // Reduced censor
-  real ucensor = marginal_cdf(ycensor | ymarginal, yloc, yscale, yshape);
-  real vcensor = marginal_cdf(zcensor | zmarginal, zloc, zscale, zshape);
+  real ucensor = marginal_cdf(ycensor | ymarginal, ylocn, yscale, yshape1);
+  real vcensor = marginal_cdf(zcensor | zmarginal, zlocn, zscale, zshape1);
   // .. need a matrix to pass to copula cdf
   matrix[1, 2] uvcensors = [[ucensor, vcensor]];
 
@@ -114,32 +114,32 @@ transformed parameters {
   
   // .. cases with y observed
   for(i in 1:Ncases[1, 1])
-    uv[i11[i], 1] = marginal_cdf(y[i11[i]] | ymarginal, yloc, yscale, yshape);
+    uv[i11[i], 1] = marginal_cdf(y[i11[i]] | ymarginal, ylocn, yscale, yshape1);
 
   for(i in 1:Ncases[1, 2])
-    uv[i12[i], 1] = marginal_cdf(y[i12[i]] | ymarginal, yloc, yscale, yshape);
+    uv[i12[i], 1] = marginal_cdf(y[i12[i]] | ymarginal, ylocn, yscale, yshape1);
 
   // .. cases with z observed
   for(i in 1:Ncases[1, 1])
-    uv[i11[i], 2] = marginal_cdf(z[i11[i]] | zmarginal, zloc, zscale, zshape);
+    uv[i11[i], 2] = marginal_cdf(z[i11[i]] | zmarginal, zlocn, zscale, zshape1);
 
   for(i in 1:Ncases[2, 1])
-    uv[i21[i], 2] = marginal_cdf(z[i21[i]] | zmarginal, zloc, zscale, zshape);
+    uv[i21[i], 2] = marginal_cdf(z[i21[i]] | zmarginal, zlocn, zscale, zshape1);
 
   for(i in 1:Ncases[3, 1])
-    uv[i31[i], 2] = marginal_cdf(z[i31[i]] | zmarginal, zloc, zscale, zshape);
+    uv[i31[i], 2] = marginal_cdf(z[i31[i]] | zmarginal, zlocn, zscale, zshape1);
 }
 
 
 model {
   // --- Priors --
-  yloc ~ normal(yloc_prior[1], yloc_prior[2]);
+  ylocn ~ normal(ylocn_prior[1], ylocn_prior[2]);
   ylogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]);
-  yshape ~ normal(yshape_prior[1], yshape_prior[2]) T[shape_lower, shape_upper];
+  yshape1 ~ normal(yshape1_prior[1], yshape1_prior[2]) T[shape_lower, shape_upper];
 
-  zloc ~ normal(yloc_prior[1], yloc_prior[2]);
+  zlocn ~ normal(ylocn_prior[1], ylocn_prior[2]);
   zlogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]);
-  zshape ~ normal(zshape_prior[1], zshape_prior[2]) T[shape_lower, shape_upper];
+  zshape1 ~ normal(zshape1_prior[1], zshape1_prior[2]) T[shape_lower, shape_upper];
 
   rho ~ normal(rho_prior[1], rho_prior[2]) T[rho_lower, rho_upper];
 
@@ -150,29 +150,29 @@ model {
 
   // Case 11 : both y and z observed
   target += copula_lpdf(uv[i11,:] | copula, rho);
-  target += marginal_lpdf(y[i11] | ymarginal, yloc, yscale, yshape);
-  target += marginal_lpdf(z[i11] | zmarginal, zloc, zscale, zshape);
+  target += marginal_lpdf(y[i11] | ymarginal, ylocn, yscale, yshape1);
+  target += marginal_lpdf(z[i11] | zmarginal, zlocn, zscale, zshape1);
 
   // Case 21 : y censored and z observed
-  target += copula_lpdf_ucensored(ucensor, uv[i21, 2], copula, rho);
-  target += marginal_lpdf(z[i21] | zmarginal, zloc, zscale, zshape);
+  target += copula_lpdf_conditional(uv[i21, 2], ucensor, copula, rho);
+  target += marginal_lpdf(z[i21] | zmarginal, zlocn, zscale, zshape1);
 
   // Case 12 : y observed and z censored
   // we re-use the expression of case 12 and invert u and v variables
-  target += copula_lpdf_ucensored(vcensor, uv[i12, 1], copula, rho);
-  target += marginal_lpdf(y[i12] | ymarginal, yloc, yscale, yshape);
+  target += copula_lpdf_conditional(uv[i12, 1], vcensor, copula, rho);
+  target += marginal_lpdf(y[i12] | ymarginal, ylocn, yscale, yshape1);
 
   // Case 22 : both y and z censored. Copulas cdf times 
   // the number of occurences for 22
   target += Ncases[2,2]*copula_lcdf(uvcensors | copula, rho);
 
   // Case 31 : y is missing and z is observed. 
-  target += marginal_lpdf(z[i31] | zmarginal, zloc, zscale, zshape);
+  target += marginal_lpdf(z[i31] | zmarginal, zlocn, zscale, zshape1);
 
   // Case 32 : y is missing and z is censored 
   // this a Gumbel cdf for z reduced variable times
   // the number of occurences for 32
-  target += Ncases[3,2]*marginal_lcdf(zcensor | zmarginal, zloc, zscale, zshape);
+  target += Ncases[3,2]*marginal_lcdf(zcensor | zmarginal, zlocn, zscale, zshape1);
 
 }
 

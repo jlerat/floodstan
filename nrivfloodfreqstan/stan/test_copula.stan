@@ -26,6 +26,7 @@ data {
 
 
 generated quantities {
+  real rho_check = rho;
     
   vector[N] luncens;
   vector[N] lcond;
@@ -39,7 +40,7 @@ generated quantities {
     tmp2[1, 1] = uv[i, 1];
     tmp2[1, 2] = uv[i, 2];
     luncens[i] = copula_lpdf(tmp2| copula, rho);
-    lcond[i] = copula_lpdf_ucensored(uv[i, 1], tmp1, copula, rho);
+    lcond[i] = copula_lpdf_conditional(tmp1, uv[i, 2], copula, rho);
     lcens[i] = copula_lcdf(tmp2| copula, rho);
   }
 

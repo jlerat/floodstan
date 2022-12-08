@@ -216,65 +216,64 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
 // ------- Marginal functions -----------------------------
 // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal
 
-real marginal_lpdf(vector x, int marginal, real loc, real scale, real shape)
+real marginal_lpdf(vector x, int marginal, real locn, real scale, real shape1)
 {
     if(marginal==1){
-        return gumbel_lpdf(x | loc, scale);
+        return gumbel_lpdf(x | locn, scale);
     }
     else if(marginal==2){
-        return lognormal_lpdf(x | loc, scale);
+        return lognormal_lpdf(x | locn, scale);
     }
     else if(marginal==3){
-        return gev_lpdf(x | loc, scale, shape);
+        return gev_lpdf(x | locn, scale, shape1);
     }
     else if(marginal==4){
-        print("x=", x, " loc=", loc, " scale=", scale, " shape=", shape);
-        return logpearson3_lpdf(x | loc, scale, shape);
+        return logpearson3_lpdf(x | locn, scale, shape1);
     }
     else if(marginal==5){
-        return normal_lpdf(x | loc, scale);
+        return normal_lpdf(x | locn, scale);
     }
 
     return not_a_number();
 }
 
-real marginal_cdf(real x, int marginal, real loc, real scale, real shape)
+real marginal_cdf(real x, int marginal, real locn, real scale, real shape1)
 {
     if(marginal==1){
-        return gumbel_cdf(x | loc, scale);
+        return gumbel_cdf(x | locn, scale);
     }
     else if(marginal==2){
-        return lognormal_cdf(x | loc, scale);
+        return lognormal_cdf(x | locn, scale);
     }
     else if(marginal==3){
-        return exp(gev_lcdf(x | loc, scale, shape));
+        return exp(gev_lcdf(x | locn, scale, shape1));
     }
     else if(marginal==4){
-        return pearson3_cdf(log(x) | loc, scale, shape);
+        return pearson3_cdf(log(x) | locn, scale, shape1);
     }
     else if(marginal==5){
-        return normal_cdf(x | loc, scale);
+        return normal_cdf(x | locn, scale);
     }
 
     return not_a_number();
 }
 
-real marginal_lcdf(real x, int marginal, real loc, real scale, real shape)
+real marginal_lcdf(real x, int marginal, real locn, real scale, real shape1)
 {
     if(marginal==1){
-        return gumbel_lcdf(x | loc, scale);
+        return gumbel_lcdf(x | locn, scale);
     }
     else if(marginal==2){
-        return lognormal_lcdf(x | loc, scale);
+        return lognormal_lcdf(x | locn, scale);
     }
     else if(marginal==3){
-        return gev_lcdf(x | loc, scale, shape);
+        return gev_lcdf(x | locn, scale, shape1);
     }
     else if(marginal==4){
-        return log(pearson3_cdf(log(x) | loc, scale, shape));
+        return log(pearson3_cdf(log(x) | locn, scale, shape1));
     }
     else if(marginal==5){
-        return normal_lcdf(x | loc, scale);
+        return normal_lcdf(x | locn, scale);
     }
 
     return not_a_number();
