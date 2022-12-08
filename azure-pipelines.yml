@@ -131,7 +131,7 @@ steps:
 - script: |
     source activate $(CONDA_ENV_NAME)
     cd $(BUILD_DIR)/nrivfloodfreqstan
-    #pytest --junitxml=junit/test-results.xml --cov=nrivfloodfreqstan --cov-config=.coveragerc --cov-report=xml 
+    pytest --junitxml=junit/test-results.xml --cov=nrivfloodfreqstan --cov-config=.coveragerc --cov-report=xml 
   displayName: test
 
 - task: CopyFiles@2
