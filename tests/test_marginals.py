@@ -60,22 +60,22 @@ def test_marginals(allclose):
             dist1.set_dict_params(p.to_dict())
             dist2.fit_lh_moments(streamflow)
             if distname == "LogNormal":
-                assert dist2.locn == dist1.m
-                assert dist2.logscale == math.log(dist1.s)
+                assert allclose(dist2.locn, dist1.m, atol=1e-6)
+                assert allclose(dist2.logscale, math.log(dist1.s), atol=1e-6)
             elif distname == "Normal":
-                assert dist2.locn == dist1.mu
-                assert dist2.logscale == dist1.logsig
+                assert allclose(dist2.locn, dist1.mu, atol=1e-6)
+                assert allclose(dist2.logscale, dist1.logsig, atol=1e-6)
             elif distname == "Gumbel":
-                assert dist2.locn == dist1.tau
-                assert dist2.logscale == dist1.logalpha
+                assert allclose(dist2.locn, dist1.tau, atol=1e-6)
+                assert allclose(dist2.logscale, dist1.logalpha, atol=1e-6)
             elif distname == "GEV":
-                assert dist2.locn == dist1.tau
-                assert dist2.logscale == dist1.logalpha
-                assert dist2.shape1 == dist1.kappa
+                assert allclose(dist2.locn, dist1.tau, atol=1e-6)
+                assert allclose(dist2.logscale, dist1.logalpha, atol=1e-6)
+                assert allclose(dist2.shape1, dist1.kappa, atol=1e-6)
             elif distname == "LogPearson3":
-                assert dist2.locn == dist1.m
-                assert dist2.logscale == math.log(dist1.s)
-                assert dist2.shape1 == dist1.g
+                assert allclose(dist2.locn, dist1.m, atol=1e-6)
+                assert allclose(dist2.logscale, math.log(dist1.s), atol=1e-6)
+                assert allclose(dist2.shape1, dist1.g, atol=1e-6)
 
             params, _ = fsample.bootstrap_lh_moments(dist1, streamflow, nparams)
             tbar = tqdm(params.iterrows(), total=nparams, \
