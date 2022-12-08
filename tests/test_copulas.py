@@ -325,7 +325,7 @@ def test_conditional_density(allclose):
                 uvc[:, 0] = ucond
                 c0 = cop.cdf(uvc)
                 eps = 1e-6
-                uvc[:, 1]+=eps
+                uvc[:, 1] += eps
                 c1 = cop.cdf(uvc)
                 expected2 = (c1-c0)/eps
                 assert allclose(pdfu, expected2, atol=5e-4, rtol=5e-4)

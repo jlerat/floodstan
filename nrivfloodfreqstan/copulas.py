@@ -80,9 +80,6 @@ class Copula():
     def conditional_density(self, ucond, v):
         return NotImplementedError()
 
-    def logconditional_density(self, ucond, v):
-        return np.log(self.logconditional_density(ucond, v))
-
     def cdf(self, uv):
         return NotImplementedError()
 
@@ -132,7 +129,6 @@ class GaussianCopula(Copula):
 
     def pdf(self, uv):
         uv, pq = self._transform(uv)
-        mu = np.zeros(2)
         theta = self.theta
         #Sigma = np.array([[1, theta], [theta, 1]])
         # See Jones (2014), eq. 4.3 page 163
