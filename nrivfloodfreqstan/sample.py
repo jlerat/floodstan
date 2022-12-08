@@ -193,13 +193,13 @@ def prepare(y, z=None, \
 
     yprior = get_marginal_prior(yname, ymarginal, prior_variables, \
                                 prior_name)
-    stan_data["yloc_prior"] = yprior["loc"]
+    stan_data["ylocn_prior"] = yprior["locn"]
     stan_data["ylogscale_prior"] = yprior["logscale"]
     stan_data["yshape_prior"] = yprior["shape"]
 
     zprior = get_marginal_prior(zname, zmarginal, prior_variables, \
                                 prior_name)
-    stan_data["zloc_prior"] = zprior["loc"]
+    stan_data["zlocn_prior"] = zprior["locn"]
     stan_data["zlogscale_prior"] = zprior["logscale"]
     stan_data["zshape_prior"] = zprior["shape"]
 
