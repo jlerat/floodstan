@@ -9,7 +9,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from nrivfloodfreqstan import load_stan_model
+from nrivfloodfreqstan import marginals
 
 MARGINAL_CODES = {"Gumbel": 1, \
                     "LogNormal": 2,\
@@ -22,21 +22,11 @@ COPULA_CODES = {"Gumbel": 1, \
                 "Gaussian": 3}
 
 # BOUNDS
-SHAPE_LOWER = -2
-SHAPE_UPPER = 2
 RHO_LOWER = 0.01
 RHO_UPPER = 0.95
 
 # Path to priors
 FPRIORS = Path(__file__).resolve().parent / "priors"
-
-# Setup logger with a write function to use contextlib
-
-# List of stan model
-STAN_MODEL_NAMES = ["bivariate_censoring", \
-                        "univariate_censoring"]
-
-STAN_SEED = 5446
 
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
 
@@ -181,8 +171,8 @@ def prepare(y, z=None, \
         "i12": i12, \
         "i22": i22, \
         "i32": i32, \
-        "shape_lower": SHAPE_LOWER, \
-        "shape_upper": SHAPE_UPPER, \
+        "shape1_lower": marginals.SHAPE1_MIN, \
+        "shape1_upper": marginals.SHAPE1_MAX, \
         "rho_lower": RHO_LOWER, \
         "rho_upper": RHO_UPPER
     }
@@ -195,43 +185,45 @@ def prepare(y, z=None, \
                                 prior_name)
     stan_data["ylocn_prior"] = yprior["locn"]
     stan_data["ylogscale_prior"] = yprior["logscale"]
-    stan_data["yshape_prior"] = yprior["shape"]
+    stan_data["yshape1_prior"] = yprior["shape1"]
 
     zprior = get_marginal_prior(zname, zmarginal, prior_variables, \
                                 prior_name)
     stan_data["zlocn_prior"] = zprior["locn"]
     stan_data["zlogscale_prior"] = zprior["logscale"]
-    stan_data["zshape_prior"] = zprior["shape"]
+    stan_data["zshape1_prior"] = zprior["shape1"]
 
     return stan_data
 
 
 
-def initialise():
-    pass
+def initialise(stan_data):
+    """ Initialise sampler.
 
+    """
+    # Get marginal distributions
+    ymarginal = [k for k, code in MARGINAL_CODES.items()\
+                        if code==stan_data["ymarginal"]][0]
+    ydist = marginals.factory(ymarginal)
+    ydist.params_guess(stan_data["y"])
 
-def stan_sample(inits, stan_data, \
-                    model, \
-                    stan_output_folder, \
-                    adapt_delta=None, \
-                    nchains=5, \
-                    nwarm=10000, \
-                    show_progress=False, \
-                    show_console=False, \
-                    nsamples=10000, **kwargs):
+    inits = {
+        "ylocn": ydist.locn, \
+        "ylogscale": ydist.logscale, \
+        "yshape1": ydist.shape1
+    }
 
-    # Add default arguments
-    return model.sample(data=stan_data, \
-                        chains=nchains, \
-                        iter_warmup=nwarm, \
-                        iter_sampling=nsamples//nchains, \
-                        output_dir=stan_output_folder, \
-                        seed=STAN_SEED, \
-                        inits=inits, \
-                        adapt_delta=adapt_delta, \
-                        show_console=show_console, \
-                        show_progress=show_progress, \
-                        **kwargs)
+    # Initialise covariate distribution
+    if not stan_data["z"] is None:
+        zmarginal = [k for k, code in MARGINAL_CODES.items()\
+                        if code==stan_data["zmarginal"]][0]
+        zdist = marginals.factory(zmarginal)
+        zdist.params_guess(stan_data["z"])
+
+        inits["zlocn"] = zdist.locn
+        inits["zlogscale"] = zdist.logscale
+        inits["zshape1"] = zdist.shape1
+
+    return inits
 
 

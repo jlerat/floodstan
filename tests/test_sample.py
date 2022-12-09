@@ -18,11 +18,13 @@ import importlib
 from tqdm import tqdm
 
 from nrivfloodfreqstan import marginals, sample, copulas
-from nrivfloodfreqstan import test_marginal, test_copula
+from nrivfloodfreqstan import test_marginal, test_copula, \
+                                univariate_censoring, \
+                                bivariate_censoring
 
 from tqdm import tqdm
 
-np.random.seed(5446)
+SEED = 5446
 
 FTESTS = Path(__file__).resolve().parent
 
@@ -63,10 +65,10 @@ def test_get_marginal_prior():
     expected = {\
         "locn": [700./3, 1400./3], \
         "logscale": [5, 4], \
-        "shape": [0, 4]
+        "shape1": [0, 4]
     }
 
-    for key in ["locn", "logscale", "shape"]:
+    for key in ["locn", "logscale", "shape1"]:
         assert np.allclose(prior[key], expected[key])
 
 
@@ -108,7 +110,8 @@ def test_marginals(allclose):
 
             for iboot in tbar:
                 # Bootstrap fit
-                yboot = np.random.choice(y.values, N)
+                rng = np.random.default_rng(SEED)
+                yboot = rng.choice(y.values, N)
                 dist.fit_lh_moments(yboot)
                 y0, y1 = dist.support
                 if y0>yboot.min() or y1<yboot.max():
@@ -141,7 +144,8 @@ def test_marginals(allclose):
 
 def test_copulas(allclose):
     N = 100
-    uv = np.random.uniform(0, 1, size=(N, 2))
+    rng = np.random.default_rng(SEED)
+    uv = rng.uniform(0, 1, size=(N, 2))
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
 
     for copula in ["Gumbel", "Clayton", "Gaussian"]:
@@ -192,19 +196,42 @@ def test_copulas(allclose):
 
 def test_univariate(allclose):
     stationids = get_stationids()
-    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
-    nvalues = 1000
+    LOGGER = sample.get_logger(level="INFO")#, stan_logger=False)
+
+    # Large number of values to check we can get the "true" parameters
+    # back from sampling
+    nvalues = 2000
 
     for stationid in stationids:
         y = get_ams(stationid)
         N = len(y)
-        dist = marginals.factory("GEV")
-        dist.fit_lh_moments(y)
 
-        if dist.shape1<-3 or dist.shape1>3:
-            continue
+        for marginal in ["GEV", "LogPearson3", "Gumbel", "LogNormal"]:
+            dist = marginals.factory(marginal)
+            dist.fit_lh_moments(y)
 
-        ys = dist.sample(nvalues)
+            if dist.shape1<marginals.SHAPE1_MIN or dist.shape1>marginals.SHAPE1_MAX:
+                continue
 
+            # Here we generate large number of data from known distribution
+            ys = dist.rvs(nvalues)
+            stan_data = sample.prepare(ys, ymarginal=marginal)
+            inits = sample.initialise(stan_data)
+
+            fout = FTESTS / "sampling" / "univariate" / stationid / marginal
+            fout.mkdir(parents=True, exist_ok=True)
+            for f in fout.glob("*.*"):
+                f.unlink()
+
+            smp = univariate_censoring.sample(\
+                    data=stan_data, \
+                    chains=4, \
+                    seed=SEED, \
+                    iter_warmup=5000, \
+                    iter_sampling=5000, \
+                    output_dir=fout, \
+                    inits=inits)
+
+            df = smp.draws_pd()
 
 

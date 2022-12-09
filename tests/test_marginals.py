@@ -18,7 +18,7 @@ from test_sample import get_stationids, get_ams
 
 from tqdm import tqdm
 
-np.random.seed(5446)
+SEED = 5446
 
 FTESTS = Path(__file__).resolve().parent
 
@@ -45,7 +45,7 @@ def test_floodfreqdist(allclose):
 def test_marginals(allclose):
     stationids = get_stationids()
     distnames = ["GEV", "LogPearson3", "LogNormal", \
-                    "Gumbel", "Normal"]
+                            "Gumbel", "Normal"]
     nparams = 500
 
     for stationid in stationids:
@@ -84,7 +84,6 @@ def test_marginals(allclose):
                 assert allclose(dist2.locn, dist1.m, atol=1e-6)
                 assert allclose(dist2.logscale, math.log(dist1.s), atol=1e-6)
                 assert allclose(dist2.shape1, dist1.g, atol=1e-6)
-
 
             params, _ = fsample.bootstrap_lh_moments(dist1, streamflow, nparams)
             desc = f"[{stationid}] Testing {distname}"
@@ -133,4 +132,29 @@ def test_marginals(allclose):
                 cdf2 = dist2.cdf(streamflow)
                 assert allclose(cdf1, cdf2)
 
+
+def test_params_guess(allclose):
+    stationids = get_stationids()
+    distnames = ["GEV", "LogPearson3", "LogNormal", \
+                            "Gumbel", "Normal"]
+    nvalues = 1000
+    nboot = 50
+
+    for stationid in stationids:
+        streamflow = get_ams(stationid)
+
+        for distname in distnames:
+            dist = marginals.factory(distname)
+            dist.fit_lh_moments(streamflow)
+
+            desc = f"[{stationid}] Testing params guess for {distname}"
+            tbar = tqdm(range(nboot), total=nboot, \
+                        disable=TQDM_DISABLE, desc=desc)
+            if TQDM_DISABLE:
+                print("\n"+desc)
+
+            distb = marginals.factory(distname)
+            for iboot in tbar:
+                ys = dist.rvs(nvalues)
+                distb.params_guess(ys)
 

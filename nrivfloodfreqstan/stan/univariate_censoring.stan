@@ -43,12 +43,12 @@ data {
   array[Ncases[2,1]] int<lower=1, upper=N> i21;
 
   // Prior parameters
-  vector[2] yloc_prior;
+  vector[2] ylocn_prior;
   vector[2] ylogscale_prior;
-  vector[2] yshape_prior;
+  vector[2] yshape1_prior;
   
-  real shape_lower;
-  real<lower=shape_lower> shape_upper;
+  real shape1_lower;
+  real<lower=shape1_lower> shape1_upper;
 
   // Censoring thresholds 
   real<lower=0> ycensor;
@@ -56,9 +56,9 @@ data {
 
 parameters {
   // Parameter for observed streamflow
-  real yloc; 
+  real ylocn; 
   real ylogscale;
-  real yshape;
+  real yshape1;
 }  
 
 
@@ -69,19 +69,19 @@ transformed parameters {
 
 model {
   // --- Priors --
-  yloc ~ normal(yloc_prior[1], yloc_prior[2]);
+  ylocn ~ normal(ylocn_prior[1], ylocn_prior[2]);
   ylogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]);
-  yshape ~ normal(yshape_prior[1], yshape_prior[2]) T[shape_lower, shape_upper];
+  yshape1 ~ normal(yshape1_prior[1], yshape1_prior[2]) T[shape1_lower, shape1_upper];
 
   // --- Copula likelihood : 6 cases---
   //  11: y observed
   //  21: y censored
 
   // Case 11 : y observed
-  target += marginal_lpdf(y[i11] | ymarginal, yloc, yscale, yshape);
+  target += marginal_lpdf(y[i11] | ymarginal, ylocn, yscale, yshape1);
 
   // Case 21 : y censored 
-  target += Ncases[2,1]*marginal_lcdf(ycensor | ymarginal, yloc, yscale, yshape);
+  target += Ncases[2,1]*marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
 }
 
 

@@ -17,8 +17,8 @@ DISTRIBUTION_NAMES = ["Normal", "GEV", "LogPearson3", \
 
 EULER_CONSTANT = 0.577215664901532
 
-SHAPE_MIN = -4
-SHAPE_MAX = 4
+SHAPE1_MIN = -3
+SHAPE1_MAX = 3
 
 def _prepare(data):
     data = np.array(data)
@@ -187,8 +187,8 @@ class FloodFreqDistribution():
     @shape1.setter
     def shape1(self, value):
         value = float(value)
-        assert value>SHAPE_MIN and value<SHAPE_MAX, \
-                f"Expected shape in ]{SHAPE_MIN}, {SHAPE_MAX}[, "+\
+        assert value>=SHAPE1_MIN and value<=SHAPE1_MAX, \
+                f"Expected shape in ]{SHAPE1_MIN}, {SHAPE1_MAX}[, "+\
                 f"got {value}."
         self._shape1 = value
 
@@ -196,6 +196,11 @@ class FloodFreqDistribution():
     def support(self):
         errmsg = f"Property support not implemented for class {self.name}."
         raise NotImplementedError(errmsg)
+
+    def in_support(self, x):
+        x0, x1 = self.support
+        ok = np.ones_like(x).astype(bool)
+        return np.where((x>=x0)&(x<=x1), ok, ~ok)
 
     def get_scipy_params(self):
         errmsg = f"Method get_scipy_params not implemented for class {self.name}."
@@ -303,7 +308,14 @@ class GEV(FloodFreqDistribution):
         return super(GEV, self).__getattribute__(name)
 
     def params_guess(self, data):
-        self.fit_lh_moments(data, 0)
+        try:
+            self.fit_lh_moments(data, eta=2)
+            assert np.all(self.in_support(data))
+        except:
+            alpha = data.var()*6/math.pi**2
+            self.logscale = math.log(alpha)
+            self.locn = data.mean()-EULER_CONSTANT*alpha
+            self.shape1 = 0.01
 
     def fit_lh_moments(self, data, eta=0):
         """ See Wang et al. (1997). """
@@ -324,6 +336,8 @@ class GEV(FloodFreqDistribution):
         }
         coefs = coefs_all[eta]
         kappa = coefs[0]+coefs[1]*tau3+coefs[2]*tau3**2+coefs[3]*tau3**3
+        # .. reasonable bounds on kappa
+        kappa = min(SHAPE1_MAX, max(SHAPE1_MIN, kappa))
 
         # See wang et al. (1997), Equation 19
         g = gamma(1+kappa)
@@ -391,10 +405,14 @@ class LogPearson3(FloodFreqDistribution):
         return np.exp(pearson3.ppf(qq, **kw))
 
     def params_guess(self, data):
-        logx = np.log(data)
-        self.shape1 = skew(logx)
-        self.locn = logx.mean()
-        self.logscale = math.log(logx.std(ddof=1))
+        try:
+            self.fit_lh_moments(data)
+            assert np.all(self.in_support(data))
+        except:
+            logx = np.log(data)
+            self.shape1 = skew(logx)
+            self.locn = logx.mean()
+            self.logscale = math.log(logx.std(ddof=1))
 
     def rvs(self, size):
         kw = self.get_scipy_params()
@@ -451,6 +469,15 @@ class LogPearson3(FloodFreqDistribution):
 
         if not ALPHA is None:
             RTALPH = math.sqrt(ALPHA)
+
+            # .. check reasonable bounds
+            if 2./RTALPH < SHAPE1_MIN:
+                RTALPH = 2./SHAPE1_MIN
+                ALPHA = RTALPHA**2
+            elif 2./RTALPH > SHAPE1_MAX:
+                RTALPH = 2./SHAPE1_MAX
+                ALPHA = RTALPHA**2
+
             BETA = ROOTPI*lam2*math.exp(gammaln(ALPHA)-gammaln(ALPHA+0.5))
             mu = lam1
             sigma = BETA*RTALPH
@@ -548,7 +575,7 @@ class LogNormal(FloodFreqDistribution):
     def params_guess(self, data):
         logx = np.log(data)
         self.locn = logx.mean()
-        self.logscale = math.log((logx-self.loc).std(ddof=1))
+        self.logscale = math.log((logx-self.locn).std(ddof=1))
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 198. """

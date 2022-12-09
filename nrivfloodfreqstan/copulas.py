@@ -89,14 +89,15 @@ class Copula():
     def ppf_conditional(self, ucond, q):
         return NotImplementedError()
 
-    def sample(self, nsamples):
+    def sample(self, nsamples, seed=5446):
         # Latin hypercube sampling of uniform distributions
         delta = 1/nsamples/2
         uu = np.linspace(delta, 1-delta, nsamples)
-        k1 = np.random.permutation(nsamples)
-        k2 = np.random.permutation(nsamples)
+        rng = np.random.default_rng(seed)
+        k1 = rng.permutation(nsamples)
+        k2 = rng.permutation(nsamples)
         uv = np.column_stack([uu[k1], uu[k2]])\
-                    +np.random.uniform(-delta/2, delta/2, \
+                    +rng.uniform(-delta/2, delta/2, \
                                         size=(nsamples, 2))
         # Sampling from conditional copula
         # Considering that uv[:, 1] are probability samples
