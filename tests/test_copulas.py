@@ -129,8 +129,8 @@ def test_vs_statsmodels(allclose):
             if copula=="Clayton":
                 continue
 
-            nok = 0
-            for itry in range(5):
+            pvalues = []
+            for itry in range(10):
                 uv1 = cop1.sample(nsamples)
                 uv2 = cop2.sample(nsamples)
                 if copula == "Gaussian":
@@ -140,11 +140,11 @@ def test_vs_statsmodels(allclose):
 
                 sa, pva = ks_2samp(uv1[:, 0], uv2[:, 0])
                 sb, pvb = ks_2samp(uv1[:, 1], uv2[:, 1])
-                if pva>0.3:
-                    nok += 1
-                    assert pvb>0.01
+                if pva>0.2:
+                    pvalues.append(pvb)
 
-            assert nok>0
+            assert len(pvb)>0
+            assert np.mean(pvb)>0.1
 
 
 def test_plots():

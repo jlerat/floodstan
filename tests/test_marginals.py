@@ -58,6 +58,14 @@ def test_marginals(allclose):
             # Test lh moments
             p = dist1.fit_lh_moments(streamflow).iloc[0]
             dist1.set_dict_params(p.to_dict())
+
+            # Skip if extreme shape parameter values
+            if distname in ["GEV", "LogPearson3"]:
+                sh = dist1.kappa if distname == "GEV" else dist1.g
+                if sh < marginals.SHAPE_MIN or \
+                        sh > marginals.SHAPE_MAX:
+                    continue
+
             dist2.fit_lh_moments(streamflow)
             if distname == "LogNormal":
                 assert allclose(dist2.locn, dist1.m, atol=1e-6)
@@ -77,6 +85,7 @@ def test_marginals(allclose):
                 assert allclose(dist2.logscale, math.log(dist1.s), atol=1e-6)
                 assert allclose(dist2.shape1, dist1.g, atol=1e-6)
 
+
             params, _ = fsample.bootstrap_lh_moments(dist1, streamflow, nparams)
             tbar = tqdm(params.iterrows(), total=nparams, \
                         desc=f"[{stationid} Testing {distname}")
@@ -84,6 +93,13 @@ def test_marginals(allclose):
             for _, param in tbar:
                 # Set parameters
                 dist1.set_dict_params(param.to_dict())
+
+                # Skip if extreme shape parameter values
+                if distname in ["GEV", "LogPearson3"]:
+                    sh = dist1.kappa if distname == "GEV" else dist1.g
+                    if sh < marginals.SHAPE_MIN or \
+                            sh > marginals.SHAPE_MAX:
+                        continue
 
                 if distname == "LogNormal":
                     dist2.locn = dist1.m
