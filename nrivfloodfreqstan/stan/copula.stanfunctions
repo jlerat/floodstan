@@ -19,18 +19,18 @@ real corr2param(int copula, real rho) {
     if(copula==1) {
         // Using Kendall Tau as parameter
         // See Joe (2014), page 172
-        return 1.0/(1-rho);
+        return 1.0/(1.0-rho);
     }
 
     else if (copula==2) {
         // Using Kendall Tau as parameter
         // See Joe (2014), page 168
-        return 2*rho/(1-rho);
+        return 2.0*rho/(1.0-rho);
     }
 
     else if (copula==3) {
         // Using Kendall Tau as parameter
-        return sin(pi()*rho/2);
+        return sin(pi()*rho/2.0);
     }
 
     return not_a_number();
@@ -45,19 +45,19 @@ real copula_lcdf(matrix uv, int copula, real rho){
 
     if(copula==1) {
         // Gumbel copula
-        real m = corr2param(copula, rho);
-        vector[N] logu = log(uv[:, 1]);
-        vector[N] logv = log(uv[:, 2]);
-        vector[N] a = pow(logu, m)+pow(logv, m);
-        return sum(-pow(a, 1.0/m));
+        real theta = corr2param(copula, rho);
+        vector[N] x = -log(uv[:, 1]);
+        vector[N] y = -log(uv[:, 2]);
+        vector[N] expsum = pow(x, theta)+pow(y, theta);
+        return sum(-pow(expsum, 1.0/theta));
     }
 
     else if (copula==2) {
         // Clayton copula
         real theta = corr2param(copula, rho);
-        vector[N] powu = pow(uv[:, 1], -theta);
-        vector[N] powv = pow(uv[:, 2], -theta);
-        return sum(-log(powu+powv-1)/theta);
+        vector[N] x = pow(uv[:, 1], -theta);
+        vector[N] y = pow(uv[:, 2], -theta);
+        return sum(-log(x+y-1)/theta);
     }
 
     else if (copula==3) {
@@ -136,18 +136,18 @@ real copula_lpdf(matrix uv, int copula, real rho){
         vector[N] expsum = pow(x, theta)+pow(y, theta);
         vector[N] exppow = pow(expsum, 1.0/theta);
         return sum(-exppow
-                    +log(exppow+theta-1)
-                    +(1.0/theta-2)*expsum
-                    +(theta-1)*log(x.*y)
-                    -log(uv[:, 1])-log(uv[:, 2]));
+                    +log(exppow+theta-1.0)
+                    +(1.0/theta-2.0)*log(expsum)
+                    +(theta-1.0)*log(x.*y)
+                    +x+y);
     }
 
     else if (copula==2) {
         // Clayton copula
         real theta = corr2param(copula, rho);
-        vector[N] expsum = pow(uv[:, 1], -theta)+pow(uv[:, 2], -theta);
-        vector[N] prod = uv[:, 1].*uv[:, 2];
-        return N*log(1+theta)+sum(log(-(theta-1)*prod-(2+1/theta)*expsum));
+        vector[N] expsum = pow(uv[:, 1], -theta)+pow(uv[:, 2], -theta)-1;
+        return N*log(1.0+theta)+sum(-(theta+1.0)*log(uv[:, 1].*uv[:, 2])
+                                        -(2+1.0/theta)*log(expsum));
     }
 
     else if (copula==3) {
@@ -172,7 +172,7 @@ real copula_lpdf_conditional(vector ucond, real v, int copula, real rho){
         real theta = corr2param(copula, rho);
         vector[N] x = -log(ucond);
         real y = -log(v);
-        return sum(-log(ucond)-(pow(x, theta)+pow(y, theta))/theta
+        return sum(x-pow(pow(x, theta)+pow(y, theta), 1./theta)
                                  +(1/theta-1)*log(1+pow(y./x, theta)));
     }
 
