@@ -22,7 +22,7 @@ np.random.seed(5446)
 
 FTESTS = Path(__file__).resolve().parent
 
-
+TQDM_DISABLE = True
 
 def test_floodfreqdist(allclose):
     name = "bidule"
@@ -87,8 +87,11 @@ def test_marginals(allclose):
 
 
             params, _ = fsample.bootstrap_lh_moments(dist1, streamflow, nparams)
+            desc = f"[{stationid}] Testing {distname}"
             tbar = tqdm(params.iterrows(), total=nparams, \
-                        desc=f"[{stationid} Testing {distname}")
+                        disable=TQDM_DISABLE, desc=desc)
+            if TQDM_DISABLE:
+                print("\n"+desc)
 
             for _, param in tbar:
                 # Set parameters

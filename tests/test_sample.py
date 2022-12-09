@@ -6,8 +6,6 @@ from itertools import product as prod
 import numpy as np
 import pandas as pd
 
-#import matplotlib.pyplot as plt
-
 from scipy.stats import norm, mvn
 from scipy.stats import multivariate_normal
 
@@ -27,6 +25,8 @@ from tqdm import tqdm
 np.random.seed(5446)
 
 FTESTS = Path(__file__).resolve().parent
+
+TQDM_DISABLE = True
 
 # --- Utils functions ----------------------------
 def get_stationids():
@@ -102,8 +102,11 @@ def test_marginals(allclose):
         for marginal in ["LogNormal", "Gumbel", "GEV", "LogPearson3", "Normal"]:
             dist = marginals.factory(marginal)
             desc = f"[{stationid}] Testing stan {marginal} marginal"
+            tbar = tqdm(range(nboot), desc=desc, disable=TQDM_DISABLE)
+            if TQDM_DISABLE:
+                print("\n"+desc)
 
-            for iboot in tqdm(range(nboot), desc=desc):
+            for iboot in tbar:
                 # Bootstrap fit
                 yboot = np.random.choice(y.values, N)
                 dist.fit_lh_moments(yboot)
@@ -141,15 +144,18 @@ def test_copulas(allclose):
     uv = np.random.uniform(0, 1, size=(N, 2))
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
 
-    #for copula in ["Gumbel", "Clayton", "Gaussian"]:
-    for copula in ["Gaussian"]:
+    for copula in ["Gumbel", "Clayton", "Gaussian"]:
         cop = copulas.factory(copula)
 
         rmin = cop.rho_min
         rmax = cop.rho_max
         nval = 20
+        desc = "Testing stan copula "+copula
         tbar = tqdm(np.linspace(rmin, rmax, nval), \
-                        desc=f"Testing stan "+copula, total=nval)
+                        desc=desc, disable=TQDM_DISABLE, total=nval)
+        if TQDM_DISABLE:
+            print("\n"+desc)
+
         for rho in tbar:
             cop.rho = rho
 
@@ -168,18 +174,37 @@ def test_copulas(allclose):
 
             assert allclose(smp.rho_check, rho, atol=1e-6)
 
-            # Test lpdf
+            # Test copula pdf
             lpdf = smp.filter(regex="luncens")
             expected = cop.logpdf(uv)
             assert allclose(lpdf, expected, atol=1e-7)
 
-            # test lcdf
+            # test copula cdf
             lcdf = smp.filter(regex="lcens")
             expected = cop.logcdf(uv)
             assert allclose(lcdf, expected, atol=1e-7)
+
+            # Test copula conditional density
             lcond = smp.filter(regex="lcond")
             expected = np.log(cop.conditional_density(uv[:, 0], uv[:, 1]))
             assert allclose(lcond, expected, atol=1e-7)
+
+
+def test_univariate(allclose):
+    stationids = get_stationids()
+    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    nvalues = 1000
+
+    for stationid in stationids:
+        y = get_ams(stationid)
+        N = len(y)
+        dist = marginals.factory("GEV")
+        dist.fit_lh_moments(y)
+
+        if dist.shape1<-3 or dist.shape1>3:
+            continue
+
+        ys = dist.sample(nvalues)
 
 
 

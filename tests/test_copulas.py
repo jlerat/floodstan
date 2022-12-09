@@ -26,6 +26,7 @@ from tqdm import tqdm
 
 FTESTS = Path(__file__).resolve().parent
 
+TQDM_DISABLE = True
 
 # ---------------- UTITILITIES -------------------------------------------
 
@@ -110,8 +111,13 @@ def test_vs_statsmodels(allclose):
         rmin = cop2.rho_min
         rmax = cop2.rho_max
         nval = 20
+        desc = "Testing "+copula+" vs statsmodels"
         tbar = tqdm(np.linspace(rmin, rmax, nval), \
-                        desc=f"Testing "+copula+" vs statsmodels", total=nval)
+                        disable=TQDM_DISABLE, \
+                        desc=desc, total=nval)
+        if TQDM_DISABLE:
+            print("\n"+desc)
+
         for rho in tbar:
             cop1.rho = rho
             cop2.rho = rho
@@ -244,8 +250,14 @@ def test_gumbel(allclose):
         def fun(u, v):
             return cop.pdf(np.array([u, v])[None, :])[0]
 
+
+        desc = f"Testing gumbel rho={rho:0.3f}"
         tbar = tqdm(np.linspace(0.1, 0.9, 5), \
-                desc=f"Testing gumbel rho={rho:0.3f}", total=5)
+                        disable=TQDM_DISABLE, \
+                        desc=desc, total=5)
+        if TQDM_DISABLE:
+            print("\n"+desc)
+
         for ucond in tbar:
             pdfu = cop.conditional_density(uv[:, 1], ucond)
 
@@ -294,9 +306,13 @@ def test_conditional_density(allclose):
             cop.rho = rho
 
             nval = 10
+            desc = f"Testing {copula} conditional density: rho={rho:0.3f}"
             tbar = tqdm(np.linspace(0.1, 0.9, nval), \
-                    desc=f"Testing {copula} conditional density: rho={rho:0.3f}", \
+                    desc=desc, disable=TQDM_DISABLE, \
                     total=nval)
+            if TQDM_DISABLE:
+                print("\n"+desc)
+
             for ucond in tbar:
                 pdfu = cop.conditional_density(uv[:, 1], ucond)
                 assert (pdfu<1).sum()>0
