@@ -143,8 +143,8 @@ def test_vs_statsmodels(allclose):
                 if pva>0.2:
                     pvalues.append(pvb)
 
-            assert len(pvb)>0
-            assert np.mean(pvb)>0.1
+            assert len(pvalues)>2
+            assert np.mean(pvalues)>0.1
 
 
 def test_plots():
