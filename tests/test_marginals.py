@@ -69,8 +69,8 @@ def test_marginals(allclose):
             # Skip if extreme shape parameter values
             if distname in ["GEV", "LogPearson3"]:
                 sh = dist1.kappa if distname == "GEV" else dist1.g
-                if sh < marginals.SHAPE_MIN or \
-                        sh > marginals.SHAPE_MAX:
+                if sh < marginals.SHAPE1_MIN or \
+                        sh > marginals.SHAPE1_MAX:
                     continue
 
             dist2.fit_lh_moments(streamflow)
@@ -106,8 +106,8 @@ def test_marginals(allclose):
                 # Skip if extreme shape parameter values
                 if distname in ["GEV", "LogPearson3"]:
                     sh = dist1.kappa if distname == "GEV" else dist1.g
-                    if sh < marginals.SHAPE_MIN or \
-                            sh > marginals.SHAPE_MAX:
+                    if sh < marginals.SHAPE1_MIN or \
+                            sh > marginals.SHAPE1_MAX:
                         continue
 
                 if distname == "LogNormal":

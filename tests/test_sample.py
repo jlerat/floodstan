@@ -63,12 +63,6 @@ def get_info():
 
 # ------------------------------------------------
 
-def test_get_stan_model():
-    for modname in sample.STAN_MODEL_NAMES:
-        model = sample.load_stan_model(modname)
-        print(f"\n{modname}: {model.exe_info()}\n")
-
-
 def test_get_copula_prior():
     prior = sample.get_copula_prior("uninformative")
     assert np.allclose(prior, [0.8, 1])

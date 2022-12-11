@@ -168,3 +168,4 @@ cython_debug/
 
 # Others
 *.png
+tests/sampling/
