@@ -8,6 +8,7 @@ import pandas as pd
 
 from scipy.stats import norm, mvn
 from scipy.stats import multivariate_normal
+from scipy.stats import ttest_1samp
 
 import pytest
 import warnings
@@ -35,13 +36,29 @@ def get_stationids():
     fs = FTESTS / "data"
     stationids = []
     for f in fs.glob("*_AMS.csv"):
-        stationids.append(re.sub("_.*", "", f.stem))
+        sid = re.sub("_.*", "", f.stem)
+        if re.search("LIS", sid):
+            continue
+        stationids.append(sid)
     return stationids
 
 def get_ams(stationid):
     fs = FTESTS / "data" / f"{stationid}_AMS.csv"
     df = pd.read_csv(fs, skiprows=15, index_col=0)
     return df.iloc[:, 0]
+
+def get_info():
+    fs = FTESTS / "data" / "stations.csv"
+    df = pd.read_csv(fs, skiprows=17)
+
+    df.columns = [re.sub(" |,", "_", re.sub(" \(.*", "", cn)) \
+                            for cn in df.columns]
+    df.loc[:, "Station_ID"] = df.Station_ID.astype(str)
+    df = df.set_index("Station_ID")
+    stationids = get_stationids()
+    df = df.loc[stationids, :]
+
+    return df
 
 
 # ------------------------------------------------
@@ -200,13 +217,13 @@ def test_univariate(allclose):
 
     # Large number of values to check we can get the "true" parameters
     # back from sampling
-    nvalues = 2000
+    nvalues = 1000
 
     for stationid in stationids:
         y = get_ams(stationid)
         N = len(y)
 
-        for marginal in ["GEV", "LogPearson3", "Gumbel", "LogNormal"]:
+        for marginal in ["LogPearson3", "Gumbel", "LogNormal"]:
             dist = marginals.factory(marginal)
             dist.fit_lh_moments(y)
 
@@ -215,6 +232,8 @@ def test_univariate(allclose):
 
             # Here we generate large number of data from known distribution
             ys = dist.rvs(nvalues)
+
+            # Configure stan data and initialisation
             stan_data = sample.prepare(ys, ymarginal=marginal)
             inits = sample.initialise(stan_data)
 
@@ -227,11 +246,19 @@ def test_univariate(allclose):
                     data=stan_data, \
                     chains=4, \
                     seed=SEED, \
-                    iter_warmup=5000, \
+                    iter_warmup=10000, \
                     iter_sampling=5000, \
                     output_dir=fout, \
                     inits=inits)
 
             df = smp.draws_pd()
 
+            # T test on parameter samples
+            for ip, pname in enumerate(["locn", "logscale", "shape1"]):
+                ref = dist[pname]
+                smp = df.loc[:, f"y{pname}"]
+
+                st, pv = ttest_1samp(smp, ref)
+
+                import pdb; pdb.set_trace()
 

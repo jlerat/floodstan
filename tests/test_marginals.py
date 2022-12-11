@@ -39,6 +39,13 @@ def test_floodfreqdist(allclose):
     dist.locn = 10
     assert dist.locn == 10
 
+    for pn in marginals.PARAMETERS:
+        dist[pn] = 1
+        assert getattr(dist, pn) == 1
+
+        dist[pn] = 2
+        assert dist[pn] == 2
+
     dist.logshape = -1
 
 

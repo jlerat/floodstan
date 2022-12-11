@@ -214,7 +214,8 @@ def initialise(stan_data):
     }
 
     # Initialise covariate distribution
-    if not stan_data["z"] is None:
+    # if there are valid covariate data
+    if stan_data["z"].var()>0:
         zmarginal = [k for k, code in MARGINAL_CODES.items()\
                         if code==stan_data["zmarginal"]][0]
         zdist = marginals.factory(zmarginal)

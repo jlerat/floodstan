@@ -1,0 +1,71 @@
+# --------------------------------------------------,,,,,,,,,,,
+# nrow : 57,,,,,,,,,,,
+# ncol : 13,,,,,,,,,,,
+# comment : List of RIVERGAUGING_GENERAL stations,,,,,,,,,,,
+# station_counts : Clarence=29 / Richmond=17 / Tweed=5 / Brunswick=2,,,,,,,,,,,
+# station_total : 53,,,,,,,,,,,
+# time_generated : 2022-11-22 14:59:53,,,,,,,,,,,
+# author : ler015,,,,,,,,,,,
+# source_file : /datasets/work/lw-resilient-nr/work/6_Reporting/1_ReportProcessingScripts/nrivreportingscripts/scripts/catchmentcharacterisation/CC_T5500_stations_list_tables.py,,,,,,,,,,,
+# work_dir : /datasets/work/lw-resilient-nr/work/6_Reporting/1_ReportProcessingScripts/nrivreportingscripts,,,,,,,,,,,
+# python_environment posix,,,,,,,,,,,
+# python_version : 3.10.6 | packaged by conda-forge | (main, Aug 22 2022, 20:35:26) [GCC 10.4.0],,,,,,,,,
+# pandas_version : 1.4.3,,,,,,,,,,,
+# numpy_version : 1.23.2,,,,,,,,,,,
+# python_inc : /datasets/work/lw-resilient-nr/work/0_Common_Data/5_Software/1_Python/conda/envs/env_nriv_v2/include/python3.10,,,,,,,,,,,
+# python_lib : /datasets/work/lw-resilient-nr/work/0_Common_Data/5_Software/1_Python/conda/envs/env_nriv_v2/lib/python3.10/site-packages,,,,,,,,,,,
+# --------------------------------------------------,,,,,,,,,,,
+Station ID,Name,Longitude,Latitude,Length of data record collected (years),Comment,Catchment Area (km2),Maximum gauged flow (m3/s),Maximum reported flow (m3/s),Ratio max gauge over max flow (-),"Flood peak, Feb 2022 (m3/s)",Ratio Feb 2022 peak over max flow (-)
+204001,Nymboida River At Nymboida,152.73,-29.98,66.4,-,1660,3454.7,5076.1,0.68,2301,0.45
+204002,Clarence River At Tabulam,152.57,-28.89,57.4,-,4550,2665.4,10916.7,0.24,2834.2,0.26
+204004,Mann River At Jackadgery,152.54,-29.57,59.1,-,7800,3973.4,12776.5,0.31,5821.3,0.46
+204006,Bookookoorara River At Undercliffe,152.17,-28.64,10.9,Flow data before 2011 was discarded.,127,10.4,175.6,0.06,48.2,0.27
+204007,Clarence River At Lilydale (Newbold Crossing),152.68,-29.51,51.3,-,16690,14789.9,18648.8,0.79,13150.7,0.71
+204008,Guy Fawkes River At Ebor,152.35,-30.4,49.1,-,31,95,185.5,0.51,32,0.17
+204014,Mann River At Mitchell,152.11,-29.69,50.5,-,881,129,1904.4,0.07,142.7,0.07
+204015,Boyd River At Broadmeadows,152.32,-29.84,52.5,-,2670,85,1633.6,0.05,771.5,0.47
+204017,Bielsdown Creek At Dorrigo No.2 & No.3,152.71,-30.3,51.3,Significant changes in rating curve over time.,76,316,749.2,0.42,98.7,0.13
+204025,Orara River At Karangi,153.03,-30.25,53.1,Significant changes in rating curve over time.,135,158.6,960,0.17,404.3,0.42
+204030,Aberfoyle River At Aberfoyle,152.01,-30.26,45.2,-,200,11.2,117.7,0.1,41.1,0.35
+204031,Mann River At Shannon Vale,151.85,-29.72,38.6,-,348,387.9,619.2,0.63,97.3,0.16
+204033,Timbarra River At Billyrimba,152.25,-29.19,44.7,-,985,56.2,1751.4,0.03,568.2,0.32
+204034,Henry River At Newton Boyd,152.21,-29.76,51.3,-,389,24.7,801.9,0.03,168.9,0.21
+204036,Cataract Creek At Sandy Hill(Below Snake Creek),152.22,-28.93,70.7,-,236,53.2,1066.1,0.05,156.6,0.15
+204037,Clouds Creek At Clouds Creek,152.63,-30.09,51.8,-,62,56.8,225.6,0.25,88.9,0.39
+204039,Maryland River D/S Wylie Creek,152.2,-28.47,43.7,Significant changes in rating curve over time.,373,297.5,1381,0.22,72.3,0.05
+204041,Orara River At Bawden Bridge,152.81,-29.72,62.4,Very high gauging of 2800 m3/sec in March 1974 that exceeds maximum flow reported.,1790,2831.7,2365.5,1.2,2125.3,0.9
+204043,Peacock Creek At Bonalbo,152.67,-28.73,62.7,-,47,8.2,251.2,0.03,155,0.62
+204046,Timbarra River At Drake,152.39,-29.05,53.4,-,1720,430.4,2940.8,0.15,1098.5,0.37
+204051,Clarence River At Paddys Flat,152.42,-28.72,46.7,-,2230,897,5728.1,0.16,989.4,0.17
+204055,Sportsmans Creek At Gurranang Siding,152.98,-29.47,40.4,Flow data before 1982 was discarded.,202,354.2,615.6,0.58,615.6,1
+204056,Dandahra Creek At Gibraltar Range,152.45,-29.48,47.5,-,104,136.6,655.6,0.21,271.5,0.41
+204067,Gordon Brook At Fineflower,152.65,-29.4,39.6,Significant changes in rating curve over time.,315,39.2,825,0.05,825,1
+204068,Orara River At Orange Grove,153.01,-30.26,27.3,Significant changes in rating curve in 2000.,126,136,688.8,0.2,468.6,0.68
+204069,Nymboida River D/S Nymboida Weir,152.69,-29.92,25.2,-,1732,2453.7,4943.2,0.5,2285,0.46
+204071,Bielsdown River At Charlestead,152.71,-30.23,19.5,-,131,18.9,542.9,0.03,172.7,0.32
+204900,Clarence River At Baryulgil,152.59,-29.2,51.4,-,7490,3324,9526.9,0.35,5969.1,0.63
+204906,Orara River At Glenreagh,152.99,-30.07,50,-,446,978,1338.9,0.73,1063.6,0.79
+203002,Coopers Creek At Repentance,153.41,-28.64,46,-,62,127.7,1363.2,0.09,1363.2,1
+203004,Richmond River At Casino,153.06,-28.86,52.7,Significant changes in rating curve over time. No streamflow data available for the peak of 2022 event between 2022-02-28 11:45 and 2022-03-01 9:45.,1790,1806.8,2089.5,0.86,2089.5,1
+203005,Richmond River At Wiangaree,152.97,-28.51,51.4,-,702,667,2687.9,0.25,1490.6,0.55
+203010,Leycester River At Rock Valley,153.16,-28.74,55.4,-,179,226.5,1343,0.17,1343,1
+203012,Byron Creek At Binna Burra,153.5,-28.71,45.1,-,39,65.2,459.7,0.14,210.5,0.46
+203014,Wilsons River At Eltham,153.39,-28.76,65.3,-,223,421.3,741.2,0.57,578.4,0.78
+203024,Coopers Creek At Ewing Bridge,153.36,-28.72,21.1,Flow data before 2001 was discarded.,148,254.6,807.7,0.32,807.7,1
+203030,Myrtle Creek At Rappville,153,-29.11,43.2,-,332,142.4,174.9,0.81,174.9,1
+203034,Eden Creek At Doubtful,152.92,-28.76,21.2,-,581,123.6,873.2,0.14,846,0.97
+203041,Shannon Brook At Yorklea,153.01,-28.94,21.1,Significant changes in rating curve post 1990.,492,199.1,530.2,0.38,158.8,0.3
+203056,Richmond River At Lavelles Road,152.89,-28.45,12.1,-,337,209.8,1016.8,0.21,593.7,0.58
+203057,Houghlahans Creek At Upstream Teven,153.49,-28.8,12.1,-,8,4.9,58.1,0.09,35,0.6
+203059,Marom Creek At Graham Road,153.37,-28.87,11.3,-,31,8.3,206.5,0.04,181.1,0.88
+203060,Coopers Creek At Fairmeadow,153.35,-28.75,11.3,-,191,210.6,368.5,0.57,368.5,1
+203061,Goolmangar Creek At Mcnamara Bridge Weir,153.23,-28.73,11.3,-,143,150.9,261.7,0.58,261.7,1
+203062,Wilsons River At Lavertys Gap Weir,153.44,-28.58,6.7,-,25,7.4,257,0.03,257,1
+203900,Richmond River At Kyogle,152.99,-28.62,37.5,-,899,869.2,1525.3,0.57,1363.2,0.89
+201001,Oxley River At Eungella,153.29,-28.35,65.7,-,213,752.7,1590.6,0.47,1181.4,0.74
+201005,Rous River At Boat Harbour No.3,153.34,-28.31,15.4,Flow data before 2007 was discarded.,111,197.9,926,0.21,296.7,0.32
+201012,Cobaki Creek At Cobaki,153.46,-28.2,40.5,-,10,5.3,206.8,0.03,120.4,0.58
+201015,Tweed River D/S Palmers Road Crossing,153.29,-28.43,13.6,-,156,230.3,1129.5,0.2,1129.5,1
+201900,Tweed River At Uki,153.33,-28.41,55.4,Station influenced by releases from Clarrie Hall dam.,275,368.1,2557.5,0.14,2557.5,1
+202001,Brunswick River At Durrumbul (Sherrys Crossing),153.46,-28.53,51.1,Significant changes in rating curve over time.,34,220.9,792.1,0.28,792.1,1
+202002,Burringbar Creek At Burringbar,153.48,-28.44,12.1,-,40,14.7,122.3,0.12,119.7,0.98

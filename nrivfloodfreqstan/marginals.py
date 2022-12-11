@@ -17,6 +17,8 @@ DISTRIBUTION_NAMES = ["Normal", "GEV", "LogPearson3", \
 
 EULER_CONSTANT = 0.577215664901532
 
+PARAMETERS = ["locn", "logscale", "shape1"]
+
 SHAPE1_MIN = -3
 SHAPE1_MAX = 3
 
@@ -159,6 +161,19 @@ class FloodFreqDistribution():
         except NotImplementedError:
             txt += "\n"
         return txt
+
+
+    def __setitem__(self, key, value):
+        if not key in PARAMETERS:
+            txt = "/".join(PARAMETERS)
+            raise ValueError(f"Expected {key} in {txt}.")
+        setattr(self, key, value)
+
+    def __getitem__(self, key):
+        if not key in PARAMETERS:
+            txt = "/".join(list(self.params.names))
+            raise ValueError(f"Expected {key} in {txt}.")
+        return getattr(self, key)
 
     @property
     def locn(self):
@@ -309,8 +324,15 @@ class GEV(FloodFreqDistribution):
 
     def params_guess(self, data):
         try:
-            self.fit_lh_moments(data, eta=2)
-            assert np.all(self.in_support(data))
+            # Try LH moments with decrasing eta to
+            # favour high eta if possible.
+            for eta in [2, 1, 0]:
+                self.fit_lh_moments(data)
+
+                # Check support is ok to avoid
+                # problems with likelihood computation later on
+                assert np.all(self.in_support(data))
+                break
         except:
             alpha = data.var()*6/math.pi**2
             self.logscale = math.log(alpha)
@@ -410,7 +432,7 @@ class LogPearson3(FloodFreqDistribution):
             assert np.all(self.in_support(data))
         except:
             logx = np.log(data)
-            self.shape1 = skew(logx)
+            self.shape1 = max(SHAPE1_MIN, min(SHAPE1_MAX, skew(logx)))
             self.locn = logx.mean()
             self.logscale = math.log(logx.std(ddof=1))
 
