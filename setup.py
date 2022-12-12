@@ -18,6 +18,7 @@ from wheel.bdist_wheel import bdist_wheel
 MODEL_DIR = "nrivfloodfreqstan/stan"
 
 MODELS = ["univariate_censoring", "bivariate_censoring", \
+            "gls_spatial", "gls_spatial_generate", \
             "test_marginal", "test_copula"]
 
 CMDSTAN_VERSION = "2.30.1"
