@@ -431,10 +431,15 @@ class LogPearson3(FloodFreqDistribution):
             self.fit_lh_moments(data)
             assert np.all(self.in_support(data))
         except:
-            logx = np.log(data)
-            self.shape1 = max(SHAPE1_MIN, min(SHAPE1_MAX, skew(logx)))
-            self.locn = logx.mean()
-            self.logscale = math.log(logx.std(ddof=1))
+            # Progressively decreases shape parameter
+            # and stops if data are within support
+            shapes = np.linspace(0.01*np.sign(self.shape1), \
+                                self.shape1, 10)[::-1]
+            for shape1 in shapes:
+                self.shape1 = shape1
+                if np.all(self.in_support(data)):
+                    break
+
 
     def rvs(self, size):
         kw = self.get_scipy_params()
@@ -560,9 +565,21 @@ class Gumbel(FloodFreqDistribution):
         self.locn = tau
 
     def params_guess(self, data):
-        alpha = data.var()*6/math.pi**2
-        self.logscale = math.log(alpha)
-        self.locn = data.mean()-EULER_CONSTANT*alpha
+        try:
+            # Try LH moments with decrasing eta to
+            # favour high eta if possible.
+            for eta in [2, 1, 0]:
+                self.fit_lh_moments(data)
+
+                # Check support is ok to avoid
+                # problems with likelihood computation later on
+                assert np.all(self.in_support(data))
+                break
+        except:
+            alpha = data.var()*6/math.pi**2
+            self.logscale = math.log(alpha)
+            self.locn = data.mean()-EULER_CONSTANT*alpha
+            self.shape1 = 0.01
 
 
 
