@@ -229,13 +229,21 @@ def test_univariate(allclose):
 
             # Configure stan data and initialisation
             stan_data = sample.prepare(ys, ymarginal=marginal)
+
+            # Flat priors
+            stan_data["ylocn_prior"] = [ys.mean(), ys.mean()*100]
+            stan_data["ylogscale_prior"] = [5, 10]
+
+            # Initialise
             inits = sample.initialise(stan_data)
 
+            # Clean output folder
             fout = FTESTS / "sampling" / "univariate" / stationid / marginal
             fout.mkdir(parents=True, exist_ok=True)
             for f in fout.glob("*.*"):
                 f.unlink()
 
+            # Sample
             smp = univariate_censoring.sample(\
                     data=stan_data, \
                     chains=4, \
@@ -245,14 +253,16 @@ def test_univariate(allclose):
                     output_dir=fout, \
                     inits=inits)
 
+            # Get sample data
             df = smp.draws_pd()
+            diag = smp.diagnose()
 
             # T test on parameter samples
             for ip, pname in enumerate(["locn", "logscale", "shape1"]):
                 ref = dist[pname]
                 smp = df.loc[:, f"y{pname}"]
 
+                # Does not work...
                 st, pv = ttest_1samp(smp, ref)
 
-                import pdb; pdb.set_trace()
 
