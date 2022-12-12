@@ -59,9 +59,9 @@ def test_gls_generate():
             "x": x, \
             "w": w, \
             "beta": beta, \
-            "rho": rho,
-            "alpha": alpha, \
-            "sigma": sigma, \
+            "logrho": math.log(rho),
+            "logalpha": math.log(alpha), \
+            "logsigma": math.log(sigma), \
             "kernel": kernel
         }
 
@@ -129,9 +129,9 @@ def test_gls():
         "x": x, \
         "w": w, \
         "beta": beta, \
-        "rho": rho,
-        "alpha": alpha, \
-        "sigma": sigma, \
+        "logrho": math.log(rho),
+        "logalpha": math.log(alpha), \
+        "logsigma": math.log(sigma), \
         "kernel": 1
     }
 
@@ -157,13 +157,19 @@ def test_gls():
     ipts = np.random.choice(np.arange(N), 2*NX, replace=False)
 
     # sample
+    theta_prior = np.row_stack([np.zeros(P), 5*np.ones(P)])
+
     stan_data = {
         "N": len(ipts), \
         "P": P, \
         "x": x[ipts], \
         "w": w[ipts], \
         "y": df.values[0, ipts], \
-        "kernel": 1
+        "kernel": 1, \
+        "logrho_prior": [math.log(0.5), 0.5], \
+        "logalpha_prior": [0., 2], \
+        "logsigma_prior": [0., 2], \
+        "theta_prior": theta_prior
     }
     smp = gls_spatial.sample(\
                 data=stan_data, \
@@ -175,4 +181,5 @@ def test_gls():
     df = smp.draws_pd()
 
 
+    import pdb; pdb.set_trace()
 

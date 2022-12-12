@@ -9,9 +9,9 @@ data {
    vector[P] beta;
 
    // GP parameter
-   real<lower=0> rho;
-   real<lower=0> alpha;
-   real<lower=0> sigma;
+   real logrho;
+   real logalpha;
+   real logsigma;
 
    // kernel choice
    // 1=Gaussian 2=Exponential
@@ -19,6 +19,11 @@ data {
 }
 
 transformed data {
+    // Parameters
+    real rho = exp(logrho);
+    real alpha = exp(logalpha);
+    real sigma = exp(logsigma);
+
     // Mean
     vector[N] mu = x*beta;
 
