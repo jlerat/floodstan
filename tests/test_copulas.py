@@ -334,7 +334,7 @@ def test_conditional_density(allclose):
                     s, err = quad(fun, 0, ucond, args=(uv[i, 1], ))
                     expected1[i] = s
 
-                assert allclose(pdfu, expected1, atol=1e-4)
+                assert allclose(pdfu, expected1, atol=2e-4)
 
                 # Test conditional density vs derivating cdf
                 uvc = uv.copy()
