@@ -138,6 +138,7 @@ def prepare(y, z=None, \
     yobs = y>=ycensor
     ycens = y<ycensor
 
+    zmiss = pd.isnull(z)
     zobs = z>=zcensor
     zcens = z<zcensor
 
@@ -149,9 +150,13 @@ def prepare(y, z=None, \
     i22 = np.where(ycens & zcens)[0]+1
     i32 = np.where(ymiss & zcens)[0]+1
 
-    Ncases = np.array([[len(i11), len(i12)], \
-                [len(i21), len(i22)], \
-                [len(i31), len(i32)]])
+    i13 = np.where(yobs & zmiss)[0]+1
+    i23 = np.where(ycens & zmiss)[0]+1
+    i33 = np.where(ymiss & zmiss)[0]+1
+
+    Ncases = np.array([[len(i11), len(i12), len(i13)], \
+                [len(i21), len(i22), len(i23)], \
+                [len(i31), len(i32), len(i33)]])
     assert N == np.sum(Ncases)
 
     # Create data dict
@@ -171,6 +176,9 @@ def prepare(y, z=None, \
         "i12": i12, \
         "i22": i22, \
         "i32": i32, \
+        "i13": i13, \
+        "i23": i23, \
+        "i33": i33, \
         "shape1_lower": marginals.SHAPE1_MIN, \
         "shape1_upper": marginals.SHAPE1_MAX, \
         "rho_lower": RHO_LOWER, \
