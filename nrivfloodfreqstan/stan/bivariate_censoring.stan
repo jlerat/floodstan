@@ -18,10 +18,10 @@
 *   - 2=Clayton
 *   - 3=Gaussian
 *
-*  The 6 different cases depending on data availability are coded as follows:
-*  11: y and z observed         12: y observed, z censored
-*  21: y censored, z observed   22: y censored, z censored
-*  31: y missing, z observed    32: y missing, z censored
+*  The 9 different cases depending on data availability are coded as follows:
+*  11: y and z observed         12: y observed, z censored   13: y observed, z missing
+*  21: y censored, z observed   22: y censored, z censored   23: y censored, z missing
+*  31: y missing, z observed    32: y missing, z censored    33: y missing, z missing
 *
 **/
 
@@ -49,8 +49,8 @@ data {
   vector[N] z; // Data for second variable (ams AWRA)
 
   // Indexing
-  // .. number of values - 6 cases (see comment above)
-  array[3, 2] int<lower=0, upper=N> Ncases;
+  // .. number of values - 9 cases (see comment above)
+  array[3, 3] int<lower=0, upper=N> Ncases;
 
   // cases where covariate is available
   array[Ncases[1,1]] int<lower=1, upper=N> i11;
@@ -61,6 +61,10 @@ data {
   array[Ncases[1,2]] int<lower=1, upper=N> i12;
   array[Ncases[2,2]] int<lower=1, upper=N> i22;
   array[Ncases[3,2]] int<lower=1, upper=N> i32;
+
+  // cases where covariate is missing
+  array[Ncases[1,3]] int<lower=1, upper=N> i13;
+  array[Ncases[2,3]] int<lower=1, upper=N> i23;
 
   // Prior parameters
   vector[2] ylocn_prior;
@@ -118,6 +122,9 @@ transformed parameters {
 
   for(i in 1:Ncases[1, 2])
     uv[i12[i], 1] = marginal_cdf(y[i12[i]] | ymarginal, ylocn, yscale, yshape1);
+  
+  for(i in 1:Ncases[1, 3])
+    uv[i13[i], 1] = marginal_cdf(y[i13[i]] | ymarginal, ylocn, yscale, yshape1);
 
   // .. cases with z observed
   for(i in 1:Ncases[1, 1])
@@ -143,10 +150,13 @@ model {
 
   rho ~ normal(rho_prior[1], rho_prior[2]) T[rho_lower, rho_upper];
 
-  // --- Copula likelihood : 6 cases---
-  //  11: y and z observed         12: y observed, z censored
-  //  21: y censored, z observed   22: y censored, z censored
-  //  31: y missing, z observed    32: y missing, z censored
+  // --- Copula likelihood : 9 cases---
+  //  11: y and z observed        12: y observed, z censored  13: y obs, z miss
+  //  21: y censored, z observed  22: y censored, z censored  23: y cens, z miss
+  //  31: y missing, z observed   32: y missing, z censored   33: y miss, z miss
+  // 
+  // All cases are covered below except 33 where there is not data for both
+  // y and z. This case does not contribute to the likelihood.
 
   // Case 11 : both y and z observed
   target += copula_lpdf(uv[i11,:] | copula, rho);
@@ -157,6 +167,10 @@ model {
   target += copula_lpdf_conditional(uv[i21, 2], ucensor, copula, rho);
   target += marginal_lpdf(z[i21] | zmarginal, zlocn, zscale, zshape1);
 
+  // Case 31 : y is missing and z is observed. 
+  // this is marginal pdf for z
+  target += marginal_lpdf(z[i31] | zmarginal, zlocn, zscale, zshape1);
+
   // Case 12 : y observed and z censored
   // we re-use the expression of case 12 and invert u and v variables
   target += copula_lpdf_conditional(uv[i12, 1], vcensor, copula, rho);
@@ -166,14 +180,18 @@ model {
   // the number of occurences for 22
   target += Ncases[2,2]*copula_lcdf(uvcensors | copula, rho);
 
-  // Case 31 : y is missing and z is observed. 
-  target += marginal_lpdf(z[i31] | zmarginal, zlocn, zscale, zshape1);
-
   // Case 32 : y is missing and z is censored 
-  // this a Gumbel cdf for z reduced variable times
+  // this a marginal cdf for z reduced variable times
   // the number of occurences for 32
   target += Ncases[3,2]*marginal_lcdf(zcensor | zmarginal, zlocn, zscale, zshape1);
+  
+  // Case 13 : y is obs, z is missing
+  // this is marginal pdf for y (analogous to case 31)
+  target += marginal_lpdf(y[i13] | ymarginal, ylocn, yscale, yshape1);
 
+  // Case 23 : y is cens, z is missing
+  // this is marginal cdf for y (analogous to case 32)
+  target += Ncases[2,3]*marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
 }
 
 

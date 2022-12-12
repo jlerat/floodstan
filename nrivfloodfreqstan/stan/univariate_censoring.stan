@@ -15,6 +15,7 @@
 *  The 2 different cases depending on data availability are coded as follows:
 *  11: y observed         
 *  21: y censored
+*  Other cases described in bivariate_censoring.stan are not used.
 *
 **/
 
@@ -35,8 +36,8 @@ data {
   vector[N] y; // Data for first variable (ams streamflow)
 
   // Indexing
-  // .. number of values - 6 cases (only 2 used in univariate fitting)
-  array[3, 2] int<lower=0, upper=N> Ncases;
+  // .. number of values - 9 cases (only 2 used in univariate fitting)
+  array[3, 3] int<lower=0, upper=N> Ncases;
 
   // 2 cases obs/censored
   array[Ncases[1,1]] int<lower=1, upper=N> i11;
