@@ -14,6 +14,8 @@ KERNEL_CODES = {\
                 "Gaussian": 1, \
                 "Exponential": 2
             }
+KERNEL_CODES_INV = {code:name for name, code in KERNEL_CODES.items()}
+
 
 # BOUNDS
 
@@ -108,15 +110,14 @@ def get_QR_matrices(x):
     return Q_ast, R_ast
 
 
-def generate(x, w, samples, kernel="Gaussian"):
-    # Check inputs
-    x = np.array(x).astype(np.float64)
-    w = np.array(w).astype(np.float64)
-    assert x.ndim==2, "Expected 2d array for x."
-    assert w.ndim==2, "Expected 2d array for w."
-    assert w.shape[1] == 2, "Expected 2nd dim of w to be of length 2."
-    N, P = x.shape
-    assert w.shape[0] == N, f"Expected {N} points in w, got {w.shape[0]}."
+def generate(stan_data, samples, conditional=False):
+    # Get data
+    N = stan_data["N"]
+    x = stan_data["x"]
+    w = stan_data["w"]
+    y = stan_data["y"]
+    ivalid = stan_data["ivalid"]-1
+    kernel = KERNEL_CODES_INV[stan_data["kernel"]]
 
     # generate data
     M = len(samples)
@@ -132,6 +133,15 @@ def generate(x, w, samples, kernel="Gaussian"):
         mu = x.dot(beta)
         Sigma = kernel_covariance(w, rho, alpha, sigma, kernel)
         L = np.linalg.cholesky(Sigma)
-        samples_generated[i, :] = mu+L.dot(eps[i])
+        raw = mu+L.dot(eps[i])
+
+        if conditional:
+            Sigma22inv = np.linalg.inv(Sigma[ivalid[:, None], ivalid[None, :]])
+            Sigma12 = Sigma[:, ivalid]
+            ys = raw+Sigma12.dot(Sigma22inv).dot(y[ivalid]-raw[ivalid])
+        else:
+            ys = raw
+
+        samples_generated[i, :] = ys
 
     return samples_generated
