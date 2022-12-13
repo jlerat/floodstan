@@ -96,7 +96,7 @@ def test_sample_prepare():
     stan_data = sample.prepare(df.y, df.z, prior_variables=prior_variables)
 
     Ncases = stan_data["Ncases"]
-    assert np.allclose(Ncases, [[55, 0], [0, 0], [10, 0]])
+    assert np.allclose(Ncases, [[55, 0, 0], [0, 0, 0], [10, 0, 0]])
 
     i11 = stan_data["i11"]
     assert pd.notnull(df.y.iloc[i11-1]).all()
