@@ -15,6 +15,8 @@ data {
     int<lower=1, upper=2> kernel;
 
     // Priors
+    real<lower=-10> logrho_lower;
+    real<lower=logrho_lower, upper=20> logrho_upper;
     vector[2] logrho_prior;
     vector[2] logalpha_prior;
     vector[2] logsigma_prior;
@@ -75,7 +77,7 @@ model {
     matrix[Nvalid, Nvalid] L = cholesky_decompose(K);
 
     // Prior
-    logrho ~ normal(logrho_prior[1], logrho_prior[2]); 
+    logrho ~ normal(logrho_prior[1], logrho_prior[2]) T[logrho_lower, logrho_upper]; 
     logalpha ~ normal(logalpha_prior[1], logalpha_prior[2]);
     logsigma ~ normal(logsigma_prior[1], logsigma_prior[2]);
 

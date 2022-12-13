@@ -42,6 +42,8 @@ def prepare(x, w, y, \
             logalpha_prior, \
             logsigma_prior, \
             theta_prior=None, \
+            logrho_lower=-10, \
+            logrho_upper=20, \
             kernel="Gaussian"):
 
     # Check inputs
@@ -80,6 +82,8 @@ def prepare(x, w, y, \
         "logrho_prior": logrho_prior, \
         "logalpha_prior": logalpha_prior, \
         "logsigma_prior": logsigma_prior, \
+        "logrho_lower": logrho_lower, \
+        "logrho_upper": logrho_upper, \
         "theta_prior": theta_prior
     }
 
