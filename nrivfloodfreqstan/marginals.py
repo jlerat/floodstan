@@ -500,10 +500,10 @@ class LogPearson3(FloodFreqDistribution):
             # .. check reasonable bounds
             if 2./RTALPH < SHAPE1_MIN:
                 RTALPH = 2./SHAPE1_MIN
-                ALPHA = RTALPHA**2
+                ALPHA = RTALPH**2
             elif 2./RTALPH > SHAPE1_MAX:
                 RTALPH = 2./SHAPE1_MAX
-                ALPHA = RTALPHA**2
+                ALPHA = RTALPH**2
 
             BETA = ROOTPI*lam2*math.exp(gammaln(ALPHA)-gammaln(ALPHA+0.5))
             mu = lam1
