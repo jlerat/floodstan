@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as path_effects
 
 import pytest
 import warnings
@@ -16,7 +17,8 @@ from cmdstanpy import CmdStanModel
 import importlib
 from tqdm import tqdm
 
-from nrivfloodfreqstan import gls_spatial, gls_spatial_generate
+from nrivfloodfreqstan import gls_spatial, gls_spatial_generate, test_glsfun
+from nrivfloodfreqstan import gls, sample
 
 from tqdm import tqdm
 
@@ -29,20 +31,132 @@ FIMG.mkdir(exist_ok=True)
 
 TQDM_DISABLE = True
 
-def test_gls_generate():
-    # Generate coordinates
-    NX = 20
+def generate_data(NX):
     u = np.linspace(0, 1, NX)
     N = NX*NX
     uu, vv = np.meshgrid(u, u)
     uu, vv = uu.ravel(), vv.ravel()
     w = np.column_stack([uu, vv])
-
-    # Generate predictors
     x = np.column_stack([uu, vv, uu*vv, uu**2, vv**2])
+    y = uu
     P = x.shape[1]
-    beta = np.random.uniform(-1, 1, size=P)
+    return x, w, y, N, P, NX
 
+
+def test_gls_prepare(allclose):
+    x, w, y, N, P, NX = generate_data(20)
+    stan_data = gls.prepare(x, w, y, \
+                    logrho_prior=[0, 1], \
+                    logalpha_prior=[0, 2], \
+                    logsigma_prior=[0, 2])
+    assert stan_data["N"] == N
+    assert stan_data["P"] == P
+    assert stan_data["Nvalid"] == N
+    assert stan_data["theta_prior"].shape == (2, P)
+
+    y[:3] = np.nan
+    stan_data = gls.prepare(x, w, y, \
+                    logrho_prior=[0, 1], \
+                    logalpha_prior=[0, 2], \
+                    logsigma_prior=[0, 2])
+    assert stan_data["N"] == N
+    assert stan_data["Nvalid"] == N-3
+    assert allclose(stan_data["ivalid"], np.arange(4, N+1))
+
+    y[3] = np.inf
+    stan_data = gls.prepare(x, w, y, \
+                    logrho_prior=[0, 1], \
+                    logalpha_prior=[0, 2], \
+                    logsigma_prior=[0, 2])
+    assert stan_data["N"] == N
+    assert stan_data["Nvalid"] == N-4
+    assert allclose(stan_data["ivalid"], np.arange(5, N+1))
+
+
+def test_kernel(allclose):
+    x, w, y, N, P, NX = generate_data(5)
+    beta = np.random.uniform(-1, 1, size=P)
+    rho = 1
+    alpha = 2
+    sigma = 3
+    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+
+    for kernel in ["Gaussian", "Exponential"]:
+        K = gls.kernel_covariance(w, rho, alpha, sigma, kernel)
+
+        # Basic tests
+        assert K.shape == (N, N)
+        assert allclose(np.diag(K), alpha**2+sigma**2)
+
+        # Tests against stan
+        stan_data = {
+            "N": N, \
+            "P": P, \
+            "x": x, \
+            "w": w, \
+            "beta": beta, \
+            "logrho": math.log(rho), \
+            "logalpha": math.log(alpha), \
+            "logsigma": math.log(sigma), \
+            "kernel": gls.KERNEL_CODES[kernel]
+        }
+        smp = test_glsfun.sample(data=stan_data, \
+                            chains=1, iter_warmup=0, iter_sampling=1, \
+                            fixed_param=True, show_progress=False)
+        smp = smp.draws_pd().squeeze()
+
+        Ks = smp.filter(regex="^K").values.reshape((N, N))
+        assert allclose(K, Ks, rtol=0, atol=1e-5)
+
+        Ls = smp.filter(regex="^L").values.reshape((N, N))
+        L = np.linalg.cholesky(K).T
+        assert allclose(L, Ls, rtol=0, atol=1e-5)
+
+
+def test_QR(allclose):
+    x, w, y, N, P, NX = generate_data(5)
+    beta = np.random.uniform(-1, 1, size=P)
+    rho = 1
+    alpha = 2
+    sigma = 3
+    kernel = "Gaussian"
+    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+
+    # Compute QR decomposition
+    Q_ast, R_ast = gls.get_QR_matrices(x)
+    assert allclose(Q_ast.dot(R_ast), x)
+    d = Q_ast.T.dot(Q_ast)
+    assert allclose(np.diag(d), N-1)
+    assert allclose(d[np.triu_indices(P, 1)], 0.)
+
+    # Tests against stan
+    stan_data = {
+        "N": N, \
+        "P": P, \
+        "x": x, \
+        "w": w, \
+        "beta": beta, \
+        "logrho": math.log(rho), \
+        "logalpha": math.log(alpha), \
+        "logsigma": math.log(sigma), \
+        "kernel": gls.KERNEL_CODES[kernel]
+    }
+    smp = test_glsfun.sample(data=stan_data, \
+                        chains=1, iter_warmup=0, iter_sampling=1, \
+                        fixed_param=True, show_progress=False)
+    smp = smp.draws_pd().squeeze()
+
+    Q_ast_s = np.column_stack(np.array_split(smp.filter(regex="^Q_ast"), P))
+    assert allclose(Q_ast, Q_ast_s, rtol=0, atol=1e-5)
+
+    R_ast_s = np.column_stack(np.array_split(smp.filter(regex="^R_ast"), P))
+    assert allclose(R_ast, R_ast_s, rtol=0, atol=1e-5)
+    assert allclose(Q_ast_s.dot(R_ast_s), x, atol=1e-5, rtol=0.)
+
+
+def test_gls_generate_stan():
+    x, w, y, N, P, NX = generate_data(20)
+    beta = np.random.uniform(-1, 1, size=P)
     mu0 = x.dot(beta)
 
     # Low noise
@@ -100,24 +214,53 @@ def test_gls_generate():
             ax.matshow(ys)
             ax.set_title(title)
 
-        fp = FIMG / f"gls_generate_kernel{kernel}.png"
+        fp = FIMG / f"gls_generate_stan_kernel{kernel}.png"
         fig.savefig(fp)
 
 
+def test_gls_generate():
+    x, w, y, N, P, NX = generate_data(50)
 
-def test_gls():
+    sigma, rho = np.meshgrid([0.1, 1, 2, 3], [0.01, 0.1, 0.2, 0.4])
+    sigma, rho = sigma.ravel(), rho.ravel()
+    M = len(sigma)
+    beta = np.repeat(np.random.choice([-1, 0, 1], size=(P))[None, :], M, 0)
+    alpha = 3*np.ones_like(sigma)
+
+    smps = pd.DataFrame(np.column_stack([beta, \
+                            np.log(sigma), \
+                            np.log(rho), \
+                            np.log(alpha)]))
+    smps.columns = [f"beta_{i}" for i in range(1, P+1)]\
+                    +["logsigma", "logrho", "logalpha"]
+    ys = gls.generate(x, w, smps, "Gaussian")
+
+    plt.close("all")
+    fig, axs = plt.subplots(ncols=4, nrows=4, \
+                        figsize=(15, 15), \
+                        layout="tight")
+    for i, ax in enumerate(axs.flat):
+        rho = math.exp(smps.iloc[i].logrho)
+        alpha = math.exp(smps.iloc[i].logalpha)
+        sigma = math.exp(smps.iloc[i].logsigma)
+        params = f"R:{rho:0.1f} A:{alpha:0.1f} S:{sigma:0.1f}"
+        txt = ax.text(0.03, 0.97, params, transform=ax.transAxes, \
+                    va="top", ha="left", color="k", fontsize=16)
+        txt.set_path_effects([path_effects.Stroke(linewidth=3, foreground='w'),
+                       path_effects.Normal()])
+
+        yys = ys[i].reshape((NX, NX))
+        ax.matshow(yys)
+
+    fp = FIMG / f"gls_generate.png"
+    fig.savefig(fp)
+
+
+
+def test_gls_sample():
     # Generate coordinates
-    NX = 5
-    u = np.linspace(0, 1, NX)
-    N = NX*NX
-    uu, vv = np.meshgrid(u, u)
-    w = np.column_stack([uu.ravel(), vv.ravel()])
-
-    # Generate predictors
-    x = np.column_stack([w[:, 0], w[:, 1], np.prod(w, axis=1)])
-    P = x.shape[1]
+    x, w, _, N, P, NX = generate_data(10)
     beta = np.random.uniform(-1, 1, size=P)
-
     mu0 = x.dot(beta)
     sigma = np.std(mu0)/5
     alpha = 3*sigma
@@ -143,7 +286,7 @@ def test_gls():
 
     # Generate
     nsamples = 1
-    smp = gls_spatial_generate.sample(\
+    smps = gls_spatial_generate.sample(\
                 data=stan_data, \
                 seed=SEED, \
                 iter_warmup=10, \
@@ -151,35 +294,72 @@ def test_gls():
                 adapt_engaged=True, \
                 chains=1, \
                 output_dir=fout)
-    df = smp.draws_pd().filter(regex="^y", axis=1)
+    smp = smps.draws_pd().iloc[0]
 
     # Select points
-    ipts = np.random.choice(np.arange(N), 2*NX, replace=False)
+    yfull = smp.filter(regex="^y").values
+    ipts = np.random.choice(np.arange(N), N-NX, replace=False)
+    y = yfull.copy()
+    y[ipts] = np.nan
 
     # sample
-    theta_prior = np.row_stack([np.zeros(P), 5*np.ones(P)])
+    stan_data = gls.prepare(x, w, y, \
+                    logrho_prior=[0, 3], \
+                    logalpha_prior=[0, 6], \
+                    logsigma_prior=[0, 6])
 
-    stan_data = {
-        "N": len(ipts), \
-        "P": P, \
-        "x": x[ipts], \
-        "w": w[ipts], \
-        "y": df.values[0, ipts], \
-        "kernel": 1, \
-        "logrho_prior": [math.log(0.5), 0.5], \
-        "logalpha_prior": [0., 2], \
-        "logsigma_prior": [0., 2], \
-        "theta_prior": theta_prior
-    }
     smp = gls_spatial.sample(\
                 data=stan_data, \
                 seed=SEED, \
-                iter_warmup=5000, \
+                iter_warmup=10000, \
                 iter_sampling=10000, \
                 chains=5, \
                 output_dir=fout)
     df = smp.draws_pd()
 
+    # Plot
+    plt.close("all")
+    fig, axs = plt.subplots(ncols=4, nrows=4, \
+                        figsize=(12, 12), \
+                        layout="tight")
+    for i, ax in enumerate(axs.flat):
+        if i == 0:
+            ys = yfull.reshape((NX, NX))
+            title = "data unmasked"
+        else:
+            dd = df.iloc[i]
+            beta = dd.filter(regex="beta").values
+            logrho = dd.logrho
+            logalpha = dd.logalpha
+            logsigma = dd.logsigma
 
-    import pdb; pdb.set_trace()
+            stan_data = {
+                    "N": N, \
+                    "P": P, \
+                    "x": x, \
+                    "w": w, \
+                    "beta": beta, \
+                    "logrho": logrho, \
+                    "logalpha": logalpha, \
+                    "logsigma": logsigma, \
+                    "kernel": 1
+            }
+            smps = gls_spatial_generate.sample(\
+                data=stan_data, \
+                seed=SEED, \
+                iter_warmup=10, \
+                iter_sampling=1, \
+                adapt_engaged=True, \
+                chains=1, \
+                output_dir=fout)
+            smp = smps.draws_pd().iloc[0]
+            ys = smp.filter(regex="^y").values.reshape((NX, NX))
+            title = f"Sample {i}"
+
+        ax.matshow(ys)
+        ax.set_title(title)
+
+    fp = FIMG / f"gls_sample.png"
+    fig.savefig(fp)
+
 

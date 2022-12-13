@@ -32,14 +32,18 @@ FTESTS = Path(__file__).resolve().parent
 TQDM_DISABLE = True
 
 # --- Utils functions ----------------------------
-def get_stationids():
+def get_stationids(skip=5):
     fs = FTESTS / "data"
     stationids = []
-    for f in fs.glob("*_AMS.csv"):
+    for ifile, f in enumerate(fs.glob("*_AMS.csv")):
+        if not ifile % skip == 0:
+            continue
+
         sid = re.sub("_.*", "", f.stem)
         if re.search("LIS", sid):
             continue
         stationids.append(sid)
+
     return stationids
 
 def get_ams(stationid):
@@ -84,7 +88,7 @@ def test_get_marginal_prior():
 
 
 
-def test_prepare():
+def test_sample_prepare():
     y = get_ams("203010")
     z = get_ams("203014")
     df = pd.DataFrame({"y": y, "z": z})
@@ -219,7 +223,7 @@ def test_univariate(allclose):
 
         for marginal in ["LogPearson3", "Gumbel", "LogNormal"]:
             dist = marginals.factory(marginal)
-            dist.fit_lh_moments(y)
+            dist.params_guess(y)
 
             if dist.shape1<marginals.SHAPE1_MIN or dist.shape1>marginals.SHAPE1_MAX:
                 continue
@@ -231,8 +235,10 @@ def test_univariate(allclose):
             stan_data = sample.prepare(ys, ymarginal=marginal)
 
             # Flat priors
-            stan_data["ylocn_prior"] = [ys.mean(), ys.mean()*100]
-            stan_data["ylogscale_prior"] = [5, 10]
+            dist2 = marginals.factory(marginal)
+            dist2.params_guess(ys)
+            stan_data["ylocn_prior"] = [dist2.locn, dist2.locn*10]
+            stan_data["ylogscale_prior"] = [dist2.logscale, 5]
 
             # Initialise
             inits = sample.initialise(stan_data)
@@ -264,5 +270,7 @@ def test_univariate(allclose):
 
                 # Does not work...
                 st, pv = ttest_1samp(smp, ref)
+
+                import pdb; pdb.set_trace()
 
 

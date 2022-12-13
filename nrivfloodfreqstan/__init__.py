@@ -47,4 +47,5 @@ gls_spatial_generate = load_stan_model("gls_spatial_generate")
 # Stan test functions
 test_marginal = load_stan_model("test_marginal")
 test_copula = load_stan_model("test_copula")
+test_glsfun = load_stan_model("test_glsfun")
 

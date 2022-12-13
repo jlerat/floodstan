@@ -68,7 +68,11 @@ data {
 
   // Prior parameters
   vector[2] ylocn_prior;
+  
+  real<lower=-10> logscale_lower;
+  real<lower=logscale_lower, upper=20> logscale_upper;
   vector[2] ylogscale_prior;
+  
   vector[2] yshape1_prior;
   
   vector[2] zlocn_prior;
@@ -141,11 +145,11 @@ transformed parameters {
 model {
   // --- Priors --
   ylocn ~ normal(ylocn_prior[1], ylocn_prior[2]);
-  ylogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]);
+  ylogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]) T[logscale_lower, logscale_upper];
   yshape1 ~ normal(yshape1_prior[1], yshape1_prior[2]) T[shape1_lower, shape1_upper];
 
   zlocn ~ normal(ylocn_prior[1], ylocn_prior[2]);
-  zlogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]);
+  zlogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]) T[logscale_lower, logscale_upper];
   zshape1 ~ normal(zshape1_prior[1], zshape1_prior[2]) T[shape1_lower, shape1_upper];
 
   rho ~ normal(rho_prior[1], rho_prior[2]) T[rho_lower, rho_upper];

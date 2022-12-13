@@ -19,7 +19,7 @@ MODEL_DIR = "nrivfloodfreqstan/stan"
 
 MODELS = ["univariate_censoring", "bivariate_censoring", \
             "gls_spatial", "gls_spatial_generate", \
-            "test_marginal", "test_copula"]
+            "test_marginal", "test_copula", "test_glsfun"]
 
 CMDSTAN_VERSION = "2.30.1"
 BINARIES_DIR = "bin"

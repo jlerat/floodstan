@@ -22,6 +22,9 @@ COPULA_CODES = {"Gumbel": 1, \
                 "Gaussian": 3}
 
 # BOUNDS
+LOGSCALE_LOWER = -5
+LOGSCALE_UPPER = 10
+
 RHO_LOWER = 0.01
 RHO_UPPER = 0.95
 
@@ -179,6 +182,8 @@ def prepare(y, z=None, \
         "i13": i13, \
         "i23": i23, \
         "i33": i33, \
+        "logscale_lower": LOGSCALE_LOWER, \
+        "logscale_upper": LOGSCALE_UPPER, \
         "shape1_lower": marginals.SHAPE1_MIN, \
         "shape1_upper": marginals.SHAPE1_MAX, \
         "rho_lower": RHO_LOWER, \
@@ -202,7 +207,6 @@ def prepare(y, z=None, \
     stan_data["zshape1_prior"] = zprior["shape1"]
 
     return stan_data
-
 
 
 def initialise(stan_data):
