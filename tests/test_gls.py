@@ -218,8 +218,8 @@ def test_gls_generate_stan():
         fig.savefig(fp)
 
 
-def test_gls_generate():
-    x, w, y, N, P, NX = generate_data(50)
+def test_gls_generate(allclose):
+    x, w, y, N, P, NX = generate_data(30)
 
     sigma, rho = np.meshgrid([0.1, 1, 2, 3], [0.01, 0.1, 0.2, 0.4])
     sigma, rho = sigma.ravel(), rho.ravel()
@@ -227,33 +227,56 @@ def test_gls_generate():
     beta = np.repeat(np.random.choice([-1, 0, 1], size=(P))[None, :], M, 0)
     alpha = 3*np.ones_like(sigma)
 
+    # Coordinates
+    u = np.linspace(0, 1, NX)
+    uu, vv = np.meshgrid(u, u)
+
+    # Random obs
+    y = x.dot(beta[0])
+    k = np.random.choice(np.arange(N), N-20, replace=False)
+    y[k] = np.nan
+    ivalid = np.where(pd.notnull(y))[0]+1
+    stan_data = {"N": N, "x": x, "w": w, "y": y, \
+                    "ivalid": ivalid, "kernel": 1}
+
     smps = pd.DataFrame(np.column_stack([beta, \
                             np.log(sigma), \
                             np.log(rho), \
                             np.log(alpha)]))
     smps.columns = [f"beta_{i}" for i in range(1, P+1)]\
                     +["logsigma", "logrho", "logalpha"]
-    ys = gls.generate(x, w, smps, "Gaussian")
 
-    plt.close("all")
-    fig, axs = plt.subplots(ncols=4, nrows=4, \
-                        figsize=(15, 15), \
-                        layout="tight")
-    for i, ax in enumerate(axs.flat):
-        rho = math.exp(smps.iloc[i].logrho)
-        alpha = math.exp(smps.iloc[i].logalpha)
-        sigma = math.exp(smps.iloc[i].logsigma)
-        params = f"R:{rho:0.1f} A:{alpha:0.1f} S:{sigma:0.1f}"
-        txt = ax.text(0.03, 0.97, params, transform=ax.transAxes, \
-                    va="top", ha="left", color="k", fontsize=16)
-        txt.set_path_effects([path_effects.Stroke(linewidth=3, foreground='w'),
-                       path_effects.Normal()])
+    for conditional in [True, False]:
+        ys = gls.generate(stan_data, smps, conditional)
 
-        yys = ys[i].reshape((NX, NX))
-        ax.matshow(yys)
+        if conditional:
+            err = ys[:, ivalid-1]-y[ivalid-1][None, :]
+            assert allclose(np.abs(err), 0.)
 
-    fp = FIMG / f"gls_generate.png"
-    fig.savefig(fp)
+
+        plt.close("all")
+        fig, axs = plt.subplots(ncols=4, nrows=4, \
+                            figsize=(15, 15), \
+                            layout="tight")
+        for i, ax in enumerate(axs.flat):
+            rho = math.exp(smps.iloc[i].logrho)
+            alpha = math.exp(smps.iloc[i].logalpha)
+            sigma = math.exp(smps.iloc[i].logsigma)
+            params = f"R:{rho:0.1f} A:{alpha:0.1f} S:{sigma:0.1f}"
+            txt = ax.text(0.03, 0.97, params, transform=ax.transAxes, \
+                        va="top", ha="left", color="k", fontsize=16)
+            txt.set_path_effects([path_effects.Stroke(linewidth=3, foreground='w'),
+                           path_effects.Normal()])
+
+            yys = ys[i].reshape((NX, NX))
+            ax.contourf(uu, vv, yys)
+
+
+            if conditional:
+                ax.plot(*w[ivalid-1].T, "k+")
+
+        fp = FIMG / f"gls_generate_cond{conditional}.png"
+        fig.savefig(fp)
 
 
 

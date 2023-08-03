@@ -21,6 +21,10 @@ COPULA_CODES = {"Gumbel": 1, \
                 "Clayton": 2, \
                 "Gaussian": 3}
 
+MARGINAL_CODES_INV = {code:name for name, code in MARGINAL_CODES.items()}
+COPULA_CODES_INV = {code:name for name, code in COPULA_CODES.items()}
+
+
 # BOUNDS
 LOGSCALE_LOWER = -5
 LOGSCALE_UPPER = 10
@@ -214,8 +218,7 @@ def initialise(stan_data):
 
     """
     # Get marginal distributions
-    ymarginal = [k for k, code in MARGINAL_CODES.items()\
-                        if code==stan_data["ymarginal"]][0]
+    ymarginal = MARGINAL_CODES_INV[stan_data["ymarginal"]]
     ydist = marginals.factory(ymarginal)
     ydist.params_guess(stan_data["y"])
 
@@ -228,8 +231,7 @@ def initialise(stan_data):
     # Initialise covariate distribution
     # if there are valid covariate data
     if stan_data["z"].var()>0:
-        zmarginal = [k for k, code in MARGINAL_CODES.items()\
-                        if code==stan_data["zmarginal"]][0]
+        zmarginal = MARGINAL_CODES_INV[stan_data["zmarginal"]]
         zdist = marginals.factory(zmarginal)
         zdist.params_guess(stan_data["z"])
 
