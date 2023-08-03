@@ -212,12 +212,19 @@ def test_copulas(allclose):
 def test_univariate(allclose):
     return
 
+    # Testing univariate sampling following the process described by
+    # Samantha R Cook, Andrew Gelman & Donald B Rubin (2006)
+    # Validation of Software for Bayesian Models Using Posterior Quantiles,
+    # Journal of Computational and Graphical Statistics, 15:3, 675-692,
+    # DOI: 10.1198/106186006X136976
+
     stationids = get_stationids()
     LOGGER = sample.get_logger(level="INFO")#, stan_logger=False)
 
     # Large number of values to check we can get the "true" parameters
     # back from sampling
-    nvalues = 1000
+    nvalues = 100
+    nrepeat = 20
 
     for stationid in stationids:
         y = get_ams(stationid)
@@ -230,47 +237,70 @@ def test_univariate(allclose):
             if dist.shape1<marginals.SHAPE1_MIN or dist.shape1>marginals.SHAPE1_MAX:
                 continue
 
-            # Here we generate large number of data from known distribution
-            ys = dist.rvs(nvalues)
+            # Prior distribution centered around dist params
+            width = 0.5
+            ylocn_prior = [dist.locn, abs(dist.locn)*width]
+            ylogscale_prior = [dist.logscale, abs(dist.logscale)*width]
+            yshape_prior = [max(0.1, dist.shape1), width]
 
-            # Configure stan data and initialisation
-            stan_data = sample.prepare(ys, ymarginal=marginal)
-
-            # Flat priors
             dist2 = marginals.factory(marginal)
-            dist2.params_guess(ys)
-            stan_data["ylocn_prior"] = [dist2.locn, dist2.locn*10]
-            stan_data["ylogscale_prior"] = [dist2.logscale, 5]
+            test_stat = []
+            for repeat in range(nrepeat):
+                # Generate parameters from prior
+                dist.locn = norm.rvs(*ylocn_prior)
+                dist.logscale = norm.rvs(*ylogscale_prior)
+                dist.shape1 = norm.rvs(*yshape_prior)
+                # Generate data from prior params
+                ysmp = dist.rvs(N)
 
-            # Initialise
-            inits = sample.initialise(stan_data)
+                # Configure stan data and initialisation
+                stan_data = sample.prepare(ysmp, ymarginal=marginal)
 
-            # Clean output folder
-            fout = FTESTS / "sampling" / "univariate" / stationid / marginal
-            fout.mkdir(parents=True, exist_ok=True)
-            for f in fout.glob("*.*"):
-                f.unlink()
+                # Informative priors
+                stan_data["ylocn_prior"] = ylocn_prior
+                stan_data["ylogscale_prior"] = ylogscale_prior
+                stan_data["yshape1_prior"] = yshape_prior
 
-            # Sample
-            smp = univariate_censoring.sample(\
-                    data=stan_data, \
-                    chains=4, \
-                    seed=SEED, \
-                    iter_warmup=10000, \
-                    iter_sampling=5000, \
-                    output_dir=fout, \
-                    inits=inits)
+                # Initialise
+                inits = sample.initialise(stan_data)
 
-            # Get sample data
-            df = smp.draws_pd()
-            diag = smp.diagnose()
+                # Clean output folder
+                fout = FTESTS / "sampling" / "univariate" / stationid / marginal
+                fout.mkdir(parents=True, exist_ok=True)
+                for f in fout.glob("*.*"):
+                    f.unlink()
 
-            # T test on parameter samples
-            for ip, pname in enumerate(["locn", "logscale", "shape1"]):
-                ref = dist[pname]
-                smp = df.loc[:, f"y{pname}"]
+                # Sample
+                try:
+                    smp = univariate_censoring.sample(\
+                        data=stan_data, \
+                        chains=4, \
+                        seed=SEED, \
+                        iter_warmup=5000, \
+                        iter_sampling=1000, \
+                        output_dir=fout, \
+                        inits=inits)
+                except:
+                    continue
 
-                # Does not work...
-                st, pv = ttest_1samp(smp, ref)
+                # Get sample data
+                df = smp.draws_pd()
+
+                # Test statistic
+                Nsmp = len(df)
+                test_stat.append([(df.loc[:, f"y{cn}"]<dist[cn]).sum()/Nsmp\
+                        for cn in ["locn", "logscale", "shape1"]])
+
+            test_stat = pd.DataFrame(test_stat, \
+                            columns=["locn", "logscale", "shape1"])
+
+            import matplotlib.pyplot as plt
+            from hydrodiy.plot import putils
+            plt.close("all")
+            fig, ax = plt.subplots()
+            putils.ecdfplot(ax, test_stat)
+            ax.axline((0, 0), slope=1, linestyle="--", lw=0.9)
+            plt.show()
+            import pdb; pdb.set_trace()
 
 
