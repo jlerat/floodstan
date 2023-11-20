@@ -1,0 +1,20 @@
+name: env_mini
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - cmdstanpy=1.0.7
+  - matplotlib=3.5.3
+  - numpy=1.23.2
+  - pandas=1.4.3
+  - pip
+  - pytest=7.2.0
+  - pytest-cov
+  - python=3.10.6
+  - requests=2.28.1
+  - scipy=1.9.0
+  - statsmodels=0.13.2
+  - tqdm=4.64.1
+  - pip:
+    - versioneer
+    - pytest-allclose

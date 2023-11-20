@@ -10,12 +10,14 @@ from shutil import copy, copytree, rmtree
 from typing import Tuple
 
 import cmdstanpy
-from setuptools import Extension, setup
+from setuptools import Extension, setup, find_packages
 from setuptools.command.build_ext import build_ext
 from distutils.command.clean import clean
 from wheel.bdist_wheel import bdist_wheel
 
-MODEL_DIR = "nrivfloodfreqstan/stan"
+import versioneer
+
+MODEL_DIR = "floodstan/stan"
 
 MODELS = ["univariate_censoring", "bivariate_censoring", \
             "gls_spatial", "gls_spatial_generate", \
@@ -160,8 +162,15 @@ class WheelABINone(bdist_wheel):
 
 
 setup(
+    name = "floodstan",
+    author = "Julien Lerat",
+    author_email = "julien.lerat@csiro.au",
+    version= versioneer.get_version(),
+    description = "Python tools to support hydrological modelling and data analysis",
+    packages=find_packages(),
+    package_dir={"": "src"},
     # Extension marks this as platform-specific
-    ext_modules=[Extension("nrivfloodfreqstan.stan", [])],
+    ext_modules=[Extension("floodstan.stan", [])],
     # override the build and bdist commands
     cmdclass={\
         "build_ext": BuildModels, \
