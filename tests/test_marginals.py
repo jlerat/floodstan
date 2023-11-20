@@ -12,7 +12,7 @@ import warnings
 from hydrodiy.data.containers import Vector
 
 from nrivfloodfreq import fdist, fsample
-from nrivfloodfreqstan import marginals
+from floodstan import marginals
 
 from test_sample import get_stationids, get_ams
 

@@ -9,7 +9,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from nrivfloodfreqstan import marginals
+from floodstan import marginals
 
 MARGINAL_CODES = {"Gumbel": 1, \
                     "LogNormal": 2,\

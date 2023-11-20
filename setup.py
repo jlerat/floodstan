@@ -17,7 +17,7 @@ from wheel.bdist_wheel import bdist_wheel
 
 import versioneer
 
-MODEL_DIR = "floodstan/stan"
+MODEL_DIR = "src/floodstan/stan"
 
 MODELS = ["univariate_censoring", "bivariate_censoring", \
             "gls_spatial", "gls_spatial_generate", \

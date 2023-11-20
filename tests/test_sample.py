@@ -18,8 +18,8 @@ from cmdstanpy import CmdStanModel
 import importlib
 from tqdm import tqdm
 
-from nrivfloodfreqstan import marginals, sample, copulas
-from nrivfloodfreqstan import test_marginal, test_copula, \
+from floodstan import marginals, sample, copulas
+from floodstan import test_marginal, test_copula, \
                                 univariate_censoring, \
                                 bivariate_censoring
 

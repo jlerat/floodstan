@@ -17,8 +17,8 @@ from cmdstanpy import CmdStanModel
 import importlib
 from tqdm import tqdm
 
-from nrivfloodfreqstan import gls_spatial, gls_spatial_generate, test_glsfun
-from nrivfloodfreqstan import gls, sample
+from floodstan import gls_spatial, gls_spatial_generate, test_glsfun
+from floodstan import gls, sample
 
 from tqdm import tqdm
 

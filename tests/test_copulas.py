@@ -20,7 +20,7 @@ from statsmodels.distributions.copula.api import GaussianCopula, \
 import pytest
 import warnings
 
-from nrivfloodfreqstan import copulas
+from floodstan import copulas
 
 from tqdm import tqdm
 
