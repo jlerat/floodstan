@@ -2,7 +2,8 @@ import math, re
 import numpy as np
 import pandas as pd
 
-from scipy.stats import genextreme, pearson3, gumbel_r, lognorm, norm
+from scipy.stats import genextreme, pearson3, gumbel_r
+from scipy.stats import lognorm, norm, genpareto
 from scipy.stats import multivariate_normal as mvn
 from scipy.stats import percentileofscore, skew
 from scipy.optimize import minimize
@@ -13,7 +14,7 @@ from tqdm import tqdm
 from hydrodiy.data.containers import Vector
 
 DISTRIBUTION_NAMES = ["Normal", "GEV", "LogPearson3", \
-                        "Gumbel", "LogNormal"]
+                        "Gumbel", "LogNormal", "GeneralizedPareto"]
 
 EULER_CONSTANT = 0.577215664901532
 
@@ -137,6 +138,8 @@ def factory(distname):
         return LogNormal()
     elif distname == "Normal":
         return Normal()
+    elif distname == "GeneralizedPareto":
+        return GeneralizedPareto()
     else:
         raise ValueError(errmsg)
 
@@ -327,7 +330,7 @@ class GEV(FloodFreqDistribution):
             # Try LH moments with decrasing eta to
             # favour high eta if possible.
             for eta in [2, 1, 0]:
-                self.fit_lh_moments(data)
+                self.fit_lh_moments(data, eta)
 
                 # Check support is ok to avoid
                 # problems with likelihood computation later on
@@ -569,7 +572,7 @@ class Gumbel(FloodFreqDistribution):
             # Try LH moments with decrasing eta to
             # favour high eta if possible.
             for eta in [2, 1, 0]:
-                self.fit_lh_moments(data)
+                self.fit_lh_moments(data, eta)
 
                 # Check support is ok to avoid
                 # problems with likelihood computation later on
@@ -627,5 +630,55 @@ class LogNormal(FloodFreqDistribution):
 
         self.locn = lam1
         self.logscale = math.log(lam2*math.sqrt(math.pi))
+
+
+class GeneralizedPareto(FloodFreqDistribution):
+    """ Generalized Pareto distribution class"""
+
+    def __init__(self):
+        super(GeneralizedPareto, self).__init__("GeneralizedPareto")
+
+    @property
+    def support(self):
+        loc, scale, kappa = self.locn, self.scale, self.shape1
+        if kappa<0:
+            return loc, np.inf
+        else:
+            return loc, loc+scale/kappa
+
+    def get_scipy_params(self):
+        return {"c": self.shape1, "loc": self.locn, "scale": self.scale}
+
+    def __getattribute__(self, name):
+        if name in ["pdf", "cdf", "ppf", "logpdf", "logcdf"]:
+            def fun(x):
+                kw = self.get_scipy_params()
+                f = getattr(genpareto, name)
+                return f(x, **kw)
+            return fun
+        elif name == "rvs":
+            def fun(size):
+                kw = self.get_scipy_params()
+                return genpareto.rvs(size=size, **kw)
+            return fun
+
+        return super(GeneralizedPareto, self).__getattribute__(name)
+
+    def params_guess(self, data):
+        self.fit_lh_moments(data)
+
+    def fit_lh_moments(self, data, eta=0):
+        """ See Hosking and Wallis (1997), Appendix, page 195. """
+        errmsg = f"Expected eta=0, got {eta}."
+        assert eta==0, errmsg
+
+        # Get L moments
+        lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
+        tau3 = lam3/lam2
+
+        kappa = (1-3*tau3)/(1+tau3)
+        self.shape1 = kappa
+        self.locn = lam1-(2+kappa)*lam2
+        self.logscale = math.log((1+kappa)*(2+kappa)*lam2)
 
 

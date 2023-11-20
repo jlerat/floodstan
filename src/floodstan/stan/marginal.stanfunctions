@@ -212,9 +212,32 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
 }
 
 
+// Generalized Pareto
+real genpareto_lpdf(vector y, real locn, real scale, real kappa) {
+    int N = rows(y);
+    real kappa_transition = 1e-6; 
+
+    vector[N] z=(y-locn)/scale;
+    if(abs(kappa)>kappa_transition){
+        z = -1/kappa*log(1-kappa*z);
+    }
+
+    return -(1-kappa)*sum(z)-N*log(scale);
+}
+
+real genpareto_cdf(real y, real locn, real scale, real kappa) {
+    real kappa_transition = 1e-6; 
+
+    real z=(y-locn)/scale;
+    if(abs(kappa)>kappa_transition){
+        z = -1/kappa*log(1-kappa*z);
+    }
+
+    return 1-exp(-z);    
+}
 
 // ------- Marginal functions -----------------------------
-// 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal
+// 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal, 6=Generalized pareto
 
 real marginal_lpdf(vector x, int marginal, real locn, real scale, real shape1)
 {
@@ -232,6 +255,9 @@ real marginal_lpdf(vector x, int marginal, real locn, real scale, real shape1)
     }
     else if(marginal==5){
         return normal_lpdf(x | locn, scale);
+    }
+    else if(marginal==6){
+        return genpareto_lpdf(x | locn, scale, shape1);
     }
 
     return not_a_number();
@@ -254,6 +280,9 @@ real marginal_cdf(real x, int marginal, real locn, real scale, real shape1)
     else if(marginal==5){
         return normal_cdf(x | locn, scale);
     }
+    else if(marginal==6){
+        return genpareto_cdf(log(x) | locn, scale, shape1);
+    }
 
     return not_a_number();
 }
@@ -274,6 +303,9 @@ real marginal_lcdf(real x, int marginal, real locn, real scale, real shape1)
     }
     else if(marginal==5){
         return normal_lcdf(x | locn, scale);
+    }
+    else if(marginal==6){
+        return log(genpareto_cdf(log(x) | locn, scale, shape1));
     }
 
     return not_a_number();

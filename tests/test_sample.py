@@ -210,7 +210,6 @@ def test_copulas(allclose):
 
 
 def test_univariate(allclose):
-    return
 
     # Testing univariate sampling following the process described by
     # Samantha R Cook, Andrew Gelman & Donald B Rubin (2006)
@@ -230,7 +229,8 @@ def test_univariate(allclose):
         y = get_ams(stationid)
         N = len(y)
 
-        for marginal in ["LogPearson3", "Gumbel", "LogNormal"]:
+        #for marginal in ["GEV", "LogPearson3", "Gumbel", "LogNormal"]:
+        for marginal in ["Gumbel", "LogNormal"]:
             dist = marginals.factory(marginal)
             dist.params_guess(y)
 
@@ -280,7 +280,9 @@ def test_univariate(allclose):
                         iter_sampling=1000, \
                         output_dir=fout, \
                         inits=inits)
-                except:
+                except Exception as err:
+                    import pdb; pdb.set_trace()
+
                     continue
 
                 # Get sample data

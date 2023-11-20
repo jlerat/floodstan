@@ -49,7 +49,7 @@ def test_floodfreqdist(allclose):
     dist.logshape = -1
 
 
-def test_marginals(allclose):
+def test_marginals_vs_nrivfloodfreq(allclose):
     stationids = get_stationids()
     distnames = ["GEV", "LogPearson3", "LogNormal", \
                             "Gumbel", "Normal"]
@@ -143,7 +143,8 @@ def test_marginals(allclose):
 def test_params_guess(allclose):
     stationids = get_stationids()
     distnames = ["GEV", "LogPearson3", "LogNormal", \
-                            "Gumbel", "Normal"]
+                            "Gumbel", "Normal", \
+                            "GeneralizedPareto"]
     nvalues = 1000
     nboot = 50
 
