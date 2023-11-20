@@ -89,11 +89,11 @@ steps:
 - task: Cache@2
   displayName: Use cached Anaconda environment
   inputs:
-    key: conda | $(BUILD_DIR)/nrivfloodfreqstan/env_mini.yml
+    key: conda | $(BUILD_DIR)/floodstan/env_mini.yml
     path: $(CONDA_HOME)
     cacheHitVar: CONDA_CACHE_RESTORED
 
-- bash: conda env create --file $(BUILD_DIR)/nrivfloodfreqstan/env_mini.yml
+- bash: conda env create --file $(BUILD_DIR)/floodstan/env_mini.yml
   displayName: Create Anaconda environment (if not restored from cache)
   condition: eq(variables.CONDA_CACHE_RESTORED, 'false')
 
@@ -123,20 +123,20 @@ steps:
 
 - script: |
     source activate $(CONDA_ENV_NAME)
-    cd $(BUILD_DIR)/nrivfloodfreqstan
+    cd $(BUILD_DIR)/floodstan
     python setup.py develop
   displayName: package_install
 
 
 - script: |
     source activate $(CONDA_ENV_NAME)
-    cd $(BUILD_DIR)/nrivfloodfreqstan
-    pytest --junitxml=junit/test-results.xml --cov=nrivfloodfreqstan --cov-config=.coveragerc --cov-report=xml 
+    cd $(BUILD_DIR)/floodstan
+    pytest --junitxml=junit/test-results.xml --cov=floodstan --cov-config=.coveragerc --cov-report=xml 
   displayName: test
 
 - task: CopyFiles@2
   inputs:
-    sourceFolder: '$(BUILD_DIR)/nrivfloodfreqstan/tests'
+    sourceFolder: '$(BUILD_DIR)/floodstan/tests'
     contents: '*.log'
     targetFolder: '$(Build.ArtifactStagingDirectory)'
 
