@@ -11,16 +11,20 @@ import pandas as pd
 
 from floodstan import marginals
 
-MARGINAL_CODES = {"Gumbel": 1, \
-                    "LogNormal": 2,\
-                    "GEV": 3, \
-                    "LogPearson3": 4, \
-                    "Normal": 5, \
-                    "GeneralizedPareto": 6}
+MARGINAL_CODES = {
+    "Gumbel": 1, \
+    "LogNormal": 2,\
+    "GEV": 3, \
+    "LogPearson3": 4, \
+    "Normal": 5, \
+    "GeneralizedPareto": 6
+}
 
-COPULA_CODES = {"Gumbel": 1, \
-                "Clayton": 2, \
-                "Gaussian": 3}
+COPULA_CODES = {
+    "Gumbel": 1, \
+    "Clayton": 2, \
+    "Gaussian": 3
+}
 
 MARGINAL_CODES_INV = {code:name for name, code in MARGINAL_CODES.items()}
 COPULA_CODES_INV = {code:name for name, code in COPULA_CODES.items()}
@@ -80,166 +84,205 @@ def get_logger(level, flog=None, stan_logger=True):
     return LOGGER
 
 
-def get_copula_prior(prior_name="uninformative"):
-    fp = FPRIORS / f"priors_{prior_name}.json"
-    with fp.open("r") as fo:
-        js = json.load(fo)
+class StanData():
+    def __init__(self):
+        self._N = 0
+        self._y = None
+        self._z = None
+        self._ymarginal = 3 # GEV
+        self._zmarginal = 3 # GEV
+        self._copula = 1 # Gumbel
+        self._ycensor = 1e-10
+        self._zcensor = 1e-10
+        self._start = {}
 
-    return js["copula"]["rho"]
+    @property
+    def N(self):
+        return self._N
 
+    @property
+    def start(self):
+        assert len(self._start)>0, "Start has not been set."
+        return self._start
 
-def get_marginal_prior(varname, marginal, \
-                prior_variables={}, prior_name="uninformative"):
-    fp = FPRIORS / f"priors_{prior_name}.json"
-    with fp.open("r") as fo:
-        js = json.load(fo)
+    @property
+    def ymarginal_name(self):
+        return MARGINAL_CODES_INV[self._ymarginal]
 
-    # Retrieve priors
-    priors = js["marginal"][varname][marginal]
+    @property
+    def ymarginal(self):
+        return self._ymarginal
 
-    # Evaluate
-    for name, values in priors.items():
-        values_ok = []
-        for value in values:
-            if isinstance(value, numbers.Number):
-                values_ok.append(value)
-            else:
-                converted = eval(value.format(**prior_variables))
-                values_ok.append(converted)
+    @property
+    def zmarginal_name(self):
+        return MARGINAL_CODES_INV[self._zmarginal]
 
-        priors[name] = values_ok
+    @property
+    def zmarginal(self):
+        return self._zmarginal
 
-    return priors
+    @property
+    def copula(self):
+        return self._copula
 
+    @copula.setter
+    def copula(self, value):
+        assert value in COPULA_CODES_INV, "Cannot find y copula code."
+        self._copula = value
 
-def prepare(y, z=None, \
-            ymarginal="GEV", \
-            zmarginal="GEV", \
-            yname="streamflow_obs", \
-            zname="streamflow_awra", \
-            copula="Gumbel", \
-            ycensor=1e-10, \
-            zcensor=1e-10, \
-            prior_name="uninformative", \
-            prior_variables={"area": 500}
-        ):
+    @property
+    def ycensor(self):
+        return self._ycensor
 
-    # Check inputs
-    y = np.array(y).astype(np.float64)
-    assert y.ndim==1, "Expected 1d array for y."
+    @property
+    def y(self):
+        if self._y is None:
+            errmess = "y is not set."
+            raise ValueError(errmess)
+        return self._y
 
-    if z is None:
-        # All z data are uncensored
-        z = np.zeros_like(y)+2*zcensor
+    @property
+    def zcensor(self):
+        return self._zcensor
 
-    z = np.array(z).astype(np.float64)
-    assert z.ndim==1, "Expected 1d array for z."
-    N = len(z)
-    assert len(y)==N, "Expected len(y)==len(z)."
-    assert ~np.isnan(z).any(), "Expected no nan in z."
-
-    ycensor = float(ycensor)
-    zcensor = float(zcensor)
-
-    # indexes
-    ymiss = pd.isnull(y)
-    yobs = y>=ycensor
-    ycens = y<ycensor
-
-    zmiss = pd.isnull(z)
-    zobs = z>=zcensor
-    zcens = z<zcensor
-
-    i11 = np.where(yobs & zobs)[0]+1
-    i21 = np.where(ycens & zobs)[0]+1
-    i31 = np.where(ymiss & zobs)[0]+1
-
-    i12 = np.where(yobs & zcens)[0]+1
-    i22 = np.where(ycens & zcens)[0]+1
-    i32 = np.where(ymiss & zcens)[0]+1
-
-    i13 = np.where(yobs & zmiss)[0]+1
-    i23 = np.where(ycens & zmiss)[0]+1
-    i33 = np.where(ymiss & zmiss)[0]+1
-
-    Ncases = np.array([[len(i11), len(i12), len(i13)], \
-                [len(i21), len(i22), len(i23)], \
-                [len(i31), len(i32), len(i33)]])
-    assert N == np.sum(Ncases)
-
-    # Create data dict
-    stan_data = {\
-        "ymarginal": MARGINAL_CODES[ymarginal], \
-        "zmarginal": MARGINAL_CODES[zmarginal], \
-        "copula": COPULA_CODES[copula], \
-        "N": N, \
-        "y": y, \
-        "z": z, \
-        "ycensor": ycensor, \
-        "zcensor": zcensor, \
-        "Ncases": Ncases, \
-        "i11": i11, \
-        "i21": i21, \
-        "i31": i31, \
-        "i12": i12, \
-        "i22": i22, \
-        "i32": i32, \
-        "i13": i13, \
-        "i23": i23, \
-        "i33": i33, \
-        "logscale_lower": LOGSCALE_LOWER, \
-        "logscale_upper": LOGSCALE_UPPER, \
-        "shape1_lower": marginals.SHAPE1_MIN, \
-        "shape1_upper": marginals.SHAPE1_MAX, \
-        "rho_lower": RHO_LOWER, \
-        "rho_upper": RHO_UPPER
-    }
-
-    # Get priors
-    copula_prior = get_copula_prior(prior_name)
-    stan_data["rho_prior"] = copula_prior
-
-    yprior = get_marginal_prior(yname, ymarginal, prior_variables, \
-                                prior_name)
-    stan_data["ylocn_prior"] = yprior["locn"]
-    stan_data["ylogscale_prior"] = yprior["logscale"]
-    stan_data["yshape1_prior"] = yprior["shape1"]
-
-    zprior = get_marginal_prior(zname, zmarginal, prior_variables, \
-                                prior_name)
-    stan_data["zlocn_prior"] = zprior["locn"]
-    stan_data["zlogscale_prior"] = zprior["logscale"]
-    stan_data["zshape1_prior"] = zprior["shape1"]
-
-    return stan_data
+    @property
+    def z(self):
+        if self._z is None:
+            # Case where no z has been setup
+            return 2*self.zcensor*np.ones(self.N)
+        else:
+            return self._z
 
 
-def initialise(stan_data):
-    """ Initialise sampler.
+    def set_y(self, y, ymarginal=3, ycensor=1e-10):
+        assert ymarginal in MARGINAL_CODES_INV, "Cannot find y marginal code."
+        self._ymarginal = ymarginal
+        self._ycensor = np.float64(ycensor)
 
-    """
-    # Get marginal distributions
-    ymarginal = MARGINAL_CODES_INV[stan_data["ymarginal"]]
-    ydist = marginals.factory(ymarginal)
-    ydist.params_guess(stan_data["y"])
+        y = np.array(values).astype(np.float64)
+        assert y.ndim==1, "Expected y as 1d array."
+        self._y = y
+        self._N = len(y)
 
-    inits = {
-        "ylocn": ydist.locn, \
-        "ylogscale": ydist.logscale, \
-        "yshape1": ydist.shape1
-    }
+        # Set initial values
+        dist = marginals.factory(self.ymarginal_name)
+        dist.params_guess(y)
+        # TODO verify init is compatible
+        self._start["ylocn"] = dist.locn
+        self._start["ylogscale"] = dist.logscale
+        self._start["yshape1"] = dist.shape1
 
-    # Initialise covariate distribution
-    # if there are valid covariate data
-    if stan_data["z"].var()>0:
-        zmarginal = MARGINAL_CODES_INV[stan_data["zmarginal"]]
-        zdist = marginals.factory(zmarginal)
-        zdist.params_guess(stan_data["z"])
+        # Set data indexes
+        self.set_indexes()
 
-        inits["zlocn"] = zdist.locn
-        inits["zlogscale"] = zdist.logscale
-        inits["zshape1"] = zdist.shape1
 
-    return inits
+    def set_z(self, z, zmarginal=3, zcensor=1e-10):
+        assert zmarginal in MARGINAL_CODES_INV, "Cannot find z marginal code."
+        self._zmarginal = zmarginal
+        self._zcensor = np.float64(zcensor)
+
+        z = np.array(values).astype(np.float64)
+        assert z.ndim==1, "Expected z as 1d array."
+        assert ~np.isnan(z).any(), "Expected no nan in z."
+        assert len(z) == self.N, f"Expected z of length {N}."
+
+        # Set initial values
+        dist = marginals.factory(self.zmarginal_name)
+        dist.params_guess(z)
+        # TODO verify init is compatible
+        self._start["zlocn"] = dist.locn
+        self._start["zlogscale"] = dist.logscale
+        self._start["zshape1"] = dist.shape1
+
+        # Set data indexes
+        self.set_indexes()
+
+
+    def set_indexes(self):
+        y, ycensor = self.y, self.ycensor
+        ymiss = pd.isnull(y)
+        yobs = y>=ycensor
+        ycens = y<ycensor
+
+        z, zcensor = self.z, self.zcensor
+        zmiss = pd.isnull(z)
+        zobs = z>=zcensor
+        zcens = z<zcensor
+
+        self.i11 = np.where(yobs & zobs)[0]+1
+        self.i21 = np.where(ycens & zobs)[0]+1
+        self.i31 = np.where(ymiss & zobs)[0]+1
+
+        self.i12 = np.where(yobs & zcens)[0]+1
+        self.i22 = np.where(ycens & zcens)[0]+1
+        self.i32 = np.where(ymiss & zcens)[0]+1
+
+        self.i13 = np.where(yobs & zmiss)[0]+1
+        self.i23 = np.where(ycens & zmiss)[0]+1
+        self.i33 = np.where(ymiss & zmiss)[0]+1
+
+        self.Ncases = np.array([\
+                        [len(self.i11), len(self.i12), len(self.i13)], \
+                        [len(self.i21), len(self.i22), len(self.i23)], \
+                        [len(self.i31), len(self.i32), len(self.i33)]
+                    ])
+        assert len(y) == np.sum(Ncases)
+
+
+    def get_priors(self):
+        start = self.start
+        ylocstart = start["ylocn"]
+        ylocprior = [ylocstart, 10*abs(ylocstart)]
+
+        # TODO verify prior is compatible
+
+        if "zlocn" in start:
+            zlocstart = start["zlocn"]
+            zlocprior = [zlocstart, 10*abs(zlocstart)]
+        else:
+            zlocprior = [0, 10]
+
+        return ylocprior, zlocprior
+
+
+    def to_dict(self):
+        """ Export stan data to be used by stan program """
+        yprior, zprior = self.get_priors()
+
+        dd = {
+            "ymarginal": self.ymarginal, \
+            "zmarginal": self.zmarginal, \
+            "copula": COPULA_CODES[copula], \
+            "N": self.N, \
+            "y": self.y, \
+            "z": self.z, \
+            "ycensor": self.ycensor, \
+            "zcensor": self.zcensor, \
+            "Ncases": self.Ncases, \
+            "i11": self.i11, \
+            "i21": self.i21, \
+            "i31": self.i31, \
+            "i12": self.i12, \
+            "i22": self.i22, \
+            "i32": self.i32, \
+            "i13": self.i13, \
+            "i23": self.i23, \
+            "i33": self.i33, \
+            "logscale_lower": LOGSCALE_LOWER, \
+            "logscale_upper": LOGSCALE_UPPER, \
+            "shape1_lower": marginals.SHAPE1_MIN, \
+            "shape1_upper": marginals.SHAPE1_MAX, \
+            "rho_lower": RHO_LOWER, \
+            "rho_upper": RHO_UPPER, \
+            "rho_prior": [0.8, 1], \
+            "ylocn_prior": yprior, \
+            "ylogscale_prior": [0, 10], \
+            "yshape1_prior": [0, 4], \
+            "zlocn_prior": zprior, \
+            "zlogscale_prior": [0, 10], \
+            "zshape1_prior": [0, 4], \
+        }
+        return dd
+
 
 
