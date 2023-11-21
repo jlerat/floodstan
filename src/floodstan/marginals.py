@@ -647,7 +647,7 @@ class GeneralizedPareto(FloodFreqDistribution):
             return loc, loc+scale/kappa
 
     def get_scipy_params(self):
-        return {"c": self.shape1, "loc": self.locn, "scale": self.scale}
+        return {"c": -self.shape1, "loc": self.locn, "scale": self.scale}
 
     def __getattribute__(self, name):
         if name in ["pdf", "cdf", "ppf", "logpdf", "logcdf"]:

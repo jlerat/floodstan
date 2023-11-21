@@ -15,7 +15,8 @@ MARGINAL_CODES = {"Gumbel": 1, \
                     "LogNormal": 2,\
                     "GEV": 3, \
                     "LogPearson3": 4, \
-                    "Normal": 5}
+                    "Normal": 5, \
+                    "GeneralizedPareto": 6}
 
 COPULA_CODES = {"Gumbel": 1, \
                 "Clayton": 2, \

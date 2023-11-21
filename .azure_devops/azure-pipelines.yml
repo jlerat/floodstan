@@ -139,6 +139,14 @@ steps:
     sourceFolder: '$(BUILD_DIR)/floodstan/tests'
     contents: '*.log'
     targetFolder: '$(Build.ArtifactStagingDirectory)'
+  displayName: copy_test_log
+
+- task: CopyFiles@2
+  inputs:
+    sourceFolder: '$(BUILD_DIR)/floodstan/tests/images'
+    contents: 'univariate*.png'
+    targetFolder: '$(Build.ArtifactStagingDirectory)'
+  displayName: copy_test_images
 
 - task: PublishBuildArtifacts@1
   inputs:

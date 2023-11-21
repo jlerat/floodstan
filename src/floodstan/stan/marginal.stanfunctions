@@ -213,22 +213,22 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
 
 
 // Generalized Pareto
-real genpareto_lpdf(vector y, real locn, real scale, real kappa) {
+real genpareto_lpdf(vector y, real tau, real alpha, real kappa) {
     int N = rows(y);
     real kappa_transition = 1e-6; 
 
-    vector[N] z=(y-locn)/scale;
+    vector[N] z=(y-tau)/alpha;
     if(abs(kappa)>kappa_transition){
         z = -1/kappa*log(1-kappa*z);
     }
 
-    return -(1-kappa)*sum(z)-N*log(scale);
+    return -(1-kappa)*sum(z)-N*log(alpha);
 }
 
-real genpareto_cdf(real y, real locn, real scale, real kappa) {
+real genpareto_cdf(real y, real tau, real alpha, real kappa) {
     real kappa_transition = 1e-6; 
 
-    real z=(y-locn)/scale;
+    real z=(y-tau)/alpha;
     if(abs(kappa)>kappa_transition){
         z = -1/kappa*log(1-kappa*z);
     }
@@ -305,7 +305,7 @@ real marginal_lcdf(real x, int marginal, real locn, real scale, real shape1)
         return normal_lcdf(x | locn, scale);
     }
     else if(marginal==6){
-        return log(genpareto_cdf(log(x) | locn, scale, shape1));
+        return log(genpareto_cdf(x | locn, scale, shape1));
     }
 
     return not_a_number();

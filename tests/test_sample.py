@@ -6,6 +6,8 @@ from itertools import product as prod
 import numpy as np
 import pandas as pd
 
+import matplotlib.pyplot as plt
+
 from scipy.stats import norm, mvn
 from scipy.stats import multivariate_normal
 from scipy.stats import ttest_1samp
@@ -13,7 +15,7 @@ from scipy.stats import ttest_1samp
 import pytest
 import warnings
 
-from cmdstanpy import CmdStanModel
+from hydrodiy.plot import putils
 
 import importlib
 from tqdm import tqdm
@@ -107,16 +109,19 @@ def test_sample_prepare():
     assert pd.notnull(df.z.iloc[i31-1]).all()
 
 
-def test_marginals(allclose):
+def test_marginals_vs_stan(allclose):
     stationids = get_stationids()
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
     nboot = 100
+    marginal_names =["LogNormal", "Gumbel", "GEV", "LogPearson3", \
+                            "Normal", "GeneralizedPareto"]
+    marginal_names = ["GeneralizedPareto"]
 
     for stationid in stationids:
         y = get_ams(stationid)
         N = len(y)
 
-        for marginal in ["LogNormal", "Gumbel", "GEV", "LogPearson3", "Normal"]:
+        for marginal in marginal_names:
             dist = marginals.factory(marginal)
             desc = f"[{stationid}] Testing stan {marginal} marginal"
             tbar = tqdm(range(nboot), desc=desc, disable=TQDM_DISABLE)
@@ -154,10 +159,16 @@ def test_marginals(allclose):
 
                 lcens = smp.filter(regex="lcens").values
                 expected = dist.logcdf(yboot)
+
+                #tau, alpha, kappa = dist.locn, dist.scale, dist.shape1
+                #z = -1./kappa*np.log(1-kappa*(yboot-tau)/alpha)
+                #lcens2 = np.log(1-np.exp(-z))
+                #import pdb; pdb.set_trace()
+
                 assert allclose(lcens, expected, atol=1e-5)
 
 
-def test_copulas(allclose):
+def test_copulas_vs_stan(allclose):
     N = 100
     rng = np.random.default_rng(SEED)
     uv = rng.uniform(0, 1, size=(N, 2))
@@ -209,8 +220,7 @@ def test_copulas(allclose):
             assert allclose(lcond, expected, atol=1e-7)
 
 
-def test_univariate(allclose):
-
+def test_univariate_sampling(allclose):
     # Testing univariate sampling following the process described by
     # Samantha R Cook, Andrew Gelman & Donald B Rubin (2006)
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
@@ -218,19 +228,40 @@ def test_univariate(allclose):
     # DOI: 10.1198/106186006X136976
 
     stationids = get_stationids()
+    stationids = stationids[:3]
+
     LOGGER = sample.get_logger(level="INFO")#, stan_logger=False)
+
+    marginal_names ={0: "LogNormal", 1:"Gumbel", 2:"GEV", 3:"LogPearson3", \
+                            4:"Normal", 5:"GeneralizedPareto"}
+    #marginal_names = {0: "LogNormal", 1: "Normal"}
 
     # Large number of values to check we can get the "true" parameters
     # back from sampling
     nvalues = 100
-    nrepeat = 20
+    nrepeat = 50
+    nrows, ncols = 2, 3
+    axwidth, axheight = 5, 5
 
     for stationid in stationids:
         y = get_ams(stationid)
         N = len(y)
 
-        #for marginal in ["GEV", "LogPearson3", "Gumbel", "LogNormal"]:
-        for marginal in ["Gumbel", "LogNormal"]:
+        # Setup image
+        plt.close("all")
+        mosaic = [[marginal_names.get(ncols*ir+ic, ".") for ic in range(ncols)]\
+                            for ir in range(nrows)]
+
+        w, h = axwidth*ncols, axheight*nrows
+        fig = plt.figure(figsize=(w, h), layout="tight")
+        axs = fig.subplot_mosaic(mosaic)
+
+        for marginal, ax in axs.items():
+            if marginal in ["Gumbel", "LogNormal", "Normal"]:
+                parnames = ["locn", "logscale"]
+            else:
+                parnames = ["locn", "logscale", "shape1"]
+
             dist = marginals.factory(marginal)
             dist.params_guess(y)
 
@@ -277,12 +308,10 @@ def test_univariate(allclose):
                         chains=4, \
                         seed=SEED, \
                         iter_warmup=5000, \
-                        iter_sampling=1000, \
+                        iter_sampling=500, \
                         output_dir=fout, \
                         inits=inits)
                 except Exception as err:
-                    import pdb; pdb.set_trace()
-
                     continue
 
                 # Get sample data
@@ -291,18 +320,19 @@ def test_univariate(allclose):
                 # Test statistic
                 Nsmp = len(df)
                 test_stat.append([(df.loc[:, f"y{cn}"]<dist[cn]).sum()/Nsmp\
-                        for cn in ["locn", "logscale", "shape1"]])
+                        for cn in parnames])
 
-            test_stat = pd.DataFrame(test_stat, \
-                            columns=["locn", "logscale", "shape1"])
+            test_stat = pd.DataFrame(test_stat, columns=parnames)
 
-            import matplotlib.pyplot as plt
-            from hydrodiy.plot import putils
-            plt.close("all")
-            fig, ax = plt.subplots()
             putils.ecdfplot(ax, test_stat)
             ax.axline((0, 0), slope=1, linestyle="--", lw=0.9)
-            plt.show()
-            import pdb; pdb.set_trace()
+
+            title = f"{marginal} - {len(test_stat)} samples / {nrepeat}"
+            ax.set_title(title)
+
+        fig.suptitle(f"Station {stationid}")
+        fp = FTESTS / "images" / f"univariate_sampling_{stationid}.png"
+        fp.parent.mkdir(exist_ok=True)
+        fig.savefig(fp)
 
 
