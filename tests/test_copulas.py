@@ -299,7 +299,7 @@ def test_gumbel(allclose):
 def test_conditional_density(allclose):
     ndata = 100
     copula_names = ["Gaussian", "Gumbel", "Clayton", "Frank"]
-    rhos = np.linspace(cop.rho_min, cop.rho_max, 10):
+    rhos = np.linspace(cop.rho_min, cop.rho_max, 10)
     for copula in copula_names:
         cop = copulas.factory(copula)
         uv = np.random.uniform(0, 1, size=(ndata, 2))
