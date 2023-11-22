@@ -92,7 +92,7 @@ def test_stan_sampling_variable(allclose):
     assert sv.marginal_code == 3
     assert sv.marginal_name == "GEV"
     assert allclose(sv.Ncases, [[55, 0, 0], [0, 0, 0], [0, 0, 0]])
-    assert allclose(sv.i11, np.arange(sv.N))
+    assert allclose(sv.i11, np.arange(sv.N)+1)
 
     dd = sv.to_dict()
     assert "xmarginal" in dd
@@ -178,8 +178,9 @@ def test_marginals_vs_stan(allclose):
                 sv.name = "y"
                 stan_data = sv.to_dict()
 
-                sp = sample.StanSamplingVariablePrior(sv)
-                sp.add_priors(stan_data)
+                stan_data["ylocn"] = dist.locn
+                stan_data["ylogscale"] = dist.logscale
+                stan_data["yshape1"] = dist.shape1
 
                 # Run stan
                 smp = test_marginal.sample(data=stan_data, \
@@ -267,9 +268,9 @@ def test_univariate_sampling(allclose):
 
     LOGGER = sample.get_logger(level="INFO")#, stan_logger=False)
 
-    #marginal_names ={0: "LogNormal", 1:"Gumbel", 2:"GEV", 3:"LogPearson3", \
-    #                        4:"Normal", 5:"GeneralizedPareto"}
-    marginal_names = {0: "LogNormal", 1: "Normal"}
+    marginal_names ={0: "LogNormal", 1:"Gumbel", 2:"GEV", 3:"LogPearson3", \
+                            4:"Normal", 5:"GeneralizedPareto"}
+    #marginal_names = {0: "LogNormal", 1: "Normal"}
 
     # Large number of values to check we can get the "true" parameters
     # back from sampling
