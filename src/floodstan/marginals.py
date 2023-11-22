@@ -20,8 +20,8 @@ EULER_CONSTANT = 0.577215664901532
 
 PARAMETERS = ["locn", "logscale", "shape1"]
 
-SHAPE1_MIN = -3
-SHAPE1_MAX = 3
+SHAPE1_MIN = -4
+SHAPE1_MAX = 4
 
 def _prepare(data):
     data = np.array(data)
