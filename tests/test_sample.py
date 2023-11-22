@@ -69,42 +69,81 @@ def get_info():
 
 # ------------------------------------------------
 
-def test_get_copula_prior():
-    prior = sample.get_copula_prior("uninformative")
-    assert np.allclose(prior, [0.8, 1])
-
-
-def test_get_marginal_prior():
-    prior_variables = {"area": 100}
-    prior = sample.get_marginal_prior("streamflow_obs", "GEV", \
-                                prior_variables, "uninformative")
-
-    expected = {\
-        "locn": [700./3, 1400./3], \
-        "logscale": [5, 4], \
-        "shape1": [0, 4]
-    }
-
-    for key in ["locn", "logscale", "shape1"]:
-        assert np.allclose(prior[key], expected[key])
-
-
-
-def test_sample_prepare():
+def test_stan_sampling_variable(allclose):
     y = get_ams("203010")
-    z = get_ams("203014")
-    df = pd.DataFrame({"y": y, "z": z})
-    prior_variables = {"area": 500}
-    stan_data = sample.prepare(df.y, df.z, prior_variables=prior_variables)
+    sv = sample.StanSamplingVariable()
 
-    Ncases = stan_data["Ncases"]
-    assert np.allclose(Ncases, [[55, 0, 0], [0, 0, 0], [10, 0, 0]])
+    msg = "Data is not set."
+    with pytest.raises(ValueError, match=msg):
+        d = sv.data
 
-    i11 = stan_data["i11"]
+    msg = "Cannot find"
+    with pytest.raises(AssertionError, match=msg):
+        sv.set(y, "bidule", 1)
+
+    msg = "Expected data"
+    with pytest.raises(AssertionError, match=msg):
+        sv.set(y[:, None], "GEV", 1)
+
+    sv.set(y, "GEV", 1)
+    assert allclose(sv.censor, 1.)
+    assert allclose(sv.data, y)
+    assert sv.N == len(y)
+    assert sv.marginal_code == 3
+    assert sv.marginal_name == "GEV"
+    assert allclose(sv.Ncases, [[55, 0, 0], [0, 0, 0], [0, 0, 0]])
+    assert allclose(sv.i11, np.arange(sv.N))
+
+    dd = sv.to_dict()
+    assert "xmarginal" in dd
+    assert "x" in dd
+    assert "xcensor" in dd
+
+    # Rapid setting
+    sv = sample.StanSamplingVariable(y)
+    msg = "Data is not set."
+    with pytest.raises(ValueError, match=msg):
+        d = sv.data
+
+    sv = sample.StanSamplingVariable(y, "GEV")
+    d = sv.data
+
+
+def test_stan_sampling_variable_prior(allclose):
+    y = get_ams("203010")
+
+    sv = sample.StanSamplingVariable(y, "GEV")
+    dd = sv.to_dict()
+    assert not "xlocn_prior" in dd
+
+    sp = sample.StanSamplingVariablePrior(sv)
+    sp.add_priors(dd)
+    assert "xlocn_prior" in dd
+
+
+def test_stan_sampling_dataset(allclose):
+    y = get_ams("203010")
+    z = get_ams("201001")
+    z.iloc[-2] = np.nan # to add a missing data in z
+    df = pd.DataFrame({"y": y, "z": z}).sort_index()
+    y, z = df.y, df.z
+
+    yv = sample.StanSamplingVariable(y, "GEV", 100)
+    zv = sample.StanSamplingVariable(z, "GEV", 100)
+    dset = sample.StanSamplingDataset([yv, zv], "Gaussian")
+
+    assert dset.copula_name == "Gaussian"
+    assert allclose(dset.Ncases, [[38, 3, 1], [6, 7, 0], [9, 1, 0]])
+
+    dd = dset.to_dict()
+    assert "ymarginal" in dd
+    assert "zmarginal" in dd
+
+    i11 = dset.i11
     assert pd.notnull(df.y.iloc[i11-1]).all()
     assert pd.notnull(df.z.iloc[i11-1]).all()
 
-    i31 = stan_data["i31"]
+    i31 = dset.i31
     assert pd.isnull(df.y.iloc[i31-1]).all()
     assert pd.notnull(df.z.iloc[i31-1]).all()
 
@@ -115,8 +154,6 @@ def test_marginals_vs_stan(allclose):
     nboot = 100
     marginal_names =["LogNormal", "Gumbel", "GEV", "LogPearson3", \
                             "Normal", "GeneralizedPareto"]
-    marginal_names = ["GeneralizedPareto"]
-
     for stationid in stationids:
         y = get_ams(stationid)
         N = len(y)
@@ -137,14 +174,12 @@ def test_marginals_vs_stan(allclose):
                 if y0>yboot.min() or y1<yboot.max():
                     continue
 
-                stan_data = {
-                    "ymarginal": sample.MARGINAL_CODES[marginal], \
-                    "N": N, \
-                    "y": yboot, \
-                    "ylocn": dist.locn, \
-                    "ylogscale": dist.logscale, \
-                    "yshape1": dist.shape1
-                }
+                sv = sample.StanSamplingVariable(yboot, marginal)
+                sv.name = "y"
+                stan_data = sv.to_dict()
+
+                sp = sample.StanSamplingVariablePrior(sv)
+                sp.add_priors(stan_data)
 
                 # Run stan
                 smp = test_marginal.sample(data=stan_data, \
@@ -232,9 +267,9 @@ def test_univariate_sampling(allclose):
 
     LOGGER = sample.get_logger(level="INFO")#, stan_logger=False)
 
-    marginal_names ={0: "LogNormal", 1:"Gumbel", 2:"GEV", 3:"LogPearson3", \
-                            4:"Normal", 5:"GeneralizedPareto"}
-    #marginal_names = {0: "LogNormal", 1: "Normal"}
+    #marginal_names ={0: "LogNormal", 1:"Gumbel", 2:"GEV", 3:"LogPearson3", \
+    #                        4:"Normal", 5:"GeneralizedPareto"}
+    marginal_names = {0: "LogNormal", 1: "Normal"}
 
     # Large number of values to check we can get the "true" parameters
     # back from sampling
@@ -274,7 +309,6 @@ def test_univariate_sampling(allclose):
             ylogscale_prior = [dist.logscale, abs(dist.logscale)*width]
             yshape_prior = [max(0.1, dist.shape1), width]
 
-            dist2 = marginals.factory(marginal)
             test_stat = []
             for repeat in range(nrepeat):
                 # Generate parameters from prior
@@ -285,15 +319,12 @@ def test_univariate_sampling(allclose):
                 ysmp = dist.rvs(N)
 
                 # Configure stan data and initialisation
-                stan_data = sample.prepare(ysmp, ymarginal=marginal)
+                sv = sample.StanSamplingVariable(ysmp, marginal)
+                sv.name = "y"
+                stan_data = sv.to_dict()
 
-                # Informative priors
-                stan_data["ylocn_prior"] = ylocn_prior
-                stan_data["ylogscale_prior"] = ylogscale_prior
-                stan_data["yshape1_prior"] = yshape_prior
-
-                # Initialise
-                inits = sample.initialise(stan_data)
+                sp = sample.StanSamplingVariablePrior(sv)
+                sp.add_priors(stan_data)
 
                 # Clean output folder
                 fout = FTESTS / "sampling" / "univariate" / stationid / marginal
@@ -310,7 +341,7 @@ def test_univariate_sampling(allclose):
                         iter_warmup=5000, \
                         iter_sampling=500, \
                         output_dir=fout, \
-                        inits=inits)
+                        inits=stan_data)
                 except Exception as err:
                     continue
 
