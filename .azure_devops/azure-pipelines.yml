@@ -131,7 +131,7 @@ steps:
 - script: |
     source activate $(CONDA_ENV_NAME)
     cd $(BUILD_DIR)/floodstan
-    #pytest --junitxml=junit/test-results.xml --cov=floodstan --cov-config=.coveragerc --cov-report=xml 
+    pytest --junitxml=junit/test-results.xml --cov=floodstan --cov-config=.coveragerc --cov-report=xml 
   displayName: test
 
 - task: CopyFiles@2
@@ -159,10 +159,10 @@ steps:
     testResultsFiles: '**/test-*.xml'
     testRunTitle: 'Publish test results for Python $(python.version)'
 
-#- task: PublishCodeCoverageResults@1
-#  displayName: 'Publish Cobertura Coverage Report'
-#  inputs:
-#    codeCoverageTool: Cobertura
-#    summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/coverage.xml'
-#    reportDirectory: '$(System.DefaultWorkingDirectory)/**/htmlcov'
+- task: PublishCodeCoverageResults@1
+  displayName: 'Publish Cobertura Coverage Report'
+  inputs:
+    codeCoverageTool: Cobertura
+    summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/coverage.xml'
+    reportDirectory: '$(System.DefaultWorkingDirectory)/**/htmlcov'
 
