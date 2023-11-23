@@ -268,12 +268,9 @@ def test_univariate_sampling(allclose):
     # DOI: 10.1198/106186006X136976
 
     stationids = get_stationids()
-    stationids = stationids[:1]
-
-    LOGGER = sample.get_logger(level="INFO")#, stan_logger=False)
-
+    stationids = stationids[:5]
+    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
     mgs = {i: n for i, n in enumerate(sample.MARGINAL_NAMES.keys())}
-    mgs = {0: "LogPearson3"}
 
     # Large number of values to check we can get the "true" parameters
     # back from sampling
