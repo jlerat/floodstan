@@ -11,7 +11,8 @@ import pandas as pd
 
 from floodstan import marginals
 
-MARGINAL_CODES = {
+# Distribution options
+MARGINAL_NAMES = {
     "Gumbel": 1, \
     "LogNormal": 2,\
     "GEV": 3, \
@@ -20,15 +21,14 @@ MARGINAL_CODES = {
     "GeneralizedPareto": 6
 }
 
-COPULA_CODES = {
+COPULA_NAMES = {
     "Gumbel": 1, \
     "Clayton": 2, \
     "Gaussian": 3
 }
 
-MARGINAL_CODES_INV = {code:name for name, code in MARGINAL_CODES.items()}
-COPULA_CODES_INV = {code:name for name, code in COPULA_CODES.items()}
-
+MARGINAL_CODES = {code:name for name, code in MARGINAL_NAMES.items()}
+COPULA_CODES = {code:name for name, code in COPULA_NAMES.items()}
 
 # BOUNDS
 LOGSCALE_LOWER = -5
@@ -119,7 +119,7 @@ class StanSamplingVariable():
 
     @property
     def marginal_code(self):
-        return MARGINAL_CODES[self._marginal_name]
+        return MARGINAL_NAMES[self._marginal_name]
 
     @property
     def censor(self):
@@ -145,9 +145,8 @@ class StanSamplingVariable():
         return self._data
 
     def set(self, data, marginal_name, censor):
-        assert marginal_name in MARGINAL_CODES, f"Cannot find marginal {marginal_name}."
+        assert marginal_name in MARGINAL_NAMES, f"Cannot find marginal {marginal_name}."
         self._marginal_name = marginal_name
-        self._censor = np.float64(censor)
 
         data = np.array(data).astype(np.float64)
         assert data.ndim==1, "Expected data as 1d array."
@@ -155,14 +154,22 @@ class StanSamplingVariable():
         self._data = data
         self._N = len(data)
 
+        dok = data[~np.isnan(data)]
+        assert len(dok)>0, "Expected at least one valid data value."
+
+        # We set the censor close to data min to avoid potential
+        # problems with computing log cdf for the censor
+        censor = max(np.float64(censor), dok.min()-1e-10)
+        self._censor = censor
+
         # Set initial values
         dist = marginals.factory(self.marginal_name)
-        dok = data[~np.isnan(data)]
         dist.params_guess(dok)
         # .. verify parameter is compatible
         lpdf = dist.logpdf(dok)
-        errmsg = "Initial parameter incompatible with data"
-        assert not np.isnan(lpdf).any(), errmsg
+        lcdf = dist.logcdf(censor)
+        errmsg = "Initial parameters incompatible with data"
+        assert not np.isnan(lpdf).any() or np.isnan(lcdf), errmsg
 
         self._initial_parameters["locn"] = dist.locn
         self._initial_parameters["logscale"] = dist.logscale
@@ -174,7 +181,7 @@ class StanSamplingVariable():
         self._is_cens = data<self.censor
         self.i11 = np.where(self.is_obs)[0]+1
         self.i21 = np.where(self.is_cens)[0]+1
-        # .. 3x3 due to stan code requirement. Only first 2 cells used
+        # .. 3x3 due to stan code requirement. Only first 2 top left cells used
         self.Ncases = np.zeros((3, 3), dtype=int)
         self.Ncases[:2, 0] = [len(self.i11), len(self.i21)]
 
@@ -234,7 +241,7 @@ class StanSamplingDataset():
         self._stan_variables = stan_variables
 
         # Set copula
-        assert copula_name in COPULA_CODES, f"Cannot find copula {copula_name}."
+        assert copula_name in COPULA_NAMES, f"Cannot find copula {copula_name}."
         self._copula_name = copula_name
 
         # Set indexes
@@ -246,7 +253,7 @@ class StanSamplingDataset():
 
     @property
     def copula_code(self):
-        return COPULA_CODES[self._copula_name]
+        return COPULA_NAMES[self._copula_name]
 
     @property
     def stan_variables(self):

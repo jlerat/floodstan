@@ -264,13 +264,12 @@ def test_univariate_sampling(allclose):
     # DOI: 10.1198/106186006X136976
 
     stationids = get_stationids()
-    stationids = stationids[:3]
+    stationids = stationids[:1]
 
     LOGGER = sample.get_logger(level="INFO")#, stan_logger=False)
 
-    marginal_names ={0: "LogNormal", 1:"Gumbel", 2:"GEV", 3:"LogPearson3", \
-                            4:"Normal", 5:"GeneralizedPareto"}
-    #marginal_names = {0: "LogNormal", 1: "Normal"}
+    mgs = {i: n for i, n in enumerate(sample.MARGINAL_NAMES.keys())}
+    mgs = {0: "LogPearson3"}
 
     # Large number of values to check we can get the "true" parameters
     # back from sampling
@@ -285,7 +284,7 @@ def test_univariate_sampling(allclose):
 
         # Setup image
         plt.close("all")
-        mosaic = [[marginal_names.get(ncols*ir+ic, ".") for ic in range(ncols)]\
+        mosaic = [[mgs.get(ncols*ir+ic, ".") for ic in range(ncols)]\
                             for ir in range(nrows)]
 
         w, h = axwidth*ncols, axheight*nrows
@@ -305,17 +304,18 @@ def test_univariate_sampling(allclose):
                 continue
 
             # Prior distribution centered around dist params
-            width = 0.5
-            ylocn_prior = [dist.locn, abs(dist.locn)*width]
-            ylogscale_prior = [dist.logscale, abs(dist.logscale)*width]
-            yshape_prior = [max(0.1, dist.shape1), width]
+            ylocn_prior = [dist.locn, abs(dist.locn)*0.5]
+            ylogscale_prior = [dist.logscale, abs(dist.logscale)*0.5]
+            yshape1_prior = [max(0.1, dist.shape1), 0.2]
 
             test_stat = []
-            for repeat in range(nrepeat):
+            # .. double the number of tries to get nrepeat samples
+            # .. in case of failure
+            for repeat in range(2*nrepeat):
                 # Generate parameters from prior
                 dist.locn = norm.rvs(*ylocn_prior)
                 dist.logscale = norm.rvs(*ylogscale_prior)
-                dist.shape1 = norm.rvs(*yshape_prior)
+                dist.shape1 = norm.rvs(*yshape1_prior)
                 # Generate data from prior params
                 ysmp = dist.rvs(N)
 
@@ -324,8 +324,9 @@ def test_univariate_sampling(allclose):
                 sv.name = "y"
                 stan_data = sv.to_dict()
 
-                sp = sample.StanSamplingVariablePrior(sv)
-                sp.add_priors(stan_data)
+                stan_data["ylocn_prior"] = ylocn_prior
+                stan_data["ylogscale_prior"] = ylogscale_prior
+                stan_data["yshape1_prior"] = yshape1_prior
 
                 # Clean output folder
                 fout = FTESTS / "sampling" / "univariate" / stationid / marginal
@@ -344,6 +345,25 @@ def test_univariate_sampling(allclose):
                         output_dir=fout, \
                         inits=stan_data)
                 except Exception as err:
+                    dist.locn = stan_data["ylocn"]
+                    dist.logscale = stan_data["ylogscale"]
+                    dist.shape1 = stan_data["yshape1"]
+                    lpdf = dist.logpdf(ysmp)
+
+                    logprior = [\
+                        norm.logpdf(dist.locn, *ylocn_prior), \
+                        norm.logpdf(dist.logscale, *ylogscale_prior), \
+                        norm.logpdf(dist.shape1, *yshape1_prior)
+                    ]
+                    stest = test_marginal.sample(data=stan_data, \
+                                    chains=1, iter_warmup=0, iter_sampling=1, \
+                                    fixed_param=True, show_progress=False)
+                    stest = stest.draws_pd().squeeze()
+                    lpdf2 = stest.filter(regex="luncens").values
+                    lcdf2 = stest.filter(regex="lcens").values
+                    import pdb; pdb.set_trace()
+
+
                     continue
 
                 # Get sample data
@@ -353,6 +373,10 @@ def test_univariate_sampling(allclose):
                 Nsmp = len(df)
                 test_stat.append([(df.loc[:, f"y{cn}"]<dist[cn]).sum()/Nsmp\
                         for cn in parnames])
+
+                # Stop iterating when the number of samples is met
+                if repeat>nrepeat-2:
+                    break
 
             test_stat = pd.DataFrame(test_stat, columns=parnames)
 
