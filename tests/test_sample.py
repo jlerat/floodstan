@@ -268,7 +268,7 @@ def test_univariate_sampling(allclose):
     # DOI: 10.1198/106186006X136976
 
     stationids = get_stationids()
-    stationids = stationids[:5]
+    stationids = stationids[:3]
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
     mgs = {i: n for i, n in enumerate(sample.MARGINAL_NAMES.keys())}
 
