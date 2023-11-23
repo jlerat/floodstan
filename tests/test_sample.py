@@ -72,6 +72,7 @@ def get_info():
 def test_stan_sampling_variable(allclose):
     y = get_ams("203010")
     sv = sample.StanSamplingVariable()
+    censor = y.median()
 
     msg = "Data is not set."
     with pytest.raises(ValueError, match=msg):
@@ -83,10 +84,13 @@ def test_stan_sampling_variable(allclose):
 
     msg = "Expected data"
     with pytest.raises(AssertionError, match=msg):
-        sv.set(y[:, None], "GEV", 1)
+        sv.set(y[:, None], "GEV", censor)
 
-    sv.set(y, "GEV", 1)
-    assert allclose(sv.censor, 1.)
+    sv.set(y, "GEV", censor)
+    assert allclose(sv.censor, censor)
+
+    sv.set(y, "GEV", 1.)
+    assert allclose(sv.censor, max(y.min(), 1.))
     assert allclose(sv.data, y)
     assert sv.N == len(y)
     assert sv.marginal_code == 3
@@ -226,7 +230,7 @@ def test_copulas_vs_stan(allclose):
             cop.rho = rho
 
             stan_data = {
-                "copula": sample.COPULA_CODES[copula], \
+                "copula": sample.COPULA_NAMES[copula], \
                 "N": N, \
                 "uv": uv, \
                 "rho": rho
