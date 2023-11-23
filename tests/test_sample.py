@@ -346,25 +346,6 @@ def test_univariate_sampling(allclose):
                         output_dir=fout, \
                         inits=stan_data)
                 except Exception as err:
-                    dist.locn = stan_data["ylocn"]
-                    dist.logscale = stan_data["ylogscale"]
-                    dist.shape1 = stan_data["yshape1"]
-                    lpdf = dist.logpdf(ysmp)
-
-                    logprior = [\
-                        norm.logpdf(dist.locn, *ylocn_prior), \
-                        norm.logpdf(dist.logscale, *ylogscale_prior), \
-                        norm.logpdf(dist.shape1, *yshape1_prior)
-                    ]
-                    stest = test_marginal.sample(data=stan_data, \
-                                    chains=1, iter_warmup=0, iter_sampling=1, \
-                                    fixed_param=True, show_progress=False)
-                    stest = stest.draws_pd().squeeze()
-                    lpdf2 = stest.filter(regex="luncens").values
-                    lcdf2 = stest.filter(regex="lcens").values
-                    import pdb; pdb.set_trace()
-
-
                     continue
 
                 # Get sample data
