@@ -156,11 +156,13 @@ def test_marginals_vs_nrivfloodfreq(allclose):
 
 
 def test_params_guess(allclose):
-    stationids = ["204014"] #get_stationids()
+    stationids = get_stationids()
     distnames = marginals.MARGINAL_NAMES
     nvalues = 1000
     nsamples = 100000
     nboot = 200
+    if TQDM_DISABLE:
+        print("\n")
 
     for stationid in stationids:
         streamflow = get_ams(stationid)
@@ -173,7 +175,7 @@ def test_params_guess(allclose):
             tbar = tqdm(range(nboot), total=nboot, \
                         disable=TQDM_DISABLE, desc=desc)
             if TQDM_DISABLE:
-                print("\n"+desc)
+                print(desc)
 
             distb = marginals.factory(distname)
             ems = []

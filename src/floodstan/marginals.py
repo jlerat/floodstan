@@ -710,7 +710,7 @@ class GeneralizedPareto(FloodFreqDistribution):
 
 
 class GeneralizedLogistic(FloodFreqDistribution):
-    """ Generalized Pareto distribution class"""
+    """ Generalized Logistic distribution class"""
 
     def __init__(self):
         super(GeneralizedLogistic, self).__init__("GeneralizedLogistic")
@@ -756,9 +756,9 @@ class GeneralizedLogistic(FloodFreqDistribution):
             tau, alpha, kappa = self.locn, self.scale, self.shape1
             def fun(p):
                 if abs(kappa)>kt:
-                    return tau-alpha/kappa*(1-(1-1.0/p)**kappa)
+                    return tau+alpha/kappa*(1-(1.0/p-1)**kappa)
                 else:
-                    return tau-alpha*np.log(1-1.0/p)
+                    return tau+alpha*np.log(1.0/p-1)
             return fun
 
         elif name == "rvs":
@@ -777,7 +777,7 @@ class GeneralizedLogistic(FloodFreqDistribution):
         dmin, dmax = data.min(), data.max()
         tau, alpha, kappa = self.locn, self.scale, self.shape1
         if smin>dmin:
-            self.shape1 = alpha/(dmin-tau)*1.01
+            self.shape1 = alpha/(dmin-tau)*0.99
         elif smax<dmax:
             self.shape1 = alpha/(dmax-tau)*0.99
 
@@ -811,7 +811,8 @@ class Gamma(FloodFreqDistribution):
         return 0, np.inf
 
     def get_scipy_params(self):
-        return {"a": self.locn/self.scale, "scale": self.scale}
+        loc, scale2 = self.locn, self.scale**2
+        return {"a": loc*loc/scale2, "scale": scale2/loc}
 
     def __getattribute__(self, name):
         if name in ["pdf", "cdf", "ppf", "logpdf", "logcdf"]:

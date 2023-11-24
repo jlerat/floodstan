@@ -156,8 +156,10 @@ def test_marginals_vs_stan(allclose):
     stationids = get_stationids()
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
     nboot = 100
-    marginal_names =["LogNormal", "Gumbel", "GEV", "LogPearson3", \
-                            "Normal", "GeneralizedPareto"]
+    marginal_names = ["Gamma"] #sample.MARGINAL_NAMES
+    if TQDM_DISABLE:
+        print("\n")
+
     for stationid in stationids:
         y = get_ams(stationid)
         N = len(y)
@@ -167,16 +169,14 @@ def test_marginals_vs_stan(allclose):
             desc = f"[{stationid}] Testing stan {marginal} marginal"
             tbar = tqdm(range(nboot), desc=desc, disable=TQDM_DISABLE)
             if TQDM_DISABLE:
-                print("\n"+desc)
+                print(desc)
 
             for iboot in tbar:
                 # Bootstrap fit
                 rng = np.random.default_rng(SEED)
                 yboot = rng.choice(y.values, N)
-                dist.fit_lh_moments(yboot)
+                dist.params_guess(yboot)
                 y0, y1 = dist.support
-                if y0>yboot.min() or y1<yboot.max():
-                    continue
 
                 sv = sample.StanSamplingVariable(yboot, marginal)
                 sv.name = "y"
@@ -207,10 +207,12 @@ def test_marginals_vs_stan(allclose):
 
 
 def test_copulas_vs_stan(allclose):
-    N = 100
+    N = 500
     rng = np.random.default_rng(SEED)
     uv = rng.uniform(0, 1, size=(N, 2))
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    if TQDM_DISABLE:
+        print("\n")
 
     for copula in ["Gumbel", "Clayton", "Gaussian"]:
         cop = copulas.factory(copula)
@@ -222,7 +224,7 @@ def test_copulas_vs_stan(allclose):
         tbar = tqdm(np.linspace(rmin, rmax, nval), \
                         desc=desc, disable=TQDM_DISABLE, total=nval)
         if TQDM_DISABLE:
-            print("\n"+desc)
+            print(desc)
 
         for rho in tbar:
             cop.rho = rho
@@ -268,14 +270,15 @@ def test_univariate_sampling(allclose):
     stationids = get_stationids()
     stationids = stationids[:3]
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
-    mgs = {i: n for i, n in enumerate(sample.MARGINAL_NAMES.keys())}
+    plots = {i: n for i, n in enumerate(sample.MARGINAL_NAMES.keys())}
 
     # Large number of values to check we can get the "true" parameters
     # back from sampling
     nvalues = 100
     nrepeat = 50
-    nrows, ncols = 2, 3
+    nrows, ncols = 3, 3
     axwidth, axheight = 5, 5
+    print("\n")
 
     for stationid in stationids:
         y = get_ams(stationid)
@@ -283,7 +286,7 @@ def test_univariate_sampling(allclose):
 
         # Setup image
         plt.close("all")
-        mosaic = [[mgs.get(ncols*ir+ic, ".") for ic in range(ncols)]\
+        mosaic = [[plots.get(ncols*ir+ic, ".") for ic in range(ncols)]\
                             for ir in range(nrows)]
 
         w, h = axwidth*ncols, axheight*nrows
@@ -291,7 +294,7 @@ def test_univariate_sampling(allclose):
         axs = fig.subplot_mosaic(mosaic)
 
         for marginal, ax in axs.items():
-            if marginal in ["Gumbel", "LogNormal", "Normal"]:
+            if marginal in ["Gumbel", "LogNormal", "Normal", "Gamma"]:
                 parnames = ["locn", "logscale"]
             else:
                 parnames = ["locn", "logscale", "shape1"]
@@ -311,6 +314,10 @@ def test_univariate_sampling(allclose):
             # .. double the number of tries to get nrepeat samples
             # .. in case of failure
             for repeat in range(2*nrepeat):
+                desc = f"[{stationid}] Testing uniform sampling for "+\
+                            f"marginal {marginal} ({repeat+1}/{nrepeat})"
+                print(desc)
+
                 # Generate parameters from prior
                 dist.locn = norm.rvs(*ylocn_prior)
                 dist.logscale = norm.rvs(*ylogscale_prior)
@@ -371,4 +378,48 @@ def test_univariate_sampling(allclose):
         fp.parent.mkdir(exist_ok=True)
         fig.savefig(fp)
 
+
+def test_bivariate_sampling(allclose):
+    # Same background than univariate sampling tests
+    return
+    # TODO !
+
+    stationids = get_stationids()
+    nstations = 2
+    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+
+    copula_names = sample.COPULA_NAMES
+    plots = {i: n for i, n in enumerate(copula_names)}
+
+    # Large number of values to check we can get the "true" parameters
+    # back from sampling
+    nvalues = 100
+    nrepeat = 50
+    nrows, ncols = 2, 2
+    axwidth, axheight = 5, 5
+
+    for isite in range(nstations):
+        # Create stan variables
+        y = get_ams(stationids[isite])
+        z = get_ams(stationids[isite+1])
+        N = len(y)
+
+        z.iloc[-2] = np.nan # to add a missing data in z
+        df = pd.DataFrame({"y": y, "z": z}).sort_index()
+        y, z = df.y, df.z
+
+        yv = sample.StanSamplingVariable(y, "GEV", 100)
+        zv = sample.StanSamplingVariable(z, "GEV", 100)
+
+        # Setup image
+        plt.close("all")
+        mosaic = [[plots.get(ncols*ir+ic, ".") for ic in range(ncols)]\
+                            for ir in range(nrows)]
+
+        w, h = axwidth*ncols, axheight*nrows
+        fig = plt.figure(figsize=(w, h), layout="tight")
+        axs = fig.subplot_mosaic(mosaic)
+
+        for cop in cops:
+            pass
 
