@@ -289,10 +289,10 @@ real marginal_lpdf(vector x, int marginal, real locn, real scale, real shape1)
     else if(marginal==8){
         // Assumes that location and scale parameters are the mean 
         // and variance of Gamma distribution 
-        // mean = alpha/beta,  var=alpha/beta^2
-        // --> beta = mean/var    alpha=mean^2/var
+        // assume loc = mean and beta = 1/scale
+        // hence alpha=mean/scale
         // See https://en.wikipedia.org/wiki/Gamma_distribution
-        return gamma_lpdf(x | locn*locn/scale/scale, locn/scale/scale);
+        return gamma_lpdf(x | locn/scale, 1.0/scale);
     }
 
     return not_a_number();
@@ -322,12 +322,7 @@ real marginal_cdf(real x, int marginal, real locn, real scale, real shape1)
         return genlogistic_cdf(x | locn, scale, shape1);
     }
     else if(marginal==8){
-        // Assumes that location and scale parameters are the mean 
-        // and variance of Gamma distribution 
-        // mean = alpha/beta,  var=alpha/beta^2
-        // --> beta = mean/sig**2r    alpha=mean**2/sig**2
-        // See https://en.wikipedia.org/wiki/Gamma_distribution
-        return gamma_cdf(x | locn*locn/scale/scale, locn/scale/scale);
+        return gamma_cdf(x | locn/scale, 1.0/scale);
     }
     return not_a_number();
 }
@@ -356,12 +351,7 @@ real marginal_lcdf(real x, int marginal, real locn, real scale, real shape1)
         return log(genlogistic_cdf(x | locn, scale, shape1));
     }
     else if(marginal==8){
-        // Assumes that location and scale parameters are the mean 
-        // and variance of Gamma distribution 
-        // mean = alpha/beta,  var=alpha/beta^2
-        // --> beta = mean/var    alpha=mean^2/var
-        // See https://en.wikipedia.org/wiki/Gamma_distribution
-        return gamma_lcdf(x | locn*locn/scale/scale, locn/scale/scale);
+        return gamma_lcdf(x | locn/scale, 1.0/scale);
     }
     return not_a_number();
 }

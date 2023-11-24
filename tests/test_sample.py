@@ -156,7 +156,7 @@ def test_marginals_vs_stan(allclose):
     stationids = get_stationids()
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
     nboot = 100
-    marginal_names = ["Gamma"] #sample.MARGINAL_NAMES
+    marginal_names = sample.MARGINAL_NAMES
     if TQDM_DISABLE:
         print("\n")
 

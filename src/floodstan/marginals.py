@@ -807,12 +807,22 @@ class Gamma(FloodFreqDistribution):
         super(Gamma, self).__init__("Gamma")
 
     @property
+    def locn(self):
+        return self._locn
+
+    @locn.setter
+    def locn(self, value):
+        value = float(value)
+        assert value>0, f"Expected locn>0, got {value}."
+        self._locn = value
+
+    @property
     def support(self):
         return 0, np.inf
 
     def get_scipy_params(self):
-        loc, scale2 = self.locn, self.scale**2
-        return {"a": loc*loc/scale2, "scale": scale2/loc}
+        loc, scale = self.locn, self.scale
+        return {"a": loc/scale, "scale": scale}
 
     def __getattribute__(self, name):
         if name in ["pdf", "cdf", "ppf", "logpdf", "logcdf"]:
@@ -838,10 +848,11 @@ class Gamma(FloodFreqDistribution):
         #kappa = (3-s+math.sqrt((s-3)**3+24*s))/12/s
         #theta = dok.mean()/kappa
 
-        # Method of moments
-        m, s = dok.mean(), dok.std()
-        self.locn = m**2/s**2
-        self.logscale = math.log(m/s**2)
+        # Method of moments mean=alpha/beta, var=alpha/beta^2
+        # locn=mean and scale=1/beta
+        m, v = dok.mean(), dok.var()
+        self.locn = m**2/v
+        self.logscale = math.log(v/m)
 
 
 
