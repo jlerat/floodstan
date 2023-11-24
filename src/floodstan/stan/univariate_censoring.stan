@@ -31,7 +31,8 @@ functions {
 data {
   // Defines marginal distributions
   // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal
-  int<lower=1, upper=6> ymarginal; 
+  // 6=Gen Pareto, 7=Gen Logistic, 8=Gamma
+  int<lower=1, upper=8> ymarginal; 
 
   int N; // total number of values
   vector[N] y; // Data for first variable (ams streamflow)

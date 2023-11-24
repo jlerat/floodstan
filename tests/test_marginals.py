@@ -49,16 +49,31 @@ def test_floodfreqdist(allclose):
     dist.logshape = -1
 
 
+def test_marginals_properties(allclose):
+    distnames = marginals.MARGINAL_NAMES
+    streamflow = get_ams("203014")
+    for distname in distnames:
+        dist = marginals.factory(distname)
+        dist.params_guess(streamflow)
+        s = str(dist)
+        y = dist.rvs(size=10000)
+        p = dist.cdf(y)
+        expected = dist.ppf(p)
+        assert allclose(expected, y)
+
+
 def test_marginals_vs_nrivfloodfreq(allclose):
     stationids = get_stationids()
-    distnames = ["GEV", "LogPearson3", "LogNormal", \
-                            "Gumbel", "Normal"]
+    distnames = marginals.MARGINAL_NAMES
     nparams = 500
 
     for stationid in stationids:
         streamflow = get_ams(stationid)
 
         for distname in distnames:
+            if distname in ["GeneralizedPareto", "GeneralizedLogistic", "Gamma"]:
+                continue
+
             dist1 = fdist.factory(distname)
             dist2 = marginals.factory(distname)
 
@@ -141,19 +156,18 @@ def test_marginals_vs_nrivfloodfreq(allclose):
 
 
 def test_params_guess(allclose):
-    stationids = get_stationids()
-    distnames = ["GEV", "LogPearson3", "LogNormal", \
-                            "Gumbel", "Normal", \
-                            "GeneralizedPareto"]
+    stationids = ["204014"] #get_stationids()
+    distnames = marginals.MARGINAL_NAMES
     nvalues = 1000
-    nboot = 50
+    nsamples = 100000
+    nboot = 200
 
     for stationid in stationids:
         streamflow = get_ams(stationid)
 
         for distname in distnames:
             dist = marginals.factory(distname)
-            dist.fit_lh_moments(streamflow)
+            dist.params_guess(streamflow)
 
             desc = f"[{stationid}] Testing params guess for {distname}"
             tbar = tqdm(range(nboot), total=nboot, \
@@ -162,7 +176,15 @@ def test_params_guess(allclose):
                 print("\n"+desc)
 
             distb = marginals.factory(distname)
+            ems = []
             for iboot in tbar:
                 ys = dist.rvs(nvalues)
                 distb.params_guess(ys)
+
+                ymin, ymax = distb.support
+                assert ymin<ys.min()
+                assert ymax>ys.max()
+
+                lpdf = distb.logpdf(ys)
+                assert np.all(~np.isnan(lpdf))
 

@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 
 from scipy.stats import genextreme, pearson3, gumbel_r
-from scipy.stats import lognorm, norm, genpareto
+from scipy.stats import gamma as gamma_dist
+from scipy.stats import lognorm, norm, genpareto, genlogistic
 from scipy.stats import multivariate_normal as mvn
 from scipy.stats import percentileofscore, skew
 from scipy.optimize import minimize
@@ -13,8 +14,17 @@ from tqdm import tqdm
 
 from hydrodiy.data.containers import Vector
 
-DISTRIBUTION_NAMES = ["Normal", "GEV", "LogPearson3", \
-                        "Gumbel", "LogNormal", "GeneralizedPareto"]
+# Distribution names
+MARGINAL_NAMES = {
+    "Gumbel": 1, \
+    "LogNormal": 2,\
+    "GEV": 3, \
+    "LogPearson3": 4, \
+    "Normal": 5, \
+    "GeneralizedPareto": 6, \
+    "GeneralizedLogistic": 7, \
+    "Gamma": 8
+}
 
 EULER_CONSTANT = 0.577215664901532
 
@@ -124,9 +134,9 @@ def lh_moments(data, eta=0, compute_lam4=True):
 
 
 def factory(distname):
-    txt = "/".join(DISTRIBUTION_NAMES)
+    txt = "/".join(MARGINAL_NAMES.keys())
     errmsg = f"Expected distnames in {txt}, got {distname}."
-    assert distname in DISTRIBUTION_NAMES, errmsg
+    assert distname in MARGINAL_NAMES, errmsg
 
     if distname == "GEV":
         return GEV()
@@ -140,6 +150,10 @@ def factory(distname):
         return Normal()
     elif distname == "GeneralizedPareto":
         return GeneralizedPareto()
+    elif distname == "GeneralizedLogistic":
+        return GeneralizedLogistic()
+    elif distname == "Gamma":
+        return Gamma()
     else:
         raise ValueError(errmsg)
 
@@ -640,11 +654,11 @@ class GeneralizedPareto(FloodFreqDistribution):
 
     @property
     def support(self):
-        loc, scale, kappa = self.locn, self.scale, self.shape1
+        tau, alpha, kappa = self.locn, self.scale, self.shape1
         if kappa<0:
-            return loc, np.inf
+            return tau, np.inf
         else:
-            return loc, loc+scale/kappa
+            return tau, tau+alpha/kappa
 
     def get_scipy_params(self):
         return {"c": -self.shape1, "loc": self.locn, "scale": self.scale}
@@ -667,6 +681,19 @@ class GeneralizedPareto(FloodFreqDistribution):
     def params_guess(self, data):
         self.fit_lh_moments(data)
 
+        # .. Correct if lh moments is failing
+        smin, smax = self.support
+        dmin, dmax = data.min(), data.max()
+        tau, alpha = self.locn, self.scale
+        if smin>dmin:
+            self.locn = dmin-1e-3
+
+        smin, smax = self.support
+        tau, alpha, kappa = self.locn, self.scale, self.shape1
+        if smax<dmax and kappa>0:
+            self.shape1 = alpha/(dmax-tau)*0.99
+
+
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 195. """
         errmsg = f"Expected eta=0, got {eta}."
@@ -680,5 +707,141 @@ class GeneralizedPareto(FloodFreqDistribution):
         self.shape1 = kappa
         self.locn = lam1-(2+kappa)*lam2
         self.logscale = math.log((1+kappa)*(2+kappa)*lam2)
+
+
+class GeneralizedLogistic(FloodFreqDistribution):
+    """ Generalized Pareto distribution class"""
+
+    def __init__(self):
+        super(GeneralizedLogistic, self).__init__("GeneralizedLogistic")
+        self.kappa_transition = 1e-10
+
+    @property
+    def support(self):
+        tau, alpha, kappa = self.locn, self.scale, self.shape1
+        kt = self.kappa_transition
+        if kappa<-kt:
+            return tau+alpha/kappa, np.inf
+        elif kappa>kt:
+            return -np.inf, tau+alpha/kappa
+        else:
+            return -np.inf, np.inf
+
+    def get_scipy_params(self):
+        return {}
+
+    def __getattribute__(self, name):
+        if name in ["pdf", "cdf"]:
+            kt = self.kappa_transition
+            tau, alpha, kappa = self.locn, self.scale, self.shape1
+            def fun(x):
+                z = (x-tau)/alpha
+                if abs(kappa)>kt:
+                    z = -1.0/kappa*np.log(1-kappa*z)
+
+                if name == "pdf":
+                    return 1./alpha*np.exp(-(1-kappa)*z)/(1+np.exp(-z))**2
+                else:
+                    return 1./(1+np.exp(-z))
+            return fun
+
+        elif name in ["logpdf", "logcdf"]:
+            f = getattr(self, re.sub("log", "", name))
+            def fun(x):
+                return np.log(f(x))
+            return fun
+
+        elif name == "ppf":
+            kt = self.kappa_transition
+            tau, alpha, kappa = self.locn, self.scale, self.shape1
+            def fun(p):
+                if abs(kappa)>kt:
+                    return tau-alpha/kappa*(1-(1-1.0/p)**kappa)
+                else:
+                    return tau-alpha*np.log(1-1.0/p)
+            return fun
+
+        elif name == "rvs":
+            def fun(size):
+                u = np.random.uniform(0, 1, size=size)
+                return self.ppf(u)
+            return fun
+
+        return super(GeneralizedLogistic, self).__getattribute__(name)
+
+    def params_guess(self, data):
+        self.fit_lh_moments(data)
+
+        # .. Correct if lh moments is failing
+        smin, smax = self.support
+        dmin, dmax = data.min(), data.max()
+        tau, alpha, kappa = self.locn, self.scale, self.shape1
+        if smin>dmin:
+            self.shape1 = alpha/(dmin-tau)*1.01
+        elif smax<dmax:
+            self.shape1 = alpha/(dmax-tau)*0.99
+
+
+    def fit_lh_moments(self, data, eta=0):
+        """ See Hosking and Wallis (1997), Appendix, page 197. """
+        errmsg = f"Expected eta=0, got {eta}."
+        assert eta==0, errmsg
+
+        # Get L moments
+        lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
+        tau3 = lam3/lam2
+
+        kappa = -tau3
+        alpha = lam2*math.sin(kappa*math.pi)/kappa/math.pi
+        tau = lam1-alpha*(1/kappa-math.pi/math.sin(kappa*math.pi))
+
+        self.shape1 = kappa
+        self.logscale = math.log(alpha)
+        self.locn = tau
+
+
+class Gamma(FloodFreqDistribution):
+    """ Gamma distribution class"""
+
+    def __init__(self):
+        super(Gamma, self).__init__("Gamma")
+
+    @property
+    def support(self):
+        return 0, np.inf
+
+    def get_scipy_params(self):
+        return {"a": self.locn/self.scale, "scale": self.scale}
+
+    def __getattribute__(self, name):
+        if name in ["pdf", "cdf", "ppf", "logpdf", "logcdf"]:
+            def fun(x):
+                kw = self.get_scipy_params()
+                f = getattr(gamma_dist, name)
+                return f(x, **kw)
+            return fun
+        elif name == "rvs":
+            def fun(size):
+                kw = self.get_scipy_params()
+                return gamma_dist.rvs(size=size, **kw)
+            return fun
+
+        return super(Gamma, self).__getattribute__(name)
+
+    def params_guess(self, data):
+        dok = data[~np.isnan(data)&(data>0)]
+        assert len(dok)>5, "Expected at least 5 samples valid and >0."
+
+        # See https://en.wikipedia.org/wiki/Gamma_distribution#Maximum_likelihood_estimation
+        #s = np.log(dok.mean())-np.mean(np.log(dok))
+        #kappa = (3-s+math.sqrt((s-3)**3+24*s))/12/s
+        #theta = dok.mean()/kappa
+
+        # Method of moments
+        m, s = dok.mean(), dok.std()
+        self.locn = m**2/s**2
+        self.logscale = math.log(m/s**2)
+
+
 
 

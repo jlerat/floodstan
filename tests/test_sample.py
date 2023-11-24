@@ -197,14 +197,12 @@ def test_marginals_vs_stan(allclose):
                 expected = dist.logpdf(yboot)
                 assert allclose(luncens, expected, atol=1e-5)
 
-                lcens = smp.filter(regex="lcens").values
+                cens = smp.filter(regex="^cens").values
+                expected = dist.cdf(yboot)
+                assert allclose(cens, expected, atol=1e-5)
+
+                lcens = smp.filter(regex="^lcens").values
                 expected = dist.logcdf(yboot)
-
-                #tau, alpha, kappa = dist.locn, dist.scale, dist.shape1
-                #z = -1./kappa*np.log(1-kappa*(yboot-tau)/alpha)
-                #lcens2 = np.log(1-np.exp(-z))
-                #import pdb; pdb.set_trace()
-
                 assert allclose(lcens, expected, atol=1e-5)
 
 

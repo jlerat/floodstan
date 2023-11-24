@@ -15,7 +15,8 @@ functions {
 data {
   // Defines marginal distributions
   // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal, 6=Generalized Pareto
-  int<lower=1, upper=6> ymarginal; 
+  // 7=Generalized Logistic, 8=Gamma
+  int<lower=1, upper=8> ymarginal; 
 
   int<lower=1> N; // total number of values
   vector[N] y; // Data for first variable (ams streamflow)
@@ -37,12 +38,14 @@ generated quantities {
 
   // un censored case
   vector[N] luncens;
+  vector[N] cens;
   vector[N] lcens;
   vector[1] tmp;
 
   for(i in 1:N){
     tmp[1] = y[i];
     luncens[i] = marginal_lpdf(tmp | ymarginal, ylocn, yscale, yshape1);
+    cens[i] = marginal_cdf(y[i] | ymarginal, ylocn, yscale, yshape1);
     lcens[i] = marginal_lcdf(y[i] | ymarginal, ylocn, yscale, yshape1);
   }
 

@@ -38,8 +38,9 @@ functions {
 data {
   // Defines marginal distributions
   // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal, 6=Gen Pareto
-  int<lower=1, upper=6> ymarginal; 
-  int<lower=1, upper=6> zmarginal; 
+  // 7=Gen Logistic, 8=Gamma
+  int<lower=1, upper=8> ymarginal; 
+  int<lower=1, upper=8> zmarginal; 
 
   // Defines copula model
   // 1=Gumbel, 2=Clayton, 3=Gaussian

@@ -10,16 +10,7 @@ import numpy as np
 import pandas as pd
 
 from floodstan import marginals
-
-# Distribution options
-MARGINAL_NAMES = {
-    "Gumbel": 1, \
-    "LogNormal": 2,\
-    "GEV": 3, \
-    "LogPearson3": 4, \
-    "Normal": 5, \
-    "GeneralizedPareto": 6
-}
+from floodstan.marginals import MARGINAL_NAMES
 
 COPULA_NAMES = {
     "Gumbel": 1, \
