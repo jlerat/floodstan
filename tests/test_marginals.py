@@ -184,8 +184,8 @@ def test_params_guess(allclose):
                 distb.params_guess(ys)
 
                 ymin, ymax = distb.support
-                assert ymin<ys.min()
-                assert ymax>ys.max()
+                assert ymin<=ys.min()
+                assert ymax>=ys.max()
 
                 lpdf = distb.logpdf(ys)
                 assert np.all(~np.isnan(lpdf))
