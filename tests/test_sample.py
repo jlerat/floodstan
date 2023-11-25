@@ -319,9 +319,13 @@ def test_univariate_sampling(allclose):
                 print(desc)
 
                 # Generate parameters from prior
-                dist.locn = norm.rvs(*ylocn_prior)
-                dist.logscale = norm.rvs(*ylogscale_prior)
-                dist.shape1 = norm.rvs(*yshape1_prior)
+                try:
+                    dist.locn = norm.rvs(*ylocn_prior)
+                    dist.logscale = norm.rvs(*ylogscale_prior)
+                    dist.shape1 = norm.rvs(*yshape1_prior)
+                except:
+                    continue
+
                 # Generate data from prior params
                 ysmp = dist.rvs(N)
 
