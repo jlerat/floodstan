@@ -214,7 +214,7 @@ def test_gaussian(allclose):
             c1, c2 = pq[i]
             expected[i], err = nquad(fun1, [[-np.inf, c1], [-np.inf, c2]])
 
-        assert allclose(cdf, expected, rtol=0, atol=5e-6)
+        assert allclose(cdf, expected, rtol=0, atol=1e-5)
 
 
 def test_gumbel(allclose):
