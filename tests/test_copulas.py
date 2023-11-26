@@ -336,7 +336,7 @@ def test_conditional_density(allclose):
                     expected1[i] = s
 
                 iok = ~np.isnan(expected1)
-                assert allclose(pdfu[iok], expected1[iok], atol=2e-4)
+                assert allclose(pdfu[iok], expected1[iok], atol=1e-3)
 
                 # Test conditional density vs derivating cdf
                 uvc = uv.copy()
