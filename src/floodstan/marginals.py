@@ -7,7 +7,7 @@ from scipy.stats import gamma as gamma_dist
 from scipy.stats import lognorm, norm, genpareto, genlogistic
 from scipy.stats import multivariate_normal as mvn
 from scipy.stats import percentileofscore, skew
-from scipy.optimize import minimize
+from scipy.optimize import minimize, brentq
 from scipy.special import gamma, gammaln
 
 from tqdm import tqdm
@@ -30,8 +30,8 @@ EULER_CONSTANT = 0.577215664901532
 
 PARAMETERS = ["locn", "logscale", "shape1"]
 
-SHAPE1_MIN = -4
-SHAPE1_MAX = 4
+SHAPE1_MIN = -4.5
+SHAPE1_MAX = 4.5
 
 def _prepare(data):
     data = np.array(data)
@@ -359,7 +359,7 @@ class GEV(FloodFreqDistribution):
     def fit_lh_moments(self, data, eta=0):
         """ See Wang et al. (1997). """
         errmsg = f"Expected eta in [0, 4], got {eta}."
-        assert eta<=4 and eta>=0, errmsg
+        assert eta<=3 and eta>=0, errmsg
 
         # Get LH moments
         lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
@@ -374,9 +374,41 @@ class GEV(FloodFreqDistribution):
             4: [0.7113, -2.5383, 0.5142, -0.1027]
         }
         coefs = coefs_all[eta]
-        kappa = coefs[0]+coefs[1]*tau3+coefs[2]*tau3**2+coefs[3]*tau3**3
+        kappa_ini = coefs[0]+coefs[1]*tau3+coefs[2]*tau3**2+coefs[3]*tau3**3
+        # .. avoids large errors of interpolation
+        kappa_ini = 0.01 if abs(kappa_ini)>1 else kappa_ini
+
+        # Solve equation because kappa is outside of validity limits
+        # See Wang et al (1997), Ratio between Eq. 21 and Eq. 20
+        fun = lambda k: (eta+3)/(eta+2)/3*(-(eta+4)*(eta+3)**(-k)\
+                                    +2*(eta+3)*(eta+2)**(-k)\
+                                    -(eta+2)*(eta+1)**(-k)) / \
+                                    (-(eta+2)**(-k)+(eta+1)**(-k))-tau3
+        # .. finds proper bounds
+        deltak = 0.1
+        k0 = kappa_ini-deltak
+        niter = 0
+        while fun(k0)<0 and niter<10:
+            k0 -= deltak
+            niter += 1
+
+        k1 = kappa_ini+deltak
+        niter = 0
+        while fun(k1)>0 and niter<10:
+            k1 += deltak
+            niter += 1
+
+        # .. solve within bounds
+        f0, f1 = fun(k0), fun(k1)
+        if f0*f1<0:
+            kappa = brentq(fun, k0, k1)
+        else:
+            # .. failed getting proper bounds
+            kappa = kappa_ini
+
         # .. reasonable bounds on kappa
-        kappa = min(SHAPE1_MAX, max(SHAPE1_MIN, kappa))
+        # .. cannot have kappa<-1
+        kappa = max(-0.95, min(SHAPE1_MAX, kappa))
 
         # See wang et al. (1997), Equation 19
         g = gamma(1+kappa)
