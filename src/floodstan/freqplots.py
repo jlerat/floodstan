@@ -121,8 +121,8 @@ def plot_marginal(ax, marginal, plot_type, params=None, Tmin=1.1, Tmax=200, \
     kwargs["color"] = kwargs.get("color", color)
 
     if params is None:
-        y = marginal.ppf(prob)
-        ax.plot(x, y, label=label, **kwargs)
+        ys = marginal.ppf(prob)
+        ax.plot(x, ys, label=label, **kwargs)
     else:
         ys = []
         for _, p in params.iterrows():
