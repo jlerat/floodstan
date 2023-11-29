@@ -348,9 +348,13 @@ class GEV(FloodFreqDistribution):
 
                 # Check support is ok to avoid
                 # problems with likelihood computation later on
-                assert np.all(self.in_support(data))
-                break
+                if np.all(self.in_support(data)):
+                    break
+
+            assert np.all(self.in_support(data))
         except:
+            # Revert to moment matching of Gumbel distribution
+            # See https://en.wikipedia.org/wiki/Gumbel_distribution
             alpha = data.var()*6/math.pi**2
             self.logscale = math.log(alpha)
             self.locn = data.mean()-EULER_CONSTANT*alpha
@@ -478,10 +482,10 @@ class LogPearson3(FloodFreqDistribution):
     def params_guess(self, data):
         try:
             self.fit_lh_moments(data)
+            assert np.all(self.in_support(data))
         except:
             # Problem with gam, revert back to log norm
             self.shape1 = 0.01
-
             logx = np.log(data[data>0])
             self.locn = logx.mean()
             self.logscale = math.log((logx-self.locn).std(ddof=1))
@@ -511,7 +515,7 @@ class LogPearson3(FloodFreqDistribution):
         C1,C2,C3 = 0.2906,  0.1882,  0.0442
         D1,D2,D3 = 0.36067,-0.59567, 0.25361
         D4,D5,D6 =-2.78861, 2.56096,-0.77045
-        PI3,ROOTPI = 9.4247780,1.7724539
+        pi3,rootpi = 9.4247780,1.7724539
         SMALL = 1e-15
         # XMOM(1) -> lam1
         # XMOM(2) -> lam2
@@ -520,41 +524,38 @@ class LogPearson3(FloodFreqDistribution):
         T3 = np.abs(tau3)
 
         idx1 = (lam2<=0) | (T3>=1.)
-        ALPHA = None
+        alpha = None
         if lam2<=0 or T3>=1:
             mu = 0.
             sigma = 0.
             gam = 0.
-
         elif T3<=SMALL:
             mu = lam1
-            sigma = lam2*ROOTPI
+            sigma = lam2*rootpi
             gam = 0.
-
         elif T3>=1./3:
-            ALPHA = 0.
+            alpha = 0.
             Ti3 = 1.-T3
-            ALPHA = Ti3*(D1+Ti3*(D2+Ti3*D3))/(1.+Ti3*(D4+Ti3*(D5+Ti3*D6)))
-
+            alpha = Ti3*(D1+Ti3*(D2+Ti3*D3))/(1.+Ti3*(D4+Ti3*(D5+Ti3*D6)))
         else:
-            Ti4 = PI3*T3*T3
-            ALPHA = (1.+C1*Ti4)/(Ti4*(1.+Ti4*(C2+Ti4*C3)))
+            Ti4 = pi3*T3*T3
+            alpha = (1.+C1*Ti4)/(Ti4*(1.+Ti4*(C2+Ti4*C3)))
 
-        if not ALPHA is None:
-            RTALPH = math.sqrt(ALPHA)
+        if not alpha is None:
+            rtalpha = math.sqrt(alpha)
 
             # .. check reasonable bounds
-            if 2./RTALPH < SHAPE1_MIN:
-                RTALPH = 2./SHAPE1_MIN
-                ALPHA = RTALPH**2
-            elif 2./RTALPH > SHAPE1_MAX:
-                RTALPH = 2./SHAPE1_MAX
-                ALPHA = RTALPH**2
+            if 2./rtalpha < SHAPE1_MIN:
+                rtalpha = 2./SHAPE1_MIN
+                alpha = rtalpha**2
+            elif 2./rtalpha > SHAPE1_MAX:
+                rtalpha = 2./SHAPE1_MAX
+                alpha = rtalpha**2
 
-            BETA = ROOTPI*lam2*math.exp(gammaln(ALPHA)-gammaln(ALPHA+0.5))
+            beta = rootpi*lam2*math.exp(gammaln(alpha)-gammaln(alpha+0.5))
             mu = lam1
-            sigma = BETA*RTALPH
-            gam = 2./RTALPH
+            sigma = beta*rtalpha
+            gam = 2./rtalpha
             if tau3<0:
                 gam *= -1
 
@@ -619,9 +620,13 @@ class Gumbel(FloodFreqDistribution):
 
                 # Check support is ok to avoid
                 # problems with likelihood computation later on
-                assert np.all(self.in_support(data))
-                break
+                if np.all(self.in_support(data)):
+                    break
+
+            assert np.all(self.in_support(data))
         except:
+            # Revert to moment matching
+            # See https://en.wikipedia.org/wiki/Gumbel_distribution
             alpha = data.var()*6/math.pi**2
             self.logscale = math.log(alpha)
             self.locn = data.mean()-EULER_CONSTANT*alpha
