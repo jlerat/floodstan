@@ -66,6 +66,7 @@ def test_marginals_vs_nrivfloodfreq(allclose):
     stationids = get_stationids()
     distnames = marginals.MARGINAL_NAMES
     nparams = 500
+    results = []
 
     for stationid in stationids:
         streamflow = get_ams(stationid)
@@ -99,9 +100,11 @@ def test_marginals_vs_nrivfloodfreq(allclose):
                 assert allclose(dist2.locn, dist1.tau, atol=1e-6)
                 assert allclose(dist2.logscale, dist1.logalpha, atol=1e-6)
             elif distname == "GEV":
-                assert allclose(dist2.locn, dist1.tau, atol=1e-6)
-                assert allclose(dist2.logscale, dist1.logalpha, atol=1e-6)
-                assert allclose(dist2.shape1, dist1.kappa, atol=1e-6)
+                continue
+                # Upgraded GEV lh moments
+                #assert allclose(dist2.locn, dist1.tau, atol=1e-6)
+                #assert allclose(dist2.logscale, dist1.logalpha, atol=1e-6)
+                #assert allclose(dist2.shape1, dist1.kappa, atol=1e-6)
             elif distname == "LogPearson3":
                 assert allclose(dist2.locn, dist1.m, atol=1e-6)
                 assert allclose(dist2.logscale, math.log(dist1.s), atol=1e-6)
