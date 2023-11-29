@@ -478,16 +478,13 @@ class LogPearson3(FloodFreqDistribution):
     def params_guess(self, data):
         try:
             self.fit_lh_moments(data)
-            assert np.all(self.in_support(data))
         except:
-            # Progressively decreases shape parameter
-            # and stops if data are within support
-            shapes = np.linspace(0.01*np.sign(self.shape1), \
-                                self.shape1, 10)[::-1]
-            for shape1 in shapes:
-                self.shape1 = shape1
-                if np.all(self.in_support(data)):
-                    break
+            # Problem with gam, revert back to log norm
+            self.shape1 = 0.01
+
+            logx = np.log(data[data>0])
+            self.locn = logx.mean()
+            self.logscale = math.log((logx-self.locn).std(ddof=1))
 
 
     def rvs(self, size):
@@ -661,7 +658,7 @@ class LogNormal(FloodFreqDistribution):
         return super(LogNormal, self).__getattribute__(name)
 
     def params_guess(self, data):
-        logx = np.log(data)
+        logx = np.log(data[data>0])
         self.locn = logx.mean()
         self.logscale = math.log((logx-self.locn).std(ddof=1))
 
@@ -671,7 +668,7 @@ class LogNormal(FloodFreqDistribution):
         assert eta==0, errmsg
 
         # Get LH moments
-        lx = np.log(data)
+        lx = np.log(data[data>0])
         lam1, lam2, _, _ = lh_moments(lx, eta, compute_lam4=False)
 
         self.locn = lam1
