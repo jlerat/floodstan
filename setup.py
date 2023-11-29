@@ -15,8 +15,6 @@ from setuptools.command.build_ext import build_ext
 from distutils.command.clean import clean
 from wheel.bdist_wheel import bdist_wheel
 
-import versioneer
-
 MODEL_DIR = "src/floodstan/stan"
 
 MODELS = ["univariate_censoring", "bivariate_censoring", \
@@ -160,12 +158,10 @@ class WheelABINone(bdist_wheel):
         _, _, plat = bdist_wheel.get_tag(self)
         return "py3", "none", plat
 
-
 setup(
     name = "floodstan",
     author = "Julien Lerat",
     author_email = "julien.lerat@csiro.au",
-    version= versioneer.get_version(),
     description = "Python tools to support hydrological modelling and data analysis",
     packages=find_packages(),
     package_dir={"": "src"},
