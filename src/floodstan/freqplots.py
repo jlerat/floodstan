@@ -110,13 +110,39 @@ def plot_data(ax, data, plot_type, **kwargs):
     return rvar, data_sorted
 
 
-def plot_marginal(ax, marginal, plot_type, Tmin=1.1, Tmax=200, label="", **kwargs):
+def plot_marginal(ax, marginal, plot_type, params=None, Tmin=1.1, Tmax=200, \
+                        label="", coverage=0.9, \
+                        color="tab:blue", edgecolor="none", \
+                        facecolor="tab:blue", alpha=0.5, \
+                        **kwargs):
     prob = np.linspace(1-1/Tmin, 1-1/Tmax, 500)
     x = get_quantiles(prob, plot_type)
-    y = marginal.ppf(prob)
 
-    ax.plot(x, y, label=label, **kwargs)
+    kwargs["color"] = kwargs.get("color", color)
 
-    return x, y
+    if params is None:
+        y = marginal.ppf(prob)
+        ax.plot(x, y, label=label, **kwargs)
+    else:
+        ys = []
+        for _, p in params.iterrows():
+            marginal.locn = p.locn
+            marginal.logscale = p.logscale
+            marginal.shape1 = p.shape1
+            ys.append(marginal.ppf(prob))
+
+        ys = pd.DataFrame(ys).T
+        ym = ys.mean(axis=1)
+
+        qq = (1-coverage)/2
+        yq1 = ys.quantile(qq, axis=1)
+        yq2 = ys.quantile(1-qq, axis=1)
+
+        ax.plot(x, ym, label=label, **kwargs)
+        ax.fill_between(x, yq1, yq2, \
+                            edgecolor=edgecolor, \
+                            facecolor=facecolor, \
+                            alpha=0.5)
+    return x, ys
 
 

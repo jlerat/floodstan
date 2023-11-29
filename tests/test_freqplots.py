@@ -72,3 +72,28 @@ def test_plot_marginal():
     fig.savefig(fp)
 
 
+def test_plot_marginal_uncertainty():
+    streamflow = get_ams("203014")
+
+    plt.close("all")
+    fig, ax = plt.subplots()
+    ptype = "gumbel"
+    freqplots.plot_data(ax, streamflow, ptype)
+
+    gev = marginals.GEV()
+    gev.fit_lh_moments(streamflow)
+    p0 = np.array([gev.locn, gev.logscale, gev.shape1])[None, :]
+    params = p0+np.abs(p0)*0.1*np.random.normal(size=(100, 3))
+    params = pd.DataFrame(params, columns=["locn", "logscale", "shape1"])
+
+    freqplots.plot_marginal(ax, gev, ptype, params=params, label="GEV", \
+                        Tmax=500, edgecolor="tab:green")
+
+    retp = [5, 10, 100, 500]
+    aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
+
+    ax.legend()
+    fp = FIMG/ "freqplots_marginal_uncertainty.png"
+    fig.savefig(fp)
+
+
