@@ -49,3 +49,6 @@ test_marginal = load_stan_model("test_marginal")
 test_copula = load_stan_model("test_copula")
 test_glsfun = load_stan_model("test_glsfun")
 
+
+from . import _version
+__version__ = _version.get_versions()['version']
