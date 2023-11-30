@@ -72,6 +72,33 @@ def test_plot_marginal():
     fig.savefig(fp)
 
 
+def test_plot_marginal_censored():
+    streamflow = get_ams("203014")
+
+    gev = marginals.GEV()
+    cens = streamflow.median()
+    icens = streamflow>=cens
+    pcensored = (~icens).sum()/len(streamflow)
+
+    gev.params_guess(streamflow[icens])
+
+    plt.close("all")
+    fig, ax = plt.subplots()
+    ptype = "gumbel"
+    freqplots.plot_data(ax, streamflow, ptype)
+
+    freqplots.plot_marginal(ax, gev, ptype, \
+                                pcensored=pcensored, Tmax=500)
+
+    retp = [5, 10, 100, 500]
+    aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
+
+    ax.legend()
+    fp = FIMG/ "freqplots_marginal_censored.png"
+    fig.savefig(fp)
+
+
+
 def test_plot_marginal_uncertainty():
     streamflow = get_ams("203014")
 
