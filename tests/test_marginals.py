@@ -15,6 +15,7 @@ from nrivfloodfreq import fdist, fsample
 from floodstan import marginals
 
 from test_sample import get_stationids, get_ams
+import data_reader
 
 from tqdm import tqdm
 
@@ -23,6 +24,26 @@ SEED = 5446
 FTESTS = Path(__file__).resolve().parent
 
 TQDM_DISABLE = True
+
+
+def test_lh_moments(allclose):
+    for station, censoring \
+                in prod(data_reader.STATIONS, [True, False]):
+        # Extract L moments values from flike data
+        try:
+            testdata, _ = data_reader.get_test_data(station, "GEV", "LH0", \
+                                    censoring, "flike")
+        except IOError:
+            continue
+
+        lmoms = testdata["lmoments"]
+        streamflow = testdata["data"].streamflow
+
+        eta = 0
+        lams = marginals.lh_moments(streamflow, eta)
+        expected = lmoms.iloc[:, 1]
+        assert allclose(lams, expected, rtol=0, atol=1e-3)
+
 
 def test_floodfreqdist(allclose):
     name = "bidule"
@@ -162,7 +183,6 @@ def test_params_guess(allclose):
     stationids = get_stationids()
     distnames = marginals.MARGINAL_NAMES
     nvalues = 1000
-    nsamples = 100000
     nboot = 200
     if TQDM_DISABLE:
         print("\n")
@@ -192,4 +212,58 @@ def test_params_guess(allclose):
 
                 lpdf = distb.logpdf(ys)
                 assert np.all(~np.isnan(lpdf))
+
+
+def test_fit_lh_moments_flike(allclose):
+    for eta, distname, station, censoring in prod([0], \
+                    data_reader.DISTRIBUTIONS, \
+                    data_reader.STATIONS, \
+                    [True, False]):
+        try:
+            testdata, fr = data_reader.get_test_data(station, distname, \
+                                    f"LH{eta}", censoring, "flike")
+        except FileNotFoundError:
+            continue
+
+        streamflow = testdata["data"].streamflow
+        fit = testdata["fit"]
+
+        dist = marginals.factory(distname)
+        if distname in ["LogNormal", "LogPearson3"]:
+            # flike operates on log10 transform data for these 2 distributions
+            # and not log transform. As our procedure apply a log transform,
+            # we first transform to log10 and then exponentiate, which
+            # leads to log10 transform data within our code.
+            q = np.exp(np.log10(streamflow))
+            dist.fit_lh_moments(q, eta)
+        else:
+            dist.fit_lh_moments(streamflow, eta)
+
+        samples = pd.Series({"locn": dist.locn, "logscale": dist.logscale, \
+                        "shape1": dist.shape1, "scale": dist.scale})
+
+        # Compare parameters
+        if distname == "GEV":
+            assert allclose(samples.locn, fit.loc[0, 1], rtol=5e-3, atol=1e-2)
+            assert allclose(samples.logscale, math.log(fit.loc[1, 1]), rtol=0, atol=1e-2)
+            assert allclose(samples.shape1, fit.loc[2, 1], rtol=0, atol=1e-2)
+        elif distname == "LogPearson3":
+            assert allclose(samples.locn, fit.loc[0, 1], rtol=0, atol=1e-2)
+            assert allclose(samples.scale, fit.loc[1, 1], rtol=0, atol=1e-2)
+
+            # 2 datasets showing slightly higher error than others
+            # probably due to rounding values in flike.
+            if fr.stem in ["203014_LogPearson3_LH0_censoring", \
+                            "arr84_LogPearson3_LH0_censoring"]:
+                assert allclose(samples.shape1, fit.loc[2, 1], rtol=0, atol=2e-2)
+            else:
+                assert allclose(samples.shape1, fit.loc[2, 1], rtol=0, atol=1e-2)
+
+        elif distname == "Gumbel":
+            assert allclose(samples.logscale, math.log(fit.loc[1, 1]), rtol=0,atol=1e-2)
+            assert allclose(samples.locn, fit.loc[0, 1], rtol=0, atol=1e-1)
+        elif distname == "LogNormal":
+            assert allclose(samples.locn, fit.loc[0, 1], rtol=0, atol=1e-2)
+            assert allclose(samples.scale, fit.loc[1, 1], rtol=0, atol=1e-2)
+
 
