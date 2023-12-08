@@ -18,8 +18,14 @@ COPULA_NAMES = {
     "Gaussian": 3
 }
 
+COUNT_NAMES = {
+    "Poisson": 1, \
+    "NegativeBinomial": 2
+}
+
 MARGINAL_CODES = {code:name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code:name for name, code in COPULA_NAMES.items()}
+COUNT_CODES = {code:name for name, code in COUNT_NAMES.items()}
 
 # BOUNDS
 LOGSCALE_LOWER = -5

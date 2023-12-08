@@ -43,9 +43,11 @@ univariate_censoring = load_stan_model("univariate_censoring")
 bivariate_censoring = load_stan_model("bivariate_censoring")
 gls_spatial = load_stan_model("gls_spatial")
 gls_spatial_generate = load_stan_model("gls_spatial_generate")
+count_modelling = load_stan_model("count_modelling")
 
 # Stan test functions
 test_marginal = load_stan_model("test_marginal")
 test_copula = load_stan_model("test_copula")
 test_glsfun = load_stan_model("test_glsfun")
+test_count_modelling = load_stan_model("test_count_modelling")
 
