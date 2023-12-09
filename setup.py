@@ -19,7 +19,7 @@ MODEL_DIR = "src/floodstan/stan"
 
 MODELS = ["univariate_censoring", "bivariate_censoring", \
             "gls_spatial", "gls_spatial_generate", \
-            "count_modelling", "test_count_modelling", \
+            "event_occurrence", "test_discrete", \
             "test_marginal", "test_copula", "test_glsfun"]
 
 CMDSTAN_VERSION = "2.30.1"

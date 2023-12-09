@@ -18,23 +18,30 @@ COPULA_NAMES = {
     "Gaussian": 3
 }
 
-COUNT_NAMES = {
+DISCRETE_NAMES = {
     "Poisson": 1, \
-    "NegativeBinomial": 2
+    "NegativeBinomial": 2, \
+    "Bernoulli": 3
 }
 
 MARGINAL_CODES = {code:name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code:name for name, code in COPULA_NAMES.items()}
-COUNT_CODES = {code:name for name, code in COUNT_NAMES.items()}
+DISCRETE_CODES = {code:name for name, code in DISCRETE_NAMES.items()}
 
-# BOUNDS
+# Bounds on marginal parameters
 LOGSCALE_LOWER = -5
 LOGSCALE_UPPER = 10
 
+# Bounds on copula parameters
 RHO_LOWER = 0.01
 RHO_UPPER = 0.95
 
-# PRIOR
+# Bounds on discrete parameters
+PHI_LOWER = 0.01
+PHI_UPPER = 10.0
+NEVENT_UPPER = 10
+
+# Prior on copula parameter
 RHO_PRIOR = [0.8, 1]
 
 # Logging
@@ -308,5 +315,79 @@ class StanSamplingDataset():
             "i23": self.i23
         })
         return dd
+
+
+
+class StanDiscreteVariable():
+    def __init__(self, data=None, discrete_name=None):
+        self.name = "e"
+        self._N = 0
+        self._data = None
+        self._discrete_code = None
+        self._discrete_name = None
+        self._initial_parameters = {}
+
+        # Set if the 2 inputs are set
+        if not data is None and not discrete_name is None:
+            self.set(data, discrete_name)
+
+    @property
+    def N(self):
+        return self._N
+
+    @property
+    def initial_parameters(self):
+        assert len(self._initial_parameters)>0, \
+                f"Variable {self.name}: Initial parameters have not been set."
+        return self._initial_parameters
+
+    @property
+    def discrete_name(self):
+        return self._discrete_name
+
+    @property
+    def discrete_code(self):
+        return DISCRETE_NAMES[self._discrete_name]
+
+    @property
+    def data(self):
+        if self._data is None:
+            errmess = "Data is not set."
+            raise ValueError(errmess)
+        return self._data
+
+    def set(self, data, discrete_name):
+        assert discrete_name in DISCRETE_NAMES, f"Cannot find discrete {discrete_name}."
+        self._discrete_name = discrete_name
+
+        data = np.array(data).astype(np.int64)
+        assert data.ndim==1, "Expected data as 1d array."
+        assert np.all(data>=0), "Need all data to be >=0."
+
+        nmax = 1 if discrete_name=="Bernoulli" else NEVENT_UPPER
+        assert np.all(data<=nmax), f"Need all data to be <={nmax}."
+        self._data = data
+        self._N = len(data)
+
+        # Set initial values
+        self._initial_parameters["locn"] = data.mean()
+        self._initial_parameters["phi"] = 1.
+
+    def to_dict(self):
+        """ Export stan data to be used by stan program """
+        vn = self.name
+        dd = {
+            f"{vn}disc": self.discrete_code, \
+            "N": self.N, \
+            vn: self.data, \
+            "phi_lower": PHI_LOWER, \
+            "phi_upper": PHI_UPPER, \
+            "nevent_upper": 1 if self.discrete_name=="Bernouilli" else NEVENT_UPPER
+        }
+        for k, v in self.initial_parameters.items():
+            dd[f"{vn}{k}"] = v
+
+        return dd
+
 
 

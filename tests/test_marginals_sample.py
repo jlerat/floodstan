@@ -22,8 +22,9 @@ from tqdm import tqdm
 
 from floodstan import marginals, sample, copulas
 from floodstan import test_marginal, test_copula, \
-                                univariate_censoring, \
-                                bivariate_censoring
+                            test_discrete, \
+                            univariate_censoring, \
+                            bivariate_censoring
 
 from tqdm import tqdm
 
@@ -429,4 +430,47 @@ def test_bivariate_sampling(allclose):
 
         for cop in cops:
             pass
+
+
+def test_discrete_vs_stan(allclose):
+    ntests = 10
+    N = 100
+
+    for i in range(ntests):
+        ylocn = np.random.normal(loc=3, scale=1)
+        yphi = np.random.normal(loc=1, scale=0.5)
+        if ylocn<1e-3 or yphi<1e-3:
+            continue
+
+        for dname, dcode in sample.DISCRETE_NAMES.items():
+            if dname == "Poisson":
+                rcv = poisson(mu=ylocn)
+            else:
+                # reparameterize as per
+                # https://mc-stan.org/docs/functions-reference/nbalt.html
+                v = ylocn+ylocn**2/yphi
+                n = ylocn**2/(v-ylocn)
+                p = ylocn/v
+                rcv = nbinom(n=n, p=p)
+
+            yn = rcv.rvs(size=N)
+            stan_data = {
+                "N": N, \
+                "ydisc": dcode, \
+                "yn": yn, \
+                "ylocn": ylocn, \
+                "yphi": yphi
+            }
+
+            # Run stan
+            smp = test_discrete.sample(data=stan_data, \
+                                chains=1, iter_warmup=0, iter_sampling=1, \
+                                fixed_param=True, show_progress=False)
+            smp = smp.draws_pd().squeeze()
+
+            # Test
+            lpmf = smp.filter(regex="lpmf").values
+            expected = rcv.logpmf(yn)
+            assert allclose(lpmf, expected, atol=1e-5)
+
 
