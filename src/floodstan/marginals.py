@@ -30,8 +30,13 @@ EULER_CONSTANT = 0.577215664901532
 
 PARAMETERS = ["locn", "logscale", "shape1"]
 
-SHAPE1_MIN = -4.5
-SHAPE1_MAX = 4.5
+# Bounds
+SHAPE1_LOWER = -4.5
+SHAPE1_UPPER = 4.5
+
+LOGSCALE_LOWER = -5
+LOGSCALE_UPPER = 10
+
 
 def _prepare(data):
     data = np.array(data)
@@ -219,8 +224,8 @@ class FloodFreqDistribution():
     @shape1.setter
     def shape1(self, value):
         value = float(value)
-        assert value>=SHAPE1_MIN and value<=SHAPE1_MAX, \
-                f"Expected shape in ]{SHAPE1_MIN}, {SHAPE1_MAX}[, "+\
+        assert value>=SHAPE1_LOWER and value<=SHAPE1_UPPER, \
+                f"Expected shape in ]{SHAPE1_LOWER}, {SHAPE1_UPPER}[, "+\
                 f"got {value}."
         self._shape1 = value
 
@@ -412,7 +417,7 @@ class GEV(FloodFreqDistribution):
 
         # .. reasonable bounds on kappa
         # .. cannot have kappa<-1
-        kappa = max(-0.95, min(SHAPE1_MAX, kappa))
+        kappa = max(-0.95, min(SHAPE1_UPPER, kappa))
 
         # See wang et al. (1997), Equation 19
         g = gamma(1+kappa)
@@ -545,11 +550,11 @@ class LogPearson3(FloodFreqDistribution):
             rtalpha = math.sqrt(alpha)
 
             # .. check reasonable bounds
-            if 2./rtalpha < SHAPE1_MIN:
-                rtalpha = 2./SHAPE1_MIN
+            if 2./rtalpha < SHAPE1_LOWER:
+                rtalpha = 2./SHAPE1_LOWER
                 alpha = rtalpha**2
-            elif 2./rtalpha > SHAPE1_MAX:
-                rtalpha = 2./SHAPE1_MAX
+            elif 2./rtalpha > SHAPE1_UPPER:
+                rtalpha = 2./SHAPE1_UPPER
                 alpha = rtalpha**2
 
             beta = rootpi*lam2*math.exp(gammaln(alpha)-gammaln(alpha+0.5))

@@ -10,7 +10,13 @@ import numpy as np
 import pandas as pd
 
 from floodstan import marginals
-from floodstan.marginals import MARGINAL_NAMES
+from floodstan.marginals import MARGINAL_NAMES, \
+                                    LOGSCALE_LOWER, LOGSCALE_UPPER, \
+                                    SHAPE1_LOWER, SHAPE1_UPPER
+
+from floodstan.discretes import DISCRETE_NAMES, \
+                                    PHI_LOWER, PHI_UPPER, \
+                                    LOCN_LOWER, LOCN_UPPER
 
 COPULA_NAMES = {
     "Gumbel": 1, \
@@ -18,31 +24,21 @@ COPULA_NAMES = {
     "Gaussian": 3
 }
 
-DISCRETE_NAMES = {
-    "Poisson": 1, \
-    "NegativeBinomial": 2, \
-    "Bernoulli": 3
-}
-
 MARGINAL_CODES = {code:name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code:name for name, code in COPULA_NAMES.items()}
 DISCRETE_CODES = {code:name for name, code in DISCRETE_NAMES.items()}
 
-# Bounds on marginal parameters
-LOGSCALE_LOWER = -5
-LOGSCALE_UPPER = 10
 
 # Bounds on copula parameters
 RHO_LOWER = 0.01
 RHO_UPPER = 0.95
 
-# Bounds on discrete parameters
-PHI_LOWER = 0.01
-PHI_UPPER = 10.0
-LOCN_UPPER = 100
-
 # Prior on copula parameter
 RHO_PRIOR = [0.8, 1]
+
+# Prior on discrete parameters
+LOCN_PRIOR = [1, 10]
+PHI_PRIOR = [1, 10]
 
 # Bounds on discrete data
 NEVENT_UPPER = 10
@@ -203,8 +199,8 @@ class StanSamplingVariable():
             f"{vn}censor": self.censor, \
             "logscale_lower": LOGSCALE_LOWER, \
             "logscale_upper": LOGSCALE_UPPER, \
-            "shape1_lower": marginals.SHAPE1_MIN, \
-            "shape1_upper": marginals.SHAPE1_MAX, \
+            "shape1_lower": SHAPE1_LOWER, \
+            "shape1_upper": SHAPE1_UPPER, \
             "i11": self.i11, \
             "i21": self.i21, \
             "Ncases": self.Ncases
@@ -232,7 +228,7 @@ class StanSamplingVariablePrior():
         info[f"{vn}logscale_prior"] = [logscale_start, dscale]
 
         shape1_start = start["shape1"]
-        dshape = marginals.SHAPE1_MAX-marginals.SHAPE1_MIN
+        dshape = marginals.SHAPE1_UPPER-marginals.SHAPE1_LOWER
         info[f"{vn}shape1_prior"] = [shape1_start, dshape]
 
 
@@ -387,7 +383,10 @@ class StanDiscreteVariable():
             "locn_upper": 1 if isbern else LOCN_UPPER, \
             "phi_lower": PHI_LOWER, \
             "phi_upper": PHI_UPPER, \
-            "nevent_upper": 1 if isbern else NEVENT_UPPER
+            "nevent_upper": 1 if isbern else NEVENT_UPPER, \
+            f"{vn}locn_prior": [0.5, 3] if isbern else LOCN_PRIOR, \
+            f"{vn}phi_prior": PHI_PRIOR
+
         }
         for k, v in self.initial_parameters.items():
             dd[f"{vn}{k}"] = v

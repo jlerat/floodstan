@@ -9,8 +9,6 @@ from pathlib import Path
 import pytest
 import warnings
 
-from hydrodiy.data.containers import Vector
-
 from nrivfloodfreq import fdist, fsample
 from floodstan import marginals
 
