@@ -169,6 +169,10 @@ class DiscreteDistribution():
         kk = np.arange(kmax)
         coefs0 = self.pmf(kk)
         for i, ac in enumerate(ams_cdf):
+            if np.isnan(ac) or np.isinf(ac):
+                pot_cdf[i] = ac
+                continue
+
             coefs = coefs0.copy()
             coefs[0] -= ac
             roots = np.polynomial.Polynomial(coefs).roots()
