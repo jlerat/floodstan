@@ -12,7 +12,8 @@ import pytest
 COPULA_NAMES = {
     "Gumbel": 1, \
     "Clayton": 2, \
-    "Gaussian": 3
+    "Gaussian": 3, \
+    "Frank": 4
 }
 
 # Bounds on copula parameters
