@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 from floodstan import marginals, freqplots
 
-from test_sample import get_stationids, get_ams
+from test_sample_univariate import get_stationids, get_ams
 
 FTESTS = Path(__file__).resolve().parent
 FIMG = FTESTS / "images"

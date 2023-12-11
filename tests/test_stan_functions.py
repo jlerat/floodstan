@@ -1,0 +1,195 @@
+import json, re, math
+import shutil
+from pathlib import Path
+from itertools import product as prod
+
+import numpy as np
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+from scipy.stats import norm, mvn, poisson, nbinom, bernoulli
+from scipy.stats import multivariate_normal
+from scipy.stats import ttest_1samp
+
+import pytest
+import warnings
+
+from hydrodiy.plot import putils
+
+import importlib
+from tqdm import tqdm
+
+from floodstan import marginals, sample, copulas
+from floodstan import test_marginal, test_copula, \
+                            test_discrete
+
+from test_sample_univariate import get_stationids, get_ams, TQDM_DISABLE
+
+from tqdm import tqdm
+
+SEED = 5446
+
+FTESTS = Path(__file__).resolve().parent
+
+
+def test_marginals_vs_stan(allclose):
+    stationids = get_stationids()
+    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    nboot = 100
+    marginal_names = sample.MARGINAL_NAMES
+    if TQDM_DISABLE:
+        print("\n")
+
+    for stationid in stationids:
+        y = get_ams(stationid)
+        N = len(y)
+
+        for marginal in marginal_names:
+            dist = marginals.factory(marginal)
+            desc = f"[{stationid}] Testing stan {marginal} marginal"
+            tbar = tqdm(range(nboot), desc=desc, disable=TQDM_DISABLE)
+            if TQDM_DISABLE:
+                print(desc)
+
+            for iboot in tbar:
+                # Bootstrap fit
+                rng = np.random.default_rng(SEED)
+                yboot = rng.choice(y.values, N)
+                dist.params_guess(yboot)
+                y0, y1 = dist.support
+
+                sv = sample.StanSamplingVariable(yboot, marginal)
+                sv.name = "y"
+                stan_data = sv.to_dict()
+
+                stan_data["ylocn"] = dist.locn
+                stan_data["ylogscale"] = dist.logscale
+                stan_data["yshape1"] = dist.shape1
+
+                # Run stan
+                smp = test_marginal.sample(data=stan_data, \
+                                    chains=1, iter_warmup=0, iter_sampling=1, \
+                                    fixed_param=True, show_progress=False)
+                smp = smp.draws_pd().squeeze()
+
+                # Test
+                luncens = smp.filter(regex="luncens").values
+                expected = dist.logpdf(yboot)
+                assert allclose(luncens, expected, atol=1e-5)
+
+                cens = smp.filter(regex="^cens").values
+                expected = dist.cdf(yboot)
+                assert allclose(cens, expected, atol=1e-5)
+
+                lcens = smp.filter(regex="^lcens").values
+                expected = dist.logcdf(yboot)
+                assert allclose(lcens, expected, atol=1e-5)
+
+
+def test_copulas_vs_stan(allclose):
+    N = 500
+    rng = np.random.default_rng(SEED)
+    uv = rng.uniform(0, 1, size=(N, 2))
+    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    if TQDM_DISABLE:
+        print("\n")
+
+    for copula in ["Gumbel", "Clayton", "Gaussian"]:
+        cop = copulas.factory(copula)
+
+        rmin = cop.rho_min
+        rmax = cop.rho_max
+        nval = 20
+        desc = "Testing stan copula "+copula
+        tbar = tqdm(np.linspace(rmin, rmax, nval), \
+                        desc=desc, disable=TQDM_DISABLE, total=nval)
+        if TQDM_DISABLE:
+            print(desc)
+
+        for rho in tbar:
+            cop.rho = rho
+
+            stan_data = {
+                "copula": sample.COPULA_NAMES[copula], \
+                "N": N, \
+                "uv": uv, \
+                "rho": rho
+            }
+
+            # Run stan
+            smp = test_copula.sample(data=stan_data, \
+                                chains=1, iter_warmup=0, iter_sampling=1, \
+                                fixed_param=True, show_progress=False)
+            smp = smp.draws_pd().squeeze()
+
+            assert allclose(smp.rho_check, rho, atol=1e-6)
+
+            # Test copula pdf
+            lpdf = smp.filter(regex="luncens")
+            expected = cop.logpdf(uv)
+            assert allclose(lpdf, expected, atol=1e-7)
+
+            # test copula cdf
+            lcdf = smp.filter(regex="lcens")
+            expected = cop.logcdf(uv)
+            assert allclose(lcdf, expected, atol=1e-7)
+
+            # Test copula conditional density
+            lcond = smp.filter(regex="lcond")
+            expected = np.log(cop.conditional_density(uv[:, 0], uv[:, 1]))
+            assert allclose(lcond, expected, atol=1e-7)
+
+
+def test_discrete_vs_stan(allclose):
+    ntests = 10
+    N = 100
+
+    for i in range(ntests):
+        for dname, dcode in sample.DISCRETE_NAMES.items():
+            locn_mu = 0.5 if dname == "Bernoulli" else 3
+            locn_max = 1 if dname == "Bernoulli" else 20
+            locn_sig = 0.1 if dname == "Bernoulli" else 1
+
+            phi_mu, phi_sig = 1, 1
+
+            p0, p1 = norm.cdf([0, locn_max], loc=locn_mu, scale=locn_sig)
+            u = np.random.uniform()
+            p = p0+(p1-p0)*u
+            klocn = norm.ppf(p)*locn_sig+locn_mu
+
+            p0, p1 = norm.cdf([1e-3, 3], loc=phi_mu, scale=phi_sig)
+            u = np.random.uniform()
+            p = p0+(p1-p0)*u
+            kphi = norm.ppf(p, loc=phi_mu, scale=phi_sig)
+
+            if dname == "Poisson":
+                rcv = poisson(mu=klocn)
+            elif dname == "Bernoulli":
+                rcv = bernoulli(p=klocn)
+            else:
+                # reparameterize as per
+                # https://mc-stan.org/docs/functions-reference/nbalt.html
+                v = klocn+klocn**2/kphi
+                n = klocn**2/(v-klocn)
+                p = klocn/v
+                rcv = nbinom(n=n, p=p)
+
+            k = rcv.rvs(size=N).clip(0, sample.NEVENT_UPPER)
+            kv = sample.StanDiscreteVariable(k, dname)
+            stan_data = kv.to_dict()
+            stan_data["klocn"] = klocn
+            stan_data["kphi"] = kphi
+
+            # Run stan
+            smp = test_discrete.sample(data=stan_data, \
+                                chains=1, iter_warmup=0, iter_sampling=1, \
+                                fixed_param=True, show_progress=False)
+            smp = smp.draws_pd().squeeze()
+
+            # Test
+            lpmf = smp.filter(regex="lpmf").values
+            expected = rcv.logpmf(k)
+            assert allclose(lpmf, expected, atol=1e-5)
+
+

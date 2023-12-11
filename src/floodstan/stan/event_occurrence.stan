@@ -3,7 +3,7 @@
 * Count modelling
 *
 *  Throughout the code:
-*   - Obs variable is y
+*   - Obs variable is k
 *
 *  Count model codes:
 *   - 1=Poisson
@@ -22,33 +22,34 @@ functions {
 data {
   // Defines count distributions
   // 1=Poisson, 2=NegBinomial, 3=Bernouilli
-  int<lower=1, upper=3> edisc; 
+  int<lower=1, upper=3> kdisc; 
 
   int<lower=1> N; // total number of values
   int<lower=1> nevent_upper; // total number of values
-  array[N] int<lower=0, upper=nevent_upper> e; // Count data 
+  array[N] int<lower=0, upper=nevent_upper> k; // Count data 
 
   // Prior parameters
-  vector[2] elocn_prior;
+  real<lower=1> locn_upper;
+  vector[2] klocn_prior;
   
   real<lower=0> phi_lower;
   real<lower=phi_lower> phi_upper;
-  vector[2] ephi_prior;
+  vector[2] kphi_prior;
 }
 
 parameters {
-  real elocn; 
-  real ephi;
+  real klocn; 
+  real kphi;
 }  
 
 
 model {
   // --- Priors --
-  elocn ~ normal(elocn_prior[1], elocn_prior[2]) T[0,];
-  ephi ~ normal(ephi_prior[1], ephi_prior[2]) T[phi_lower, phi_upper];
+  klocn ~ normal(klocn_prior[1], klocn_prior[2]) T[0, locn_upper];
+  kphi ~ normal(kphi_prior[1], kphi_prior[2]) T[phi_lower, phi_upper];
 
   for(i in 1:N) {
-    target += discrete_lpmf(e[i] | edisc, elocn, ephi);
+    target += discrete_lpmf(k[i] | kdisc, klocn, kphi);
   }
 }
 

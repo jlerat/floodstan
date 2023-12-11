@@ -14,7 +14,8 @@ from hydrodiy.data.containers import Vector
 from nrivfloodfreq import fdist, fsample
 from floodstan import marginals
 
-from test_sample import get_stationids, get_ams
+from test_sample_univariate import get_stationids, get_ams, TQDM_DISABLE
+
 import data_reader
 
 from tqdm import tqdm
@@ -22,8 +23,6 @@ from tqdm import tqdm
 SEED = 5446
 
 FTESTS = Path(__file__).resolve().parent
-
-TQDM_DISABLE = True
 
 
 def test_lh_moments(allclose):

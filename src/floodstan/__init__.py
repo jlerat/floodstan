@@ -39,8 +39,8 @@ def load_stan_model(name: str) -> cmdstanpy.CmdStanModel:
     return model
 
 # Stan sampler
-univariate_censoring = load_stan_model("univariate_censoring")
-bivariate_censoring = load_stan_model("bivariate_censoring")
+univariate_censored = load_stan_model("univariate_censored")
+bivariate_censored = load_stan_model("bivariate_censored")
 gls_spatial = load_stan_model("gls_spatial")
 gls_spatial_generate = load_stan_model("gls_spatial_generate")
 event_occurrence = load_stan_model("event_occurrence")

@@ -39,10 +39,13 @@ RHO_UPPER = 0.95
 # Bounds on discrete parameters
 PHI_LOWER = 0.01
 PHI_UPPER = 10.0
-NEVENT_UPPER = 10
+LOCN_UPPER = 100
 
 # Prior on copula parameter
 RHO_PRIOR = [0.8, 1]
+
+# Bounds on discrete data
+NEVENT_UPPER = 10
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
@@ -319,8 +322,8 @@ class StanSamplingDataset():
 
 
 class StanDiscreteVariable():
-    def __init__(self, data=None, discrete_name=None):
-        self.name = "e"
+    def __init__(self, data, discrete_name):
+        self.name = "k"
         self._N = 0
         self._data = None
         self._discrete_code = None
@@ -376,13 +379,15 @@ class StanDiscreteVariable():
     def to_dict(self):
         """ Export stan data to be used by stan program """
         vn = self.name
+        isbern = self.discrete_name == "Bernoulli"
         dd = {
             f"{vn}disc": self.discrete_code, \
             "N": self.N, \
             vn: self.data, \
+            "locn_upper": 1 if isbern else LOCN_UPPER, \
             "phi_lower": PHI_LOWER, \
             "phi_upper": PHI_UPPER, \
-            "nevent_upper": 1 if self.discrete_name=="Bernouilli" else NEVENT_UPPER
+            "nevent_upper": 1 if isbern else NEVENT_UPPER
         }
         for k, v in self.initial_parameters.items():
             dd[f"{vn}{k}"] = v
