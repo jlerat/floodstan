@@ -147,23 +147,37 @@ class DiscreteDistribution():
         if self.isbern:
             raise ValueError("Function not implemented for Bernoulli variable.")
 
+        pot_cdf = np.atleast_1d(pot_cdf)
+        assert pot_cdf.ndim==1, "Expected pot_cdf as 1D array."
+        pot_cdf = pot_cdf[:, None]
+
         kk = np.arange(kmax)
-        pp = self.pmf(kk)
-        return np.sum(pp*pot_cdf**kk)
+        pp = self.pmf(kk)[None, :]
+        s = np.sum(pp*(pot_cdf**kk[None, :]), axis=1)
+        return s.squeeze()
 
 
     def ams2pot_cdf(self, ams_cdf, kmax=100):
         """ Convert ams cdf to pot cdf """
-        raise ValueError("TODO")
         if self.isbern:
             raise ValueError("Function not implemented for Bernoulli variable.")
 
+        ams_cdf = np.atleast_1d(ams_cdf)
+        assert ams_cdf.ndim==1, "Expected ams_cdf as 1D array."
+        pot_cdf = np.zeros_like(ams_cdf)
+
         kk = np.arange(kmax)
-        coefs = self.pmf(kk)
-        roots = np.polynomial.Polynomial(coefs)
-        return np.sum(pp*kk)
+        coefs0 = self.pmf(kk)
+        for i, ac in enumerate(ams_cdf):
+            coefs = coefs0.copy()
+            coefs[0] -= ac
+            roots = np.polynomial.Polynomial(coefs).roots()
 
+            roots = roots[(roots.real>0)]
+            roots = roots[np.argmin(np.abs(roots.imag))]
+            pot_cdf[i] = roots.real
 
+        return pot_cdf.squeeze()
 
 
 

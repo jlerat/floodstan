@@ -66,7 +66,7 @@ def test_discretes_vs_scipy(allclose):
 
         for i in range(ntests):
             klocn = sample_from_norm_truncated(locn_mu, locn_sig, 0, locn_max)
-            kphi = sample_from_norm_truncated(phi_mu, phi_sig, 1e-3, 3)
+            kphi = sample_from_norm_truncated(phi_mu, phi_sig, 1e-1, 3)
 
             if dname == "Poisson":
                 rcv = poisson(mu=klocn)
@@ -94,7 +94,20 @@ def test_discretes_vs_scipy(allclose):
                 continue
 
             # test pot 2 cdf ams
-            pot = 0.99
-            ams = kv.pot2ams_cdf(pot)
+            for pot in np.linspace(0.5, 0.999, 10):
+                ams = kv.pot2ams_cdf(pot)
+                expected = kv.ams2pot_cdf(ams)
+                assert allclose(pot, expected)
 
+                expected = kv.pot2ams_cdf(expected)
+                assert allclose(ams, expected)
+
+
+            pot = np.linspace(0.5, 0.999, 100)
+            ams = kv.pot2ams_cdf(pot)
+            expected = kv.ams2pot_cdf(ams)
+            assert allclose(pot, expected)
+
+            expected = kv.pot2ams_cdf(expected)
+            assert allclose(ams, expected)
 
