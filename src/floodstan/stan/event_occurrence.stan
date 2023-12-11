@@ -38,8 +38,8 @@ data {
 }
 
 parameters {
-  real klocn; 
-  real kphi;
+  real<lower=0, upper=locn_upper> klocn; 
+  real<lower=phi_lower, upper=phi_upper> kphi;
 }  
 
 

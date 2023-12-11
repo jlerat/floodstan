@@ -9,39 +9,30 @@ import time
 import numpy as np
 import pandas as pd
 
-from floodstan import marginals
+from floodstan import marginals, discretes
+
+from floodstan.copulas import COPULA_NAMES, \
+                        RHO_LOWER, RHO_UPPER
+
 from floodstan.marginals import MARGINAL_NAMES, \
                                     LOGSCALE_LOWER, LOGSCALE_UPPER, \
                                     SHAPE1_LOWER, SHAPE1_UPPER
 
 from floodstan.discretes import DISCRETE_NAMES, \
                                     PHI_LOWER, PHI_UPPER, \
-                                    LOCN_LOWER, LOCN_UPPER
-
-COPULA_NAMES = {
-    "Gumbel": 1, \
-    "Clayton": 2, \
-    "Gaussian": 3
-}
+                                    LOCN_LOWER, LOCN_UPPER, \
+                                    NEVENT_UPPER
 
 MARGINAL_CODES = {code:name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code:name for name, code in COPULA_NAMES.items()}
 DISCRETE_CODES = {code:name for name, code in DISCRETE_NAMES.items()}
 
-
-# Bounds on copula parameters
-RHO_LOWER = 0.01
-RHO_UPPER = 0.95
-
 # Prior on copula parameter
 RHO_PRIOR = [0.8, 1]
 
 # Prior on discrete parameters
-LOCN_PRIOR = [1, 10]
-PHI_PRIOR = [1, 10]
-
-# Bounds on discrete data
-NEVENT_UPPER = 10
+DISCRETE_LOCN_PRIOR = [1, 10]
+DISCRETE_PHI_PRIOR = [1, 10]
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
@@ -384,8 +375,8 @@ class StanDiscreteVariable():
             "phi_lower": PHI_LOWER, \
             "phi_upper": PHI_UPPER, \
             "nevent_upper": 1 if isbern else NEVENT_UPPER, \
-            f"{vn}locn_prior": [0.5, 3] if isbern else LOCN_PRIOR, \
-            f"{vn}phi_prior": PHI_PRIOR
+            f"{vn}locn_prior": [0.5, 3] if isbern else DISCRETE_LOCN_PRIOR, \
+            f"{vn}phi_prior": DISCRETE_PHI_PRIOR
 
         }
         for k, v in self.initial_parameters.items():

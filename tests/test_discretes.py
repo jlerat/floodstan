@@ -16,6 +16,13 @@ SEED = 5446
 
 FTESTS = Path(__file__).resolve().parent
 
+def sample_from_norm_truncated(mu, sig, x0, x1, size=None):
+    assert x0<x1
+    p0, p1 = norm.cdf([x0, x1], loc=mu, scale=sig)
+    u = np.random.uniform(size=size)
+    p = p0+(p1-p0)*u
+    return mu+sig*norm.ppf(p)
+
 
 def test_discretedist(allclose):
     name = "bidule"
@@ -58,15 +65,8 @@ def test_discretes_vs_scipy(allclose):
         phi_mu, phi_sig = 1, 1
 
         for i in range(ntests):
-            p0, p1 = norm.cdf([0, locn_max], loc=locn_mu, scale=locn_sig)
-            u = np.random.uniform()
-            p = p0+(p1-p0)*u
-            klocn = norm.ppf(p)*locn_sig+locn_mu
-
-            p0, p1 = norm.cdf([1e-3, 3], loc=phi_mu, scale=phi_sig)
-            u = np.random.uniform()
-            p = p0+(p1-p0)*u
-            kphi = norm.ppf(p, loc=phi_mu, scale=phi_sig)
+            klocn = sample_from_norm_truncated(locn_mu, locn_sig, 0, locn_max)
+            kphi = sample_from_norm_truncated(phi_mu, phi_sig, 1e-3, 3)
 
             if dname == "Poisson":
                 rcv = poisson(mu=klocn)

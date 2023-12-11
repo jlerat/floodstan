@@ -103,8 +103,8 @@ def test_marginals_vs_nrivfloodfreq(allclose):
             # Skip if extreme shape parameter values
             if distname in ["GEV", "LogPearson3"]:
                 sh = dist1.kappa if distname == "GEV" else dist1.g
-                if sh < marginals.SHAPE1_MIN or \
-                        sh > marginals.SHAPE1_MAX:
+                if sh < marginals.SHAPE1_LOWER or \
+                        sh > marginals.SHAPE1_UPPER:
                     continue
 
             dist2.fit_lh_moments(streamflow)
@@ -142,8 +142,8 @@ def test_marginals_vs_nrivfloodfreq(allclose):
                 # Skip if extreme shape parameter values
                 if distname in ["GEV", "LogPearson3"]:
                     sh = dist1.kappa if distname == "GEV" else dist1.g
-                    if sh < marginals.SHAPE1_MIN or \
-                            sh > marginals.SHAPE1_MAX:
+                    if sh < marginals.SHAPE1_LOWER or \
+                            sh > marginals.SHAPE1_UPPER:
                         continue
 
                 if distname == "LogNormal":

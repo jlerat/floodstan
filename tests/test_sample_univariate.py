@@ -192,7 +192,7 @@ def test_univariate_sampling(allclose):
             dist = marginals.factory(marginal)
             dist.params_guess(y)
 
-            if dist.shape1<marginals.SHAPE1_MIN or dist.shape1>marginals.SHAPE1_MAX:
+            if dist.shape1<marginals.SHAPE1_LOWER or dist.shape1>marginals.SHAPE1_UPPER:
                 continue
 
             # Prior distribution centered around dist params

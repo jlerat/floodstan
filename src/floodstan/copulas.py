@@ -9,10 +9,21 @@ from scipy.special import lambertw
 
 import pytest
 
-RHO_MIN = 0.01
-RHO_MAX = 0.95
+COPULA_NAMES = {
+    "Gumbel": 1, \
+    "Clayton": 2, \
+    "Gaussian": 3
+}
+
+# Bounds on copula parameters
+RHO_LOWER = 0.01
+RHO_UPPER = 0.95
 
 def factory(name):
+    txt = "/".join(COPULA_NAMES.keys())
+    errmsg = f"Expected copula name in {txt}, got {name}."
+    assert name in COPULA_NAMES, errmsg
+
     if name == "Gaussian":
         return GaussianCopula()
     elif name == "Gumbel":
@@ -51,8 +62,8 @@ class Copula():
     def __init__(self, name):
         self.name = name
         self._rho = np.nan
-        self.rho_min = RHO_MIN
-        self.rho_max = RHO_MAX
+        self.rho_min = RHO_LOWER
+        self.rho_max = RHO_UPPER
 
     @property
     def rho(self):
@@ -66,7 +77,7 @@ class Copula():
     def rho(self, val):
         """ Set correlation parameter """
         rho = float(val)
-        errmsg = f"Expected rho in [{RHO_MIN}, {RHO_MAX}], got {rho}."
+        errmsg = f"Expected rho in [{RHO_LOWER}, {RHO_UPPER}], got {rho}."
         assert rho>=self.rho_min and rho<=self.rho_max, errmsg
         self._rho = rho
 
@@ -329,8 +340,8 @@ class FrankCopula(Copula):
     def rho(self, val):
         """ Set theta parameter """
         rho = float(val)
-        errmsg = f"Expected rho in [{RHO_MIN}, {RHO_MAX}], got {rho}."
-        assert rho>=RHO_MIN and rho<=RHO_MAX, errmsg
+        errmsg = f"Expected rho in [{RHO_LOWER}, {RHO_UPPER}], got {rho}."
+        assert rho>=RHO_LOWER and rho<=RHO_UPPER, errmsg
         self._rho = rho
         self.theta = 2*rho/(1-rho)
 

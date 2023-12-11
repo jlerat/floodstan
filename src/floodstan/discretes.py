@@ -19,11 +19,14 @@ DISCRETE_NAMES = {
 PARAMETERS = ["locn", "phi"]
 
 # Bounds on discrete parameters
-PHI_LOWER = 0.01
-PHI_UPPER = 10.0
+PHI_LOWER = 0.1
+PHI_UPPER = 100.0
 
 LOCN_LOWER = 0
 LOCN_UPPER = 100
+
+# Bounds on discrete data
+NEVENT_UPPER = 100
 
 
 def factory(distname):
@@ -156,7 +159,8 @@ class DiscreteDistribution():
             raise ValueError("Function not implemented for Bernoulli variable.")
 
         kk = np.arange(kmax)
-        pp = self.pmf(kk)
+        coefs = self.pmf(kk)
+        roots = np.polynomial.Polynomial(coefs)
         return np.sum(pp*kk)
 
 
@@ -249,7 +253,7 @@ class Bernoulli(DiscreteDistribution):
         elif name == "rvs":
             def fun(size):
                 kw = self.get_scipy_params()
-                return nbinom.rvs(size=size, **kw)
+                return bernoulli.rvs(size=size, **kw)
             return fun
 
         return super(Bernoulli, self).__getattribute__(name)
