@@ -80,6 +80,8 @@ class DiscreteDistribution():
 
     @property
     def locn(self):
+        if np.isnan(self._locn):
+            raise ValueError("locn is not set.")
         return self._locn
 
     @locn.setter
@@ -93,6 +95,8 @@ class DiscreteDistribution():
 
     @property
     def phi(self):
+        if np.isnan(self._phi):
+            raise ValueError("phi is not set.")
         return self._phi
 
     @phi.setter
@@ -151,10 +155,18 @@ class DiscreteDistribution():
         assert pot_cdf.ndim==1, "Expected pot_cdf as 1D array."
         pot_cdf = pot_cdf[:, None]
 
-        kk = np.arange(kmax)
-        pp = self.pmf(kk)[None, :]
-        s = np.sum(pp*(pot_cdf**kk[None, :]), axis=1)
-        return s.squeeze()
+        if self.name == "Poisson":
+            ams_cdf = np.exp(-self.locn*(1-pot_cdf))
+        else:
+            kk = np.arange(kmax)
+            pp = self.pmf(kk)[None, :]
+            ams_cdf = np.sum(pp*(pot_cdf**kk[None, :]), axis=1)
+
+        ams_cdf = ams_cdf.squeeze()
+        notcool = (ams_cdf<0) | (ams_cdf>1) | np.iscomplex(ams_cdf)
+        ams_cdf[notcool] = np.nan
+
+        return ams_cdf
 
 
     def ams2pot_cdf(self, ams_cdf, kmax=100):
@@ -166,22 +178,29 @@ class DiscreteDistribution():
         assert ams_cdf.ndim==1, "Expected ams_cdf as 1D array."
         pot_cdf = np.zeros_like(ams_cdf)
 
-        kk = np.arange(kmax)
-        coefs0 = self.pmf(kk)
-        for i, ac in enumerate(ams_cdf):
-            if np.isnan(ac) or np.isinf(ac):
-                pot_cdf[i] = ac
-                continue
+        if self.name == "Poisson":
+            pot_cdf = 1+np.log(ams_cdf)/self.locn
+        else:
+            kk = np.arange(kmax)
+            coefs0 = self.pmf(kk)
+            for i, ac in enumerate(ams_cdf):
+                if np.isnan(ac) or np.isinf(ac):
+                    pot_cdf[i] = ac
+                    continue
 
-            coefs = coefs0.copy()
-            coefs[0] -= ac
-            roots = np.polynomial.Polynomial(coefs).roots()
+                coefs = coefs0.copy()
+                coefs[0] -= ac
+                roots = np.polynomial.Polynomial(coefs).roots()
 
-            roots = roots[(roots.real>0)]
-            roots = roots[np.argmin(np.abs(roots.imag))]
-            pot_cdf[i] = roots.real
+                roots = roots[(roots.real>0)]
+                roots = roots[np.argmin(np.abs(roots.imag))]
+                pot_cdf[i] = roots.real
 
-        return pot_cdf.squeeze()
+        pot_cdf = pot_cdf.squeeze()
+        notcool = (pot_cdf<0) | (pot_cdf>1) | np.iscomplex(pot_cdf)
+        pot_cdf[notcool] = np.nan
+
+        return pot_cdf
 
 
 

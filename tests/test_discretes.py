@@ -29,11 +29,14 @@ def test_discretedist(allclose):
     dist = discretes.DiscreteDistribution(name)
 
     assert dist.name == name
-    assert hasattr(dist, "locn")
-    assert hasattr(dist, "phi")
 
-    s = str(dist)
-    assert isinstance(s, str)
+    msg = "locn is not set"
+    with pytest.raises(ValueError, match=msg):
+        dist.locn
+
+    msg = "phi is not set"
+    with pytest.raises(ValueError, match=msg):
+        dist.phi
 
     dist.locn = 10
     assert dist.locn == 10
@@ -52,6 +55,9 @@ def test_discretedist(allclose):
 
         dist[pn] = 2
         assert dist[pn] == 2
+
+    s = str(dist)
+    assert isinstance(s, str)
 
 
 def test_discretes_vs_scipy(allclose):
@@ -110,4 +116,19 @@ def test_discretes_vs_scipy(allclose):
 
             expected = kv.pot2ams_cdf(expected)
             assert allclose(ams, expected)
+
+
+
+def test_discretes_pot2cdf(allclose):
+    kv = discretes.factory("Poisson")
+    kv.locn = 0.62
+    assert np.isnan(kv.ams2pot_cdf(0.51))
+
+    kv = discretes.factory("NegativeBinomial")
+    kv.locn = 0.6
+    kv.phi = 1
+    ams = np.linspace(0.6, 0.7, 10)
+    pot = kv.ams2pot_cdf(ams)
+    assert np.all(np.isnan(pot[:3]))
+
 
