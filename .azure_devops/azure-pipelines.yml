@@ -144,7 +144,7 @@ steps:
 - task: CopyFiles@2
   inputs:
     sourceFolder: '$(BUILD_DIR)/floodstan/tests/images'
-    contents: 'univariate*.png'
+    contents: '*.png'
     targetFolder: '$(Build.ArtifactStagingDirectory)'
   displayName: copy_test_images
 
