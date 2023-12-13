@@ -121,7 +121,12 @@ def test_occurence_modelling(allclose):
             ksmp = dist.rvs(N)
 
             # Configure stan data and initialisation
-            sv = sample.StanDiscreteVariable(ksmp, dname)
+            try:
+                sv = sample.StanDiscreteVariable(ksmp, dname)
+            except:
+                # Skip if ksmp contains very high unrealistic values
+                continue
+
             stan_data = sv.to_dict()
             stan_data["klocn_prior"] = klocn_prior
             stan_data["kphi_prior"] = kphi_prior

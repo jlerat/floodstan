@@ -299,10 +299,12 @@ def test_gumbel(allclose):
 def test_conditional_density(allclose):
     ndata = 100
     copula_names = ["Gaussian", "Gumbel", "Clayton", "Frank"]
+
     for copula in copula_names:
         cop = copulas.factory(copula)
         uv = np.random.uniform(0, 1, size=(ndata, 2))
         rhos = np.linspace(cop.rho_min, cop.rho_max, 10)
+
         for rho in rhos:
             cop.rho = rho
 
@@ -335,8 +337,8 @@ def test_conditional_density(allclose):
                     s, err = quad(fun, 0, ucond, args=(uv[i, 1], ))
                     expected1[i] = s
 
-                iok = ~np.isnan(expected1)
-                assert allclose(pdfu[iok], expected1[iok], atol=1e-3)
+                iok = expected1>1e-5
+                assert allclose(pdfu[iok], expected1[iok], atol=1e-5)
 
                 # Test conditional density vs derivating cdf
                 uvc = uv.copy()
