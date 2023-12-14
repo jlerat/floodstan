@@ -42,7 +42,8 @@ def ams_report(marginal, params, observed=None, \
 
     report_columns = []
     if not observed is None:
-        report_columns = [f"OBSERVED{hkey}_AEP[%]" for hkey in observed]
+        report_columns += [f"OBSERVED{hkey}_AEP[%]" for hkey in observed]
+        report_columns += [f"OBSERVED{hkey}_ARI[yr]" for hkey in observed]
     report_columns += [f"DESIGN_ARI{a}" for a in design_aris]
     report_df.loc[:, report_columns] = np.nan
 
@@ -68,6 +69,7 @@ def ams_report(marginal, params, observed=None, \
             for hkey, qh in observed.items():
                 cdf = truncated_probability+(1-truncated_probability)*marginal.cdf(qh)
                 report_df.loc[pidx, f"OBSERVED{hkey}_AEP[%]"] = (1-cdf)*100
+                report_df.loc[pidx, f"OBSERVED{hkey}_ARI[yr]"] = 1/(1-cdf)
 
         # .. compute streamflow
         for ari in design_aris:
@@ -76,15 +78,18 @@ def ams_report(marginal, params, observed=None, \
             report_df.loc[pidx, f"DESIGN_ARI{ari}"] = marginal.ppf(cdf)
 
     # Build stat report
+    # .. compute stat
     cp = [v for k, v in params_columns.items()]
     cc = [cn for cn in report_df.columns \
             if cn in report_columns or cn in cp]
     report_stat = report_df.loc[:, cc].describe(percentiles=QUANTILES)
     report_stat = report_stat.drop(["count", "std"], axis=0)
 
+    # .. compute confidence interval
     if np.all(report_stat.index.isin(["5%", "95"])):
         report_stat.loc["CI90", :] = report_stat.loc["95%"]-report_stat.loc["5%"]
 
     report_stat = report_stat.T
+    report_stat.columns = [cn.upper() for cn in report_stat.columns]
 
-    return report_df, report_stat
+    return report_stat, report_df

@@ -66,10 +66,10 @@ def test_report(allclose):
 
     # Get sample data
     params = smp.draws_pd()
-    rep_df, rep_stat = report.ams_report(marginal, params)
-    assert rep_stat.shape == (12, 8)
+    rep, _ = report.ams_report(marginal, params)
+    assert rep.shape == (12, 8)
 
     obs = {year: y[year] for year in [1973, 2021]}
-    rep_df, rep_stat = report.ams_report(marginal, params, obs)
-    assert rep_stat.shape == (14, 8)
+    rep, _ = report.ams_report(marginal, params, obs)
+    assert rep.shape == (16, 8)
 
