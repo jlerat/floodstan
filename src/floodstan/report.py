@@ -35,7 +35,7 @@ def ams_report(marginal, params, observed=None, \
         Statistics for all reported variables.
         See floodstan.report.QUANTILES.
     """
-    assert truncated_probability>=0 and truncated_probability<=0.5
+    assert truncated_probability>=0 and truncated_probability<=0.99
 
     # Initialise report data
     report_df = params.copy()
@@ -67,14 +67,18 @@ def ams_report(marginal, params, observed=None, \
         # .. compute aep of historical floods
         if not observed is None:
             for hkey, qh in observed.items():
+                # .. correct CDF with truncated probability
                 cdf = truncated_probability+(1-truncated_probability)*marginal.cdf(qh)
+                # .. store cdf
                 report_df.loc[pidx, f"OBSERVED{hkey}_AEP[%]"] = (1-cdf)*100
                 report_df.loc[pidx, f"OBSERVED{hkey}_ARI[yr]"] = 1/(1-cdf)
 
         # .. compute streamflow
         for ari in design_aris:
             cdf = 1-1.0/ari
+            # .. correct CDF with truncated probability
             cdf = (cdf-truncated_probability)/(1-truncated_probability)
+            # .. compute design value
             report_df.loc[pidx, f"DESIGN_ARI{ari}"] = marginal.ppf(cdf)
 
     # Build stat report
@@ -86,9 +90,17 @@ def ams_report(marginal, params, observed=None, \
     report_stat = report_stat.drop(["count", "std"], axis=0)
 
     # .. compute confidence interval
-    if np.all(report_stat.index.isin(["5%", "95"])):
+    ridx = report_stat.index
+    if "5%" in ridx and "95%" in ridx:
         report_stat.loc["CI90", :] = report_stat.loc["95%"]-report_stat.loc["5%"]
 
+    # .. compute finite value proportion
+    report_stat.loc["ISFINITE[%]", :] = report_df.apply(\
+                                        lambda x: np.isfinite(x).sum()/len(x)*100)
+    report_stat.loc["ISZERO[%]", :] = report_df.apply(\
+                                        lambda x: (np.abs(x)<1e-10).sum()/len(x)*100)
+
+    # .. final formatting
     report_stat = report_stat.T
     report_stat.columns = [cn.upper() for cn in report_stat.columns]
 
