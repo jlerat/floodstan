@@ -42,12 +42,12 @@ def load_stan_model(name: str) -> Callable:
     except ValueError:
         warnings.warn(f"Failed to load pre-built model '{name}.exe', compiling")
         model = cmdstanpy.CmdStanModel(
-            stan_file=STAN_FILES_FOLDER / f"{name}.stan",
+            stan_file=STAN_FILES_FOLDER / f"{stan_name}.stan",
             stanc_options={"O1": True},
         )
         shutil.copy(
             model.exe_file,  # type: ignore
-            STAN_FILES_FOLDER / f"{name}.exe",
+            STAN_FILES_FOLDER / f"{stan_name}.exe",
         )
 
     def fun(*args, **kwargs):
