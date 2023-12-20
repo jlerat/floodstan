@@ -21,7 +21,7 @@ import importlib
 from tqdm import tqdm
 
 from floodstan import marginals, sample, copulas
-from floodstan import bivariate_censored
+from floodstan import bivariate_censored_sampling
 
 from test_sample_univariate import get_stationids, get_ams, TQDM_DISABLE
 

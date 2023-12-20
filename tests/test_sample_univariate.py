@@ -21,7 +21,7 @@ import importlib
 from tqdm import tqdm
 
 from floodstan import marginals, sample, copulas
-from floodstan import univariate_censored
+from floodstan import univariate_censored_sampling
 
 from tqdm import tqdm
 
@@ -150,6 +150,42 @@ def test_stan_sampling_dataset(allclose):
     assert pd.notnull(df.z.iloc[i31-1]).all()
 
 
+def test_univariate_sampling_short_syntax(allclose):
+    stationids = get_stationids()
+    stationid = stationids[0]
+    marginal = "GEV"
+    y = get_ams(stationid)
+
+    # Prior distribution centered around dist params
+    dist = marginals.factory(marginal)
+    dist.params_guess(y)
+    ylocn_prior = [dist.locn, abs(dist.locn)*0.5]
+    ylogscale_prior = [dist.logscale, abs(dist.logscale)*0.5]
+    yshape1_prior = [max(0.1, dist.shape1), 0.2]
+
+    # Set STAN
+    sv = sample.StanSamplingVariable(y, marginal)
+    sv.name = "y"
+    stan_data = sv.to_dict()
+    stan_data["ylocn_prior"] = ylocn_prior
+    stan_data["ylogscale_prior"] = ylogscale_prior
+    stan_data["yshape1_prior"] = yshape1_prior
+
+    # Clean output folder
+    fout = FTESTS / "sampling" / "univariate_short_syntax"
+    fout.mkdir(parents=True, exist_ok=True)
+    for f in fout.glob("*.*"):
+        f.unlink()
+
+    # Sample
+    smp = univariate_censored_sampling(\
+                data=stan_data, \
+                output_dir=fout)
+
+    df = smp.draws_pd()
+
+
+
 def test_univariate_sampling(allclose):
     # Testing univariate sampling following the process described by
     # Samantha R Cook, Andrew Gelman & Donald B Rubin (2006)
@@ -239,7 +275,7 @@ def test_univariate_sampling(allclose):
 
                 # Sample
                 try:
-                    smp = univariate_censored.sample(\
+                    smp = univariate_censored_sampling(\
                         data=stan_data, \
                         chains=4, \
                         seed=SEED, \

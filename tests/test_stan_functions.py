@@ -21,8 +21,8 @@ import importlib
 from tqdm import tqdm
 
 from floodstan import marginals, sample, copulas
-from floodstan import test_marginal, test_copula, \
-                            test_discrete
+from floodstan import stan_test_marginal, stan_test_copula, \
+                            stan_test_discrete
 
 from test_sample_univariate import get_stationids, get_ams, TQDM_DISABLE
 
@@ -68,10 +68,7 @@ def test_marginals_vs_stan(allclose):
                 stan_data["yshape1"] = dist.shape1
 
                 # Run stan
-                smp = test_marginal.sample(data=stan_data, \
-                                    chains=1, iter_warmup=0, iter_sampling=1, \
-                                    fixed_param=True, show_progress=False)
-                smp = smp.draws_pd().squeeze()
+                smp = stan_test_marginal(data=stan_data)
 
                 # Test
                 luncens = smp.filter(regex="luncens").values
@@ -118,10 +115,7 @@ def test_copulas_vs_stan(allclose):
             }
 
             # Run stan
-            smp = test_copula.sample(data=stan_data, \
-                                chains=1, iter_warmup=0, iter_sampling=1, \
-                                fixed_param=True, show_progress=False)
-            smp = smp.draws_pd().squeeze()
+            smp = stan_test_copula(data=stan_data)
 
             assert allclose(smp.rho_check, rho, atol=1e-6)
 
@@ -182,10 +176,7 @@ def test_discrete_vs_stan(allclose):
             stan_data["kphi"] = kphi
 
             # Run stan
-            smp = test_discrete.sample(data=stan_data, \
-                                chains=1, iter_warmup=0, iter_sampling=1, \
-                                fixed_param=True, show_progress=False)
-            smp = smp.draws_pd().squeeze()
+            smp = stan_test_discrete(data=stan_data)
 
             # Test
             lpmf = smp.filter(regex="lpmf").values

@@ -56,7 +56,8 @@ def xaxis_label(ax, plot_type):
         ax.set_xlabel("Standard normal deviate [-]")
 
 
-def add_aep_to_xaxis(ax, plot_type, full_line=True, return_periods=[5, 10, 50, 100, 200], \
+def add_aep_to_xaxis(ax, plot_type, full_line=True, \
+                        return_periods=[5, 10, 50, 100, 200], \
                         kwargs_plot={"color": "gray", "linewidth": 2}, \
                         kwargs_text={"color": "gray", "va": "bottom", "ha": "center"}):
     """ Add annual exceedance probabilities (AEP) to x axis.

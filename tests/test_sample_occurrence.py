@@ -18,7 +18,8 @@ from tqdm import tqdm
 
 from hydrodiy.plot import putils
 
-from floodstan import sample, discretes, event_occurrence
+from floodstan import sample, discretes, \
+                event_occurrence_sampling
 
 from test_discretes import sample_from_norm_truncated
 
@@ -139,7 +140,7 @@ def test_occurence_modelling(allclose):
 
             # Sample
             try:
-                smp = event_occurrence.sample(\
+                smp = event_occurrence_sampling(\
                     data=stan_data, \
                     chains=4, \
                     seed=SEED, \

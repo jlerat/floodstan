@@ -15,7 +15,7 @@ import importlib
 from tqdm import tqdm
 
 from floodstan import marginals, sample, report
-from floodstan import univariate_censored
+from floodstan import univariate_censored_sampling
 
 from test_sample_univariate import get_stationids, get_ams, TQDM_DISABLE
 
@@ -55,7 +55,7 @@ def test_report(allclose):
         f.unlink()
 
     # Sample
-    smp = univariate_censored.sample(\
+    smp = univariate_censored_sampling(\
         data=stan_data, \
         chains=4, \
         seed=SEED, \
