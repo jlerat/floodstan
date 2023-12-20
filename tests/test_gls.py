@@ -17,7 +17,8 @@ from cmdstanpy import CmdStanModel
 import importlib
 from tqdm import tqdm
 
-from floodstan import gls_spatial, gls_spatial_generate, test_glsfun
+from floodstan import gls_spatial_sampling, \
+                gls_spatial_generate_sampling, stan_test_glsfun
 from floodstan import gls, sample
 
 from tqdm import tqdm
@@ -100,10 +101,7 @@ def test_kernel(allclose):
             "logsigma": math.log(sigma), \
             "kernel": gls.KERNEL_CODES[kernel]
         }
-        smp = test_glsfun.sample(data=stan_data, \
-                            chains=1, iter_warmup=0, iter_sampling=1, \
-                            fixed_param=True, show_progress=False)
-        smp = smp.draws_pd().squeeze()
+        smp = stan_test_glsfun(data=stan_data)
 
         Ks = smp.filter(regex="^K").values.reshape((N, N))
         assert allclose(K, Ks, rtol=0, atol=1e-5)
@@ -141,10 +139,9 @@ def test_QR(allclose):
         "logsigma": math.log(sigma), \
         "kernel": gls.KERNEL_CODES[kernel]
     }
-    smp = test_glsfun.sample(data=stan_data, \
+    smp = stan_test_glsfun(data=stan_data, \
                         chains=1, iter_warmup=0, iter_sampling=1, \
                         fixed_param=True, show_progress=False)
-    smp = smp.draws_pd().squeeze()
 
     Q_ast_s = np.column_stack(np.array_split(smp.filter(regex="^Q_ast"), P))
     assert allclose(Q_ast, Q_ast_s, rtol=0, atol=1e-5)
@@ -187,7 +184,7 @@ def test_gls_generate_stan():
 
         # Sample
         nsamples = 16
-        smp = gls_spatial_generate.sample(\
+        smp = gls_spatial_generate_sampling(\
                     data=stan_data, \
                     seed=SEED, \
                     iter_warmup=10, \
@@ -309,7 +306,7 @@ def test_gls_sample():
 
     # Generate
     nsamples = 1
-    smps = gls_spatial_generate.sample(\
+    smps = gls_spatial_generate_sampling(\
                 data=stan_data, \
                 seed=SEED, \
                 iter_warmup=10, \
@@ -331,12 +328,8 @@ def test_gls_sample():
                     logalpha_prior=[0, 6], \
                     logsigma_prior=[0, 6])
 
-    smp = gls_spatial.sample(\
+    smp = gls_spatial_sampling(\
                 data=stan_data, \
-                seed=SEED, \
-                iter_warmup=10000, \
-                iter_sampling=10000, \
-                chains=5, \
                 output_dir=fout)
     df = smp.draws_pd()
 
@@ -367,7 +360,7 @@ def test_gls_sample():
                     "logsigma": logsigma, \
                     "kernel": 1
             }
-            smps = gls_spatial_generate.sample(\
+            smps = gls_spatial_generate_sampling(\
                 data=stan_data, \
                 seed=SEED, \
                 iter_warmup=10, \
