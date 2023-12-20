@@ -32,21 +32,9 @@ def test_report(allclose):
     y = get_ams(stationid)
     N = len(y)
 
-    marginal = marginals.factory(marginal_name)
-    marginal.params_guess(y)
-
-    # Prior marginalribution centered around marginal params
-    ylocn_prior = [marginal.locn, abs(marginal.locn)*0.5]
-    ylogscale_prior = [marginal.logscale, abs(marginal.logscale)*0.5]
-    yshape1_prior = [max(0.1, marginal.shape1), 0.2]
-
     # Configure stan data and initialisation
     sv = sample.StanSamplingVariable(y, marginal_name)
-    sv.name = "y"
     stan_data = sv.to_dict()
-    stan_data["ylocn_prior"] = ylocn_prior
-    stan_data["ylogscale_prior"] = ylogscale_prior
-    stan_data["yshape1_prior"] = yshape1_prior
 
     # Clean output folder
     fout = FTESTS / "report" / stationid
@@ -66,10 +54,11 @@ def test_report(allclose):
 
     # Get sample data
     params = smp.draws_pd()
-    rep, _ = report.ams_report(marginal, params)
+
+    rep, _ = report.ams_report(sv.marginal, params)
     assert rep.shape == (12, 11)
 
     obs = {year: y[year] for year in [1973, 2021]}
-    rep, _ = report.ams_report(marginal, params, obs)
+    rep, _ = report.ams_report(sv.marginal, params, obs)
     assert rep.shape == (16, 11)
 

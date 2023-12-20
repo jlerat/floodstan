@@ -88,6 +88,7 @@ def test_stan_sampling_variable(allclose):
     assert allclose(sv.censor, censor)
 
     sv.set(y, "GEV", 1.)
+    assert isinstance(sv.marginal, marginals.FloodFreqDistribution)
     assert allclose(sv.censor, max(y.min(), 1.))
     assert allclose(sv.data, y)
     assert sv.N == len(y)
@@ -97,9 +98,15 @@ def test_stan_sampling_variable(allclose):
     assert allclose(sv.i11, np.arange(sv.N)+1)
 
     dd = sv.to_dict()
-    assert "xmarginal" in dd
-    assert "x" in dd
-    assert "xcensor" in dd
+    keys = ["ymarginal", "y", \
+                "ycensor", "ylocn", \
+                "ylogscale", "yshape1", \
+                "ylocn_prior", "ylogscale_prior", \
+                "yshape1_prior"]
+    for key in keys:
+        assert key in dd
+
+    assert allclose(dd["yshape1_prior"], sample.SHAPE1_PRIOR)
 
     # Rapid setting
     sv = sample.StanSamplingVariable(y)
@@ -110,17 +117,6 @@ def test_stan_sampling_variable(allclose):
     sv = sample.StanSamplingVariable(y, "GEV")
     d = sv.data
 
-
-def test_stan_sampling_variable_prior(allclose):
-    y = get_ams("203010")
-
-    sv = sample.StanSamplingVariable(y, "GEV")
-    dd = sv.to_dict()
-    assert not "xlocn_prior" in dd
-
-    sp = sample.StanSamplingVariablePrior(sv)
-    sp.add_priors(dd)
-    assert "xlocn_prior" in dd
 
 
 def test_stan_sampling_dataset(allclose):
@@ -138,8 +134,13 @@ def test_stan_sampling_dataset(allclose):
     assert allclose(dset.Ncases, [[38, 3, 1], [6, 7, 0], [9, 1, 0]])
 
     dd = dset.to_dict()
-    assert "ymarginal" in dd
-    assert "zmarginal" in dd
+    keys = ["marginal", \
+                "censor", "locn", \
+                "logscale", "shape1", \
+                "locn_prior", "logscale_prior", \
+                "shape1_prior"]
+    for name, key in prod(["y", "z"], keys):
+        assert f"{name}{key}" in dd
 
     i11 = dset.i11
     assert pd.notnull(df.y.iloc[i11-1]).all()
@@ -156,20 +157,9 @@ def test_univariate_sampling_short_syntax(allclose):
     marginal = "GEV"
     y = get_ams(stationid)
 
-    # Prior distribution centered around dist params
-    dist = marginals.factory(marginal)
-    dist.params_guess(y)
-    ylocn_prior = [dist.locn, abs(dist.locn)*0.5]
-    ylogscale_prior = [dist.logscale, abs(dist.logscale)*0.5]
-    yshape1_prior = [max(0.1, dist.shape1), 0.2]
-
     # Set STAN
     sv = sample.StanSamplingVariable(y, marginal)
-    sv.name = "y"
     stan_data = sv.to_dict()
-    stan_data["ylocn_prior"] = ylocn_prior
-    stan_data["ylogscale_prior"] = ylogscale_prior
-    stan_data["yshape1_prior"] = yshape1_prior
 
     # Clean output folder
     fout = FTESTS / "sampling" / "univariate_short_syntax"
@@ -183,7 +173,6 @@ def test_univariate_sampling_short_syntax(allclose):
                 output_dir=fout)
 
     df = smp.draws_pd()
-
 
 
 def test_univariate_sampling(allclose):
@@ -260,7 +249,6 @@ def test_univariate_sampling(allclose):
                     sv = sample.StanSamplingVariable(ysmp, marginal)
                 except:
                     continue
-                sv.name = "y"
                 stan_data = sv.to_dict()
 
                 stan_data["ylocn_prior"] = ylocn_prior

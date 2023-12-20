@@ -27,6 +27,9 @@ MARGINAL_CODES = {code:name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code:name for name, code in COPULA_NAMES.items()}
 DISCRETE_CODES = {code:name for name, code in DISCRETE_NAMES.items()}
 
+# Tight prior on shape parameter
+SHAPE1_PRIOR = [0, 1]
+
 # Prior on copula parameter
 RHO_PRIOR = [0.8, 1]
 
@@ -80,17 +83,21 @@ def get_logger(level, flog=None, stan_logger=True):
 
 
 class StanSamplingVariable():
-    def __init__(self, data=None, marginal_name=None, censor=1e-10):
-        self.name = "x"
+    def __init__(self, data=None, marginal_name=None, censor=1e-10, name="y", \
+                        tight_shape_prior=True):
+        self.name = str(name)
+        assert len(self.name)==1, "Expected one character for name."
         self._N = 0
         self._data = None
         self._marginal_code = None
         self._marginal_name = None
-        self._censor = censor
+        self._marginal = None
+        self._censor = float(censor)
         self._initial_parameters = {}
         self._is_miss = None
         self._is_obs = None
         self._is_cens = None
+        self.tight_shape_prior = bool(tight_shape_prior)
 
         # Set if the 3 inputs are set
         if not data is None and not marginal_name is None\
@@ -106,6 +113,10 @@ class StanSamplingVariable():
         assert len(self._initial_parameters)>0, \
                 f"Variable {self.name}: Initial parameters have not been set."
         return self._initial_parameters
+
+    @property
+    def marginal(self):
+        return self._marginal
 
     @property
     def marginal_name(self):
@@ -158,6 +169,7 @@ class StanSamplingVariable():
 
         # Set initial values
         dist = marginals.factory(self.marginal_name)
+        self._marginal = dist
         dist.params_guess(dok)
         # .. verify parameter is compatible
         lpdf = dist.logpdf(dok)
@@ -199,38 +211,34 @@ class StanSamplingVariable():
         for k, v in self.initial_parameters.items():
             dd[f"{vn}{k}"] = v
 
+        start = self.initial_parameters
+        locn_start = start["locn"]
+        dd[f"{vn}locn_prior"] = [locn_start, 10*abs(locn_start)]
+
+        logscale_start = start["logscale"]
+        dscale = (LOGSCALE_UPPER-LOGSCALE_LOWER)/2
+        dd[f"{vn}logscale_prior"] = [logscale_start, dscale]
+
+        # defines prior depending if it's tight or not
+        if self.tight_shape_prior:
+            shape1_prior_loc, shape1_prior_sig = SHAPE1_PRIOR
+        else:
+            shape1_prior_loc = start["shape1"]
+            shape1_prior_sig = marginals.SHAPE1_UPPER-marginals.SHAPE1_LOWER
+
+        dd[f"{vn}shape1_prior"] = [shape1_prior_loc, shape1_prior_sig]
+
         return dd
 
 
 
-class StanSamplingVariablePrior():
-    def __init__(self, stanvar):
-        self.stanvar = stanvar
-
-    def add_priors(self, info):
-        """ Add prior info to a dict """
-        vn = self.stanvar.name
-        start = self.stanvar.initial_parameters
-        locn_start = start["locn"]
-        info[f"{vn}locn_prior"] = [locn_start, 10*abs(locn_start)]
-
-        logscale_start = start["logscale"]
-        dscale = (LOGSCALE_UPPER-LOGSCALE_LOWER)/2
-        info[f"{vn}logscale_prior"] = [logscale_start, dscale]
-
-        shape1_start = start["shape1"]
-        dshape = marginals.SHAPE1_UPPER-marginals.SHAPE1_LOWER
-        info[f"{vn}shape1_prior"] = [shape1_start, dshape]
-
-
-
 class StanSamplingDataset():
-    def __init__(self, stan_variables, copula_name):
+    def __init__(self, stan_variables, copula_name, names=["y", "z"]):
         # Set stan variables
         assert len(stan_variables)==2, "Only bivariate case accepted."
         # .. changing names to y and z (Stan code requirement)
-        stan_variables[0].name = "y"
-        stan_variables[1].name = "z"
+        stan_variables[0].name = names[0]
+        stan_variables[1].name = names[1]
         assert len(set([sv.N for sv in stan_variables]))==1, "Differing data size"
         self._stan_variables = stan_variables
 
