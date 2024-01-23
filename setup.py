@@ -22,7 +22,7 @@ MODELS = ["univariate_censored", "bivariate_censored", \
             "event_occurrence", "test_discrete", \
             "test_marginal", "test_copula", "test_glsfun"]
 
-CMDSTAN_VERSION = "2.30.1"
+CMDSTAN_VERSION = "2.34.1"
 BINARIES_DIR = "bin"
 BINARIES = ["diagnose", "print", "stanc", "stansummary"]
 MATH_LIB = "stan/lib/stan_math/lib"
