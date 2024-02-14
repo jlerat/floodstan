@@ -1,5 +1,5 @@
 import shutil
-import re
+import re, os
 import warnings
 from pathlib import Path
 from typing import Callable
@@ -33,21 +33,24 @@ def load_stan_model(name: str) -> Callable:
     # Check if the executable is a test
     is_test = bool(re.search("^stan_test_", name))
 
+    # Add exe suffix if we are running on windows
+    suffix = ".exe" if os.name=="nt" else ""
+
     try:
         model = cmdstanpy.CmdStanModel(
-            exe_file=STAN_FILES_FOLDER / f"{stan_name}.exe",
+            exe_file=STAN_FILES_FOLDER / f"{stan_name}{suffix}",
             stan_file=STAN_FILES_FOLDER / f"{stan_name}.stan",
             compile=False,
         )
     except ValueError:
-        warnings.warn(f"Failed to load pre-built model '{name}.exe', compiling")
+        warnings.warn(f"Failed to load pre-built model '{name}{suffix}', compiling")
         model = cmdstanpy.CmdStanModel(
             stan_file=STAN_FILES_FOLDER / f"{stan_name}.stan",
             stanc_options={"O1": True},
         )
         shutil.copy(
             model.exe_file,  # type: ignore
-            STAN_FILES_FOLDER / f"{stan_name}.exe",
+            STAN_FILES_FOLDER / f"{stan_name}{suffix}",
         )
 
     def fun(*args, **kwargs):
@@ -85,6 +88,7 @@ def load_stan_model(name: str) -> Callable:
             return smp
 
     return fun
+
 
 # Stan sampler
 univariate_censored_sampling = load_stan_model("univariate_censored_sampling")
