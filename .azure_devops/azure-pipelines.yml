@@ -100,31 +100,36 @@ steps:
 - script: |
     source activate $(CONDA_ENV_NAME)
     cd $(BUILD_DIR)/hydrodiy
-    python setup.py develop
+    #python setup.py develop
+    pip install -e .
   displayName: hydrodiy_install
 
 - script: |
     source activate $(CONDA_ENV_NAME)
     cd $(BUILD_DIR)/hyzarr
-    python setup.py develop
+    #python setup.py develop
+    pip install -e .
   displayName: hyzarr_install
 
 - script: |
     source activate $(CONDA_ENV_NAME)
     cd $(BUILD_DIR)/nrivdata
-    python setup.py develop
+    #python setup.py develop
+    pip install -e .
   displayName: nrivdata_install
 
 - script: |
     source activate $(CONDA_ENV_NAME)
     cd $(BUILD_DIR)/nrivfloodfreq
-    python setup.py develop
+    #python setup.py develop
+    pip install -e .
   displayName: nrivfloodfreq_install
 
 - script: |
     source activate $(CONDA_ENV_NAME)
     cd $(BUILD_DIR)/floodstan
-    python setup.py develop
+    #python setup.py develop
+    pip install -e .
   displayName: package_install
 
 
