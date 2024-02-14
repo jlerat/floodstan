@@ -82,7 +82,7 @@ def test_stan_sampling_variable(allclose):
 
     msg = "Expected data"
     with pytest.raises(AssertionError, match=msg):
-        sv.set(y[:, None], "GEV", censor)
+        sv.set(y.values[:, None], "GEV", censor)
 
     sv.set(y, "GEV", censor)
     assert allclose(sv.censor, censor)
