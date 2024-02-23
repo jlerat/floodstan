@@ -9,7 +9,8 @@ DESIGN_ARIS =[2, 5, 10, 20, 50, 100, 200, 500, 1000]
 
 def ams_report(marginal, params, observed=None, \
                     truncated_probability=0, \
-                    design_aris=DESIGN_ARIS):
+                    design_aris=DESIGN_ARIS, \
+                    obs_prefix="OBS"):
     """ Generate report variables.
 
     Parameters
@@ -25,6 +26,8 @@ def ams_report(marginal, params, observed=None, \
         Probability of truncated values.
     design_aris : list
         List of design flood ari to be computed.
+    obs_prefix : str
+        Prefix appended before observed variables.
 
     Returns
     -------
@@ -42,8 +45,8 @@ def ams_report(marginal, params, observed=None, \
 
     report_columns = []
     if not observed is None:
-        report_columns += [f"OBSERVED{hkey}_AEP[%]" for hkey in observed]
-        report_columns += [f"OBSERVED{hkey}_ARI[yr]" for hkey in observed]
+        report_columns += [f"{obs_prefix}{hkey}_AEP[%]" for hkey in observed]
+        report_columns += [f"{obs_prefix}{hkey}_ARI[yr]" for hkey in observed]
     report_columns += [f"DESIGN_ARI{a}" for a in design_aris]
     report_df.loc[:, report_columns] = np.nan
 
@@ -70,8 +73,8 @@ def ams_report(marginal, params, observed=None, \
                 # .. correct CDF with truncated probability
                 cdf = truncated_probability+(1-truncated_probability)*marginal.cdf(qh)
                 # .. store cdf
-                report_df.loc[pidx, f"OBSERVED{hkey}_AEP[%]"] = (1-cdf)*100
-                report_df.loc[pidx, f"OBSERVED{hkey}_ARI[yr]"] = 1/(1-cdf)
+                report_df.loc[pidx, f"{obs_prefix}{hkey}_AEP[%]"] = (1-cdf)*100
+                report_df.loc[pidx, f"{obs_prefix}{hkey}_ARI[yr]"] = 1/(1-cdf)
 
         # .. compute streamflow
         for ari in design_aris:
