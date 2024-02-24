@@ -45,8 +45,10 @@ def ams_report(marginal, params, observed=None, \
 
     report_columns = []
     if not observed is None:
-        report_columns += [f"{obs_prefix}{hkey}_AEP[%]" for hkey in observed]
-        report_columns += [f"{obs_prefix}{hkey}_ARI[yr]" for hkey in observed]
+        report_columns += [f"{obs_prefix}{hkey}_AEP[%]" \
+                                    for hkey, _ in observed.items()]
+        report_columns += [f"{obs_prefix}{hkey}_ARI[yr]" \
+                                    for hkey, _ in observed.items()]
     report_columns += [f"DESIGN_ARI{a}" for a in design_aris]
     report_df.loc[:, report_columns] = np.nan
 
@@ -71,7 +73,8 @@ def ams_report(marginal, params, observed=None, \
         if not observed is None:
             for hkey, qh in observed.items():
                 # .. correct CDF with truncated probability
-                cdf = truncated_probability+(1-truncated_probability)*marginal.cdf(qh)
+                cdf = truncated_probability\
+                        +(1-truncated_probability)*marginal.cdf(qh)
                 # .. store cdf
                 report_df.loc[pidx, f"{obs_prefix}{hkey}_AEP[%]"] = (1-cdf)*100
                 report_df.loc[pidx, f"{obs_prefix}{hkey}_ARI[yr]"] = 1/(1-cdf)
