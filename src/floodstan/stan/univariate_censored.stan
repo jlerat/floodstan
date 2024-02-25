@@ -58,7 +58,7 @@ data {
   real<lower=shape1_lower> shape1_upper;
 
   // Censoring thresholds 
-  real<lower=0> ycensor;
+  real ycensor;
 }
 
 parameters {

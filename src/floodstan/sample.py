@@ -37,8 +37,12 @@ RHO_PRIOR = [0.8, 1]
 DISCRETE_LOCN_PRIOR = [1, 10]
 DISCRETE_PHI_PRIOR = [1, 10]
 
+CENSOR_DEFAULT = -1e10
+
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
+LOGGER_DATE_FORMAT = "%y-%m-%d %H:%M"
+
 def get_logger(level, flog=None, stan_logger=True):
     """ Get logger object.
 
@@ -65,7 +69,7 @@ def get_logger(level, flog=None, stan_logger=True):
     LOGGER.setLevel(getattr(logging, level))
 
     # Set logging format
-    ft = logging.Formatter(LOGGER_FORMAT)
+    ft = logging.Formatter(LOGGER_FORMAT, LOGGER_DATE_FORMAT)
 
     # log to console
     LOGGER.handlers = []
@@ -83,7 +87,9 @@ def get_logger(level, flog=None, stan_logger=True):
 
 
 class StanSamplingVariable():
-    def __init__(self, data=None, marginal_name=None, censor=1e-10, name="y", \
+    def __init__(self, data=None, marginal_name=None, \
+                        censor=CENSOR_DEFAULT, \
+                        name="y", \
                         tight_shape_prior=True):
         self.name = str(name)
         assert len(self.name)==1, "Expected one character for name."

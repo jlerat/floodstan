@@ -89,8 +89,8 @@ data {
   real<lower=rho_lower, upper=0.999> rho_upper;
 
   // Censoring thresholds 
-  real<lower=0> ycensor;
-  real<lower=0> zcensor;
+  real ycensor;
+  real zcensor;
 }
 
 parameters {
