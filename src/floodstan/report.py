@@ -101,9 +101,10 @@ def ams_report(marginal, params, observed=None, \
         report_stat.loc["CI90", :] = report_stat.loc["95%"]-report_stat.loc["5%"]
 
     # .. compute finite value proportion
-    report_stat.loc["ISFINITE[%]", :] = report_df.apply(\
+    cc = report_stat.columns
+    report_stat.loc["ISFINITE[%]", cc] = report_df.loc[:, cc].apply(\
                                         lambda x: np.isfinite(x).sum()/len(x)*100)
-    report_stat.loc["ISZERO[%]", :] = report_df.apply(\
+    report_stat.loc["ISZERO[%]", cc] = report_df.loc[:, cc].apply(\
                                         lambda x: (np.abs(x)<1e-10).sum()/len(x)*100)
 
     # .. final formatting
