@@ -112,18 +112,18 @@ def plot_data(ax, data, plot_type, **kwargs):
 
 
 def plot_marginal(ax, marginal, plot_type, params=None, Tmin=1.1, Tmax=200, \
-                        label="", coverage=0.9, pcensored=0., \
+                        label="", coverage=0.9, truncated_probability=0., \
                         color="tab:blue", edgecolor="none", \
                         facecolor="tab:blue", alpha=0.5, \
                         **kwargs):
     # Compute probabilitie including censoring shift
     prob = np.linspace(1-1/Tmin, 1-1/Tmax, 500)
-    probcens = (prob-pcensored)/(1-pcensored)
+    probtrunc = (prob-truncated_probability)/(1-truncated_probability)
 
     x = get_quantiles(prob, plot_type)
     kwargs["color"] = kwargs.get("color", color)
     if params is None:
-        ys = marginal.ppf(probcens)
+        ys = marginal.ppf(probtrunc)
         ax.plot(x, ys, label=label, **kwargs)
     else:
         ys = []
@@ -131,7 +131,7 @@ def plot_marginal(ax, marginal, plot_type, params=None, Tmin=1.1, Tmax=200, \
             marginal.locn = p.locn
             marginal.logscale = p.logscale
             marginal.shape1 = p.shape1
-            ys.append(marginal.ppf(probcens))
+            ys.append(marginal.ppf(probtrunc))
 
         ys = pd.DataFrame(ys).T
         ym = ys.mean(axis=1)

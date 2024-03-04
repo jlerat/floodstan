@@ -78,7 +78,7 @@ def test_plot_marginal_censored():
     gev = marginals.GEV()
     cens = streamflow.median()
     icens = streamflow>=cens
-    pcensored = (~icens).sum()/len(streamflow)
+    truncated_probability = (~icens).sum()/len(streamflow)
 
     gev.params_guess(streamflow[icens])
 
@@ -88,7 +88,8 @@ def test_plot_marginal_censored():
     freqplots.plot_data(ax, streamflow, ptype)
 
     freqplots.plot_marginal(ax, gev, ptype, \
-                                pcensored=pcensored, Tmax=500)
+                            truncated_probability=truncated_probability, \
+                            Tmax=500)
 
     retp = [5, 10, 100, 500]
     aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
