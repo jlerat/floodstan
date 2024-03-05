@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - cmdstanpy=1.0.7
+  - cmdstanpy=1.2.1
   - cython=0.29.32
   - matplotlib=3.5.3
   - numpy=1.23.2
