@@ -60,7 +60,7 @@ def load_stan_model(name: str) -> Callable:
             #    of the sampler.
             kwargs["chains"] = 1
             kwargs["seed"] = SEED_DEFAULT
-            kwargs["iter_warmup"] = 0
+            kwargs["iter_warmup"] = 1
             kwargs["iter_sampling"] = 1
             kwargs["fixed_param"] = True
             kwargs["show_progress"] = False
