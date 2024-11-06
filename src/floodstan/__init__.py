@@ -39,8 +39,7 @@ def load_stan_model(name: str) -> Callable:
     try:
         model = cmdstanpy.CmdStanModel(
             exe_file=STAN_FILES_FOLDER / f"{stan_name}{suffix}",
-            stan_file=STAN_FILES_FOLDER / f"{stan_name}.stan",
-            compile=False,
+            stan_file=STAN_FILES_FOLDER / f"{stan_name}.stan"
         )
     except ValueError:
         warnings.warn(f"Failed to load pre-built model '{name}{suffix}', compiling")
