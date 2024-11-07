@@ -7,6 +7,59 @@ import pandas as pd
 QUANTILES = [0.05, 0.25, 0.5, 0.75, 0.95]
 DESIGN_ARIS =[2, 5, 10, 20, 50, 100, 200, 500, 1000]
 
+def process_stan_diagnostic(diag):
+    """ Analyse stan diagnostic data.
+
+    Parameters
+    ----------
+    diag : str
+        Stan diagnostic generated from
+
+    Returns
+    -------
+    stan_status : dict
+        Stan diagnostic metrics.
+    """
+    diag_pat = "Checking|Processing|consider|consider"\
+            +"|incomplete mixing|prematurely"\
+            +"|not fully able|Try|try"
+    rep_pat = ".*parameters had"
+    diag = re.sub(":\n ", ": ", diag)
+    diag = [re.sub(rep_pat, "", l) for l in diag.split("\n")\
+                if l!="" and not re.search(diag_pat, l)]
+
+    stan_status = dict(message=" ".join(diag))
+    patterns = {
+        "treedepth": "(T|t)reedepth",\
+        "divergence": "divergen(t|ce)",\
+        "ebfmi": "E-BFMI",\
+        "effsamplesz": "Effective|effective draws", \
+        "rhat": "R-hat"
+    }
+    for delem, pat in patterns.items():
+        nelem = f"{delem}"
+        line = [l for l in diag if re.search(pat, l)]
+        if len(line)==0:
+            stan_status[nelem] = "unknown"
+            continue
+
+        line = line[0]
+        if re.search("satisfactory|No divergent", line):
+            stan_status[nelem] = "satisfactory"
+        else:
+            if delem=="divergence":
+                prop_div = float(re.sub(".*\\(|%\\).*", "", line))
+                if prop_div<5:
+                    stan_status[nelem] = "satisfactory"
+                else:
+                    stan_status[nelem] = line.strip()
+            else:
+                stan_status[nelem] = line.strip()
+
+    return stan_status
+
+
+
 def ams_report(marginal, params, observed=None, \
                     truncated_probability=0, \
                     design_aris=DESIGN_ARIS, \

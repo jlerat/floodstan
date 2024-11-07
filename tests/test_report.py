@@ -25,6 +25,16 @@ SEED = 5446
 
 FTESTS = Path(__file__).resolve().parent
 
+def test_process_stan_diagnostic():
+    fd = FTESTS / "stan_diag.txt"
+    with fd.open("r") as fo:
+        diag = fo.read()
+
+    dd = report.process_stan_diagnostic(diag)
+    kk = ["message", "treedepth", "divergence", "ebfmi", "effsamplesz", "rhat"]
+    for k in kk:
+        assert k in dd
+
 
 def test_report(allclose):
     stationid = "201001"
