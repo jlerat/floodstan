@@ -98,7 +98,7 @@ def compute_ams(se, water_year_start="jan",
             if qq.isnull().any():
                 continue
 
-            yy = ams.YEAR[[ievent-1, ievent]]
+            yy = ams.WATER_YEAR[[ievent-1, ievent]]
 
             # Qmin test not passed. We have to join the events
             imax = qq.idxmax()
