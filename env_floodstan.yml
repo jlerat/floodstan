@@ -1,4 +1,4 @@
-name: env_mini
+name: env_floodstan
 channels:
   - conda-forge
   - defaults
