@@ -262,6 +262,7 @@ real genlogistic_cdf(real y, real tau, real alpha, real kappa) {
 
 // ------- Marginal functions -----------------------------
 // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal, 6=Generalized pareto
+// 7=Generalized logistic, 8=Gamma
 
 real marginal_lpdf(vector x, int marginal, real locn, real scale, real shape1)
 {
