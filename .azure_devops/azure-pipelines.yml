@@ -16,19 +16,6 @@ resources:
             - azure-pipelines.yml
             - env_floodstan.yml
 
-    - repository: hyzarr
-      type: git
-      name: hyzarr/hyzarr
-      ref: refs/heads/master
-      trigger:
-        branches:
-            include:
-            - master
-        paths:
-            exclude:
-            - azure-pipelines.yml
-            - env_floodstan.yml
-
 trigger:
 - master
 
@@ -52,7 +39,6 @@ steps:
 
 - checkout: self
 - checkout: hydrodiy
-- checkout: hyzarr
 
 - bash: echo "##vso[task.prependpath]$CONDA/bin"
   displayName: Add conda to PATH
@@ -75,12 +61,6 @@ steps:
     pip install -e .
   displayName: hydrodiy_install
 
-- script: |
-    source activate $(CONDA_ENV_NAME)
-    cd $(BUILD_DIR)/hyzarr
-    #python setup.py develop
-    pip install -e .
-  displayName: hyzarr_install
 
 - script: |
     source activate $(CONDA_ENV_NAME)
