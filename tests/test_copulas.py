@@ -26,7 +26,8 @@ from tqdm import tqdm
 
 FTESTS = Path(__file__).resolve().parent
 
-TQDM_DISABLE = True
+COPULA_NAMES = ["Gaussian", "Gumbel", "Clayton", "Frank"]
+
 
 # ---------------- UTITILITIES -------------------------------------------
 
@@ -99,83 +100,75 @@ def test_base_class():
     assert np.all(uv.max(axis=0)<1)
 
 
-def test_vs_statsmodels(allclose):
+@pytest.mark.parametrize("copula", COPULA_NAMES)
+def test_vs_statsmodels(copula, allclose):
     ndata = 1000
     nsamples = 100000
-    for copula in ["Gaussian", "Gumbel", "Clayton", "Frank"]:
-        cop1 = SMCopula(copula)
-        cop2 = copulas.factory(copula)
+    cop1 = SMCopula(copula)
+    cop2 = copulas.factory(copula)
 
-        uv = np.random.uniform(0, 1, size=(ndata, 2))
+    uv = np.random.uniform(0, 1, size=(ndata, 2))
 
-        rmin = cop2.rho_min
-        rmax = cop2.rho_max
-        nval = 20
-        desc = "Testing "+copula+" vs statsmodels"
-        tbar = tqdm(np.linspace(rmin, rmax, nval), \
-                        disable=TQDM_DISABLE, \
-                        desc=desc, total=nval)
-        if TQDM_DISABLE:
-            print("\n"+desc)
+    rmin = cop2.rho_min
+    rmax = cop2.rho_max
+    nval = 20
+    for rho in np.linspace(rmin, rmax, nval):
+        cop1.rho = rho
+        cop2.rho = rho
 
-        for rho in tbar:
-            cop1.rho = rho
-            cop2.rho = rho
+        pdf1 = cop1.pdf(uv)
+        pdf2 = cop2.pdf(uv)
+        assert allclose(pdf1, pdf2, equal_nan=True, atol=1e8)
 
-            pdf1 = cop1.pdf(uv)
-            pdf2 = cop2.pdf(uv)
-            assert allclose(pdf1, pdf2, equal_nan=True, atol=1e8)
+        cdf1 = cop1.cdf(uv)
+        cdf2 = cop2.cdf(uv)
+        assert allclose(cdf1, cdf2, atol=1e-5, equal_nan=True)
 
-            cdf1 = cop1.cdf(uv)
-            cdf2 = cop2.cdf(uv)
-            assert allclose(cdf1, cdf2, atol=1e-5, equal_nan=True)
+        # Statsmodels uses a random sample generator
+        # that is not based in inverse CDF for Clayton
+        if copula=="Clayton":
+            pytest.skip("Different random sample generator.")
 
-            # Statsmodels uses a random sample generator
-            # that is not based in inverse CDF for Clayton
-            if copula=="Clayton":
-                continue
+        pvalues = []
+        for itry in range(10):
+            uv1 = cop1.sample(nsamples)
+            uv2 = cop2.sample(nsamples)
+            if copula == "Gaussian":
+                pq = norm.ppf(uv2)
+                corr = np.corrcoef(pq.T)[0, 1]
+                assert allclose(corr, cop2.theta, rtol=1e-2, atol=1e-2)
 
-            pvalues = []
-            for itry in range(10):
-                uv1 = cop1.sample(nsamples)
-                uv2 = cop2.sample(nsamples)
-                if copula == "Gaussian":
-                    pq = norm.ppf(uv2)
-                    corr = np.corrcoef(pq.T)[0, 1]
-                    assert allclose(corr, cop2.theta, rtol=1e-2, atol=1e-2)
+            sa, pva = ks_2samp(uv1[:, 0], uv2[:, 0])
+            sb, pvb = ks_2samp(uv1[:, 1], uv2[:, 1])
+            if pva>0.2:
+                pvalues.append(pvb)
 
-                sa, pva = ks_2samp(uv1[:, 0], uv2[:, 0])
-                sb, pvb = ks_2samp(uv1[:, 1], uv2[:, 1])
-                if pva>0.2:
-                    pvalues.append(pvb)
-
-            assert len(pvalues)>2
-            assert np.mean(pvalues)>0.1
+        assert len(pvalues)>2
+        assert np.mean(pvalues)>0.1
 
 
-def test_plots():
+@pytest.mark.parametrize("copula", COPULA_NAMES)
+def test_plots(copula):
     nsamples = 5000
     fimg = FTESTS / "images"
     fimg.mkdir(exist_ok=True)
 
-    for copula in ["Gaussian", "Gumbel", "Clayton", "Frank"]:
-        cop = copulas.factory(copula)
+    cop = copulas.factory(copula)
 
-        plt.close("all")
-        fig, axs = plt.subplots(ncols=2, nrows=2, figsize=(10, 10), layout="tight")
-        rhos = np.linspace(cop.rho_min, cop.rho_max, 4)
-        for iax, ax in enumerate(axs.flat):
-            cop.rho = rhos[iax]
-            samples = cop.sample(nsamples)
-            samples[:, 0] = norm.ppf(samples[:, 0])
-            samples[:, 1] = norm.ppf(samples[:, 1])
-            ax.plot(samples[:, 0], samples[:, 1], ".", alpha=0.2)
-            title = f"{copula} - rho={cop.rho:0.2f}"
-            ax.set_title(title)
+    plt.close("all")
+    fig, axs = plt.subplots(ncols=2, nrows=2, figsize=(10, 10), layout="tight")
+    rhos = np.linspace(cop.rho_min, cop.rho_max, 4)
+    for iax, ax in enumerate(axs.flat):
+        cop.rho = rhos[iax]
+        samples = cop.sample(nsamples)
+        samples[:, 0] = norm.ppf(samples[:, 0])
+        samples[:, 1] = norm.ppf(samples[:, 1])
+        ax.plot(samples[:, 0], samples[:, 1], ".", alpha=0.2)
+        title = f"{copula} - rho={cop.rho:0.2f}"
+        ax.set_title(title)
 
-        fp = fimg / f"copula_sample_{copula}.png"
-        fig.savefig(fp)
-
+    fp = fimg / f"copula_sample_{copula}.png"
+    fig.savefig(fp)
 
 
 def test_gaussian(allclose):
@@ -250,15 +243,7 @@ def test_gumbel(allclose):
         def fun(u, v):
             return cop.pdf(np.array([u, v])[None, :])[0]
 
-
-        desc = f"Testing gumbel rho={rho:0.3f}"
-        tbar = tqdm(np.linspace(0.1, 0.9, 5), \
-                        disable=TQDM_DISABLE, \
-                        desc=desc, total=5)
-        if TQDM_DISABLE:
-            print("\n"+desc)
-
-        for ucond in tbar:
+        for ucond in np.linspace(0.1, 0.9, 5):
             pdfu = cop.conditional_density(uv[:, 1], ucond)
 
             # Compare with reduced variables formula
@@ -295,59 +280,46 @@ def test_gumbel(allclose):
             assert allclose(lpdf[iok], expected[iok])
 
 
-
-def test_conditional_density(allclose):
+@pytest.mark.parametrize("copula", COPULA_NAMES)
+def test_conditional_density(copula, allclose):
     ndata = 100
-    copula_names = ["Gaussian", "Gumbel", "Clayton", "Frank"]
+    cop = copulas.factory(copula)
+    uv = np.random.uniform(0, 1, size=(ndata, 2))
+    rhos = np.linspace(cop.rho_min, cop.rho_max, 10)
 
-    for copula in copula_names:
-        cop = copulas.factory(copula)
-        uv = np.random.uniform(0, 1, size=(ndata, 2))
-        rhos = np.linspace(cop.rho_min, cop.rho_max, 10)
+    for rho in rhos:
+        cop.rho = rho
+        nval = 10
+        for ucond in np.linspace(0.1, 0.9, nval):
+            pdfu = cop.conditional_density(uv[:, 1], ucond)
+            assert (pdfu<1).sum()>0
 
-        for rho in rhos:
-            cop.rho = rho
+            # test pdfu is reverse of ppf conditional
+            # except for Gumbel which does not use
+            # ppf_conditional for the sample function
+            if copula != "Gumbel":
+                iok = pdfu<0.99
+                qu = cop.ppf_conditional(uv[iok, 1], pdfu[iok])
+                assert allclose(qu, ucond, atol=1e-3)
 
-            nval = 10
-            desc = f"Testing {copula} conditional density: rho={rho:0.3f}"
-            tbar = tqdm(np.linspace(0.1, 0.9, nval), \
-                    desc=desc, disable=TQDM_DISABLE, \
-                    total=nval)
-            if TQDM_DISABLE:
-                print("\n"+desc)
+            # Test conditional density vs integrating pdf
+            expected1 = np.zeros_like(pdfu)
+            def fun(u, v):
+                return cop.pdf(np.array([u, v])[None, :])[0]
 
-            for ucond in tbar:
-                pdfu = cop.conditional_density(uv[:, 1], ucond)
-                assert (pdfu<1).sum()>0
+            for i in range(ndata):
+                s, err = quad(fun, 0, ucond, args=(uv[i, 1], ))
+                expected1[i] = s
 
-                # test pdfu is reverse of ppf conditional
-                # except for Gumbel which does not use
-                # ppf_conditional for the sample function
-                if copula != "Gumbel":
-                    iok = pdfu<0.99
-                    qu = cop.ppf_conditional(uv[iok, 1], pdfu[iok])
-                    assert allclose(qu, ucond, atol=1e-3)
+            iok = expected1>1e-5
+            assert allclose(pdfu[iok], expected1[iok], atol=1e-5)
 
-                # Test conditional density vs integrating pdf
-                expected1 = np.zeros_like(pdfu)
-                def fun(u, v):
-                    return cop.pdf(np.array([u, v])[None, :])[0]
-
-                for i in range(ndata):
-                    s, err = quad(fun, 0, ucond, args=(uv[i, 1], ))
-                    expected1[i] = s
-
-                iok = expected1>1e-5
-                assert allclose(pdfu[iok], expected1[iok], atol=1e-5)
-
-                # Test conditional density vs derivating cdf
-                uvc = uv.copy()
-                uvc[:, 0] = ucond
-                c0 = cop.cdf(uvc)
-                eps = 1e-6
-                uvc[:, 1] += eps
-                c1 = cop.cdf(uvc)
-                expected2 = (c1-c0)/eps
-                assert allclose(pdfu, expected2, atol=5e-4, rtol=5e-4)
-
-
+            # Test conditional density vs derivating cdf
+            uvc = uv.copy()
+            uvc[:, 0] = ucond
+            c0 = cop.cdf(uvc)
+            eps = 1e-6
+            uvc[:, 1] += eps
+            c1 = cop.cdf(uvc)
+            expected2 = (c1-c0)/eps
+            assert allclose(pdfu, expected2, atol=5e-4, rtol=5e-4)
