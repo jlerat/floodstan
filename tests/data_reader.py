@@ -10,11 +10,14 @@ import warnings
 
 FTESTS = Path(__file__).resolve().parent
 
-STATIONS = ["203010", "203014", "arr61", \
-             "arr84", "arr88", \
-             "arr93", "LISAGGFLOW2"]
+STATIONS = ["203010", "203014", "arr61",
+            "arr84", "arr88",
+            "arr93", "LISAGGFLOW2"]
+
 MODELS = ["bayesian-noprior", "LH0"]
+
 SOURCES = ["flike", "bestfit"]
+
 DISTRIBUTIONS = ["GEV", "LogNormal", "Gumbel", "LogPearson3"]
 
 CENSORS = {
@@ -38,15 +41,16 @@ CENSORS = {
     }
 }
 
-def read_flike_outputs(station, distname, model, \
-                    censoring):
+
+def read_flike_outputs(station, distname, model,
+                       censoring):
     txt = "" if censoring else "no"
     fr = FTESTS / "data" / "flike_outputs" / \
-                    f"{station}_{distname}_{model}_{txt}censoring.txt"
+         f"{station}_{distname}_{model}_{txt}censoring.txt"
 
     if not fr.exists():
-        errmsg = f"Cannot find FLIKE data for {station}/"+\
-                    f"{distname}/{model}/{txt}censoring"
+        errmsg = f"Cannot find FLIKE data for {station}/"\
+                 + f"{distname}/{model}/{txt}censoring"
         raise FileNotFoundError(errmsg)
 
     with fr.open("r") as fo:
@@ -120,8 +124,7 @@ def read_flike_outputs(station, distname, model, \
     return dataframes, fr
 
 
-def read_bestfit_outputs(station, distname, model, \
-                    censoring):
+def read_bestfit_outputs(station, distname, model, censoring):
     txt = "" if censoring else "no"
     fp = FTESTS / "data" / "bestfit_outputs" / \
                     f"{station}_{distname}_{model}_{txt}censoring_parameters.txt"
