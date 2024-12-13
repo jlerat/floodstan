@@ -1,30 +1,24 @@
-import math, re
+import re
+import math
 import numpy as np
-import pandas as pd
 
 from scipy.stats import genextreme, pearson3, gumbel_r
 from scipy.stats import gamma as gamma_dist
-from scipy.stats import lognorm, norm, genpareto, genlogistic
-from scipy.stats import multivariate_normal as mvn
-from scipy.stats import percentileofscore, skew
-from scipy.optimize import minimize, brentq
+from scipy.stats import lognorm, norm, genpareto
+from scipy.optimize import brentq
 from scipy.special import gamma, gammaln
-
-from tqdm import tqdm
-
-from hydrodiy.data.containers import Vector
 
 # Distribution names
 MARGINAL_NAMES = {
-    "Gumbel": 1, \
-    "LogNormal": 2,\
-    "GEV": 3, \
-    "LogPearson3": 4, \
-    "Normal": 5, \
-    "GeneralizedPareto": 6, \
-    "GeneralizedLogistic": 7, \
+    "Gumbel": 1,
+    "LogNormal": 2,
+    "GEV": 3,
+    "LogPearson3": 4,
+    "Normal": 5,
+    "GeneralizedPareto": 6,
+    "GeneralizedLogistic": 7,
     "Gamma": 8
-}
+    }
 
 EULER_CONSTANT = 0.577215664901532
 
@@ -44,35 +38,35 @@ def _prepare(data):
 
     data[np.isnan(data)] = -2e100
     data_sorted = np.sort(data, axis=0)
-    data_sorted[data_sorted<-1e100] = np.nan
+    data_sorted[data_sorted < -1e100] = np.nan
     nval = (~np.isnan(data_sorted)).sum()
 
     errmsg = f"Expected length of valid data>=4, got {nval}."
-    assert nval>=4, errmsg
+    assert nval >= 4, errmsg
     return data_sorted, nval
 
 
 def _comb(n, i):
     """ Function much faster than scipy.comb """
-    if i>n:
+    if i > n:
         return 0
-    elif i==0:
+    elif i == 0:
         return 1
-    elif i==1:
+    elif i == 1:
         return n
-    elif i==2:
+    elif i == 2:
         return n*(n-1)/2
-    elif i==3:
+    elif i == 3:
         return n*(n-1)*(n-2)/6
-    elif i==4:
+    elif i == 4:
         return n*(n-1)*(n-2)*(n-3)/24
-    elif i==5:
+    elif i == 5:
         return n*(n-1)*(n-2)*(n-3)*(n-4)/120
-    elif i==6:
+    elif i == 6:
         return n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)/720
-    elif i==7:
+    elif i == 7:
         return n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)*(n-6)/5040
-    elif i==8:
+    elif i == 8:
         return n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)*(n-6)*(n-7)/40320
 
 
@@ -124,8 +118,8 @@ def lh_moments(data, eta=0, compute_lam4=True):
         v3 += (Cim1e2-2*Cim1e1*Cnmi1+Cim1e0*Cnmi2)*d
 
         if compute_lam4:
-            v4 += (_comb(i-1, eta+3)-3*Cim1e2*Cnmi1\
-                            +3*Cim1e1*Cnmi2-Cim1e0*Cnmi3)*d
+            v4 += (_comb(i - 1, eta + 3) - 3 * Cim1e2 * Cnmi1
+                   + 3 * Cim1e1 * Cnmi2 - Cim1e0 * Cnmi3) * d
 
     lam1 = v1/_comb(nval, eta+1)
     lam2 = v2/_comb(nval, eta+2)/2
@@ -170,7 +164,8 @@ class FloodFreqDistribution():
         self.name = name
         self._locn = np.nan
         self._logscale = np.nan
-        self._shape1 = 0. # Assume 0 shape for distribution that do not have shape
+        # Assume 0 shape for distribution that do not have shape
+        self._shape1 = 0.
 
     def __str__(self):
         txt = f"{self.name} flood frequency distribution:\n"
@@ -184,15 +179,14 @@ class FloodFreqDistribution():
             txt += "\n"
         return txt
 
-
     def __setitem__(self, key, value):
-        if not key in PARAMETERS:
+        if key not in PARAMETERS:
             txt = "/".join(PARAMETERS)
             raise ValueError(f"Expected {key} in {txt}.")
         setattr(self, key, value)
 
     def __getitem__(self, key):
-        if not key in PARAMETERS:
+        if key not in PARAMETERS:
             txt = "/".join(list(self.params.names))
             raise ValueError(f"Expected {key} in {txt}.")
         return getattr(self, key)
@@ -224,9 +218,12 @@ class FloodFreqDistribution():
     @shape1.setter
     def shape1(self, value):
         value = float(value)
-        assert value>=SHAPE1_LOWER and value<=SHAPE1_UPPER, \
-                f"Expected shape in ]{SHAPE1_LOWER}, {SHAPE1_UPPER}[, "+\
-                f"got {value}."
+
+        if value < SHAPE1_LOWER or value > SHAPE1_UPPER:
+            errmess = f"Expected shape in ]{SHAPE1_LOWER}, "\
+                      + f"{SHAPE1_UPPER}[, got {value}."
+            raise ValueError(errmess)
+
         self._shape1 = value
 
     @property
@@ -237,10 +234,11 @@ class FloodFreqDistribution():
     def in_support(self, x):
         x0, x1 = self.support
         ok = np.ones_like(x).astype(bool)
-        return np.where((x>=x0)&(x<=x1), ok, ~ok)
+        return np.where((x >= x0) & (x <= x1), ok, ~ok)
 
     def get_scipy_params(self):
-        errmsg = f"Method get_scipy_params not implemented for class {self.name}."
+        errmsg = "Method get_scipy_params not implemented"\
+                 + f" for class {self.name}."
         raise NotImplementedError(errmsg)
 
     def fit_lh_moments(self, data, eta=0):
@@ -304,12 +302,11 @@ class Normal(FloodFreqDistribution):
 
     def fit_lh_moments(self, data, eta=0):
         errmsg = f"Expected eta=0, got {eta}."
-        assert eta==0, errmsg
+        assert eta == 0, errmsg
         lam1, lam2, _, _ = lh_moments(data, eta, compute_lam4=False)
         sqpi = math.sqrt(math.pi)
         self.locn = lam1
         self.logscale = math.log(lam2*sqpi)
-
 
 
 class GEV(FloodFreqDistribution):
@@ -321,7 +318,7 @@ class GEV(FloodFreqDistribution):
     @property
     def support(self):
         x0 = self.locn+self.scale/self.shape1
-        if self.shape1<0:
+        if self.shape1 < 0:
             return x0, np.inf
         else:
             return -np.inf, x0
@@ -357,7 +354,8 @@ class GEV(FloodFreqDistribution):
                     break
 
             assert np.all(self.in_support(data))
-        except:
+
+        except Exception:
             # Revert to moment matching of Gumbel distribution
             # See https://en.wikipedia.org/wiki/Gumbel_distribution
             alpha = data.var()*6/math.pi**2
@@ -368,7 +366,7 @@ class GEV(FloodFreqDistribution):
     def fit_lh_moments(self, data, eta=0):
         """ See Wang et al. (1997). """
         errmsg = f"Expected eta in [0, 4], got {eta}."
-        assert eta<=3 and eta>=0, errmsg
+        assert eta <= 3 and eta >= 0, errmsg
 
         # Get LH moments
         lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
@@ -376,40 +374,43 @@ class GEV(FloodFreqDistribution):
 
         # See Wang et al.(1997), Equation 26
         coefs_all = {
-            0: [0.2849, -1.8213, 0.8140, -0.2835],\
-            1: [0.4823, -2.1494, 0.7269, -0.2103],\
-            2: [0.5914, -2.3351, 0.6442, -0.1616],\
-            3: [0.6618, -2.4548, 0.5733, -0.1273],\
+            0: [0.2849, -1.8213, 0.8140, -0.2835],
+            1: [0.4823, -2.1494, 0.7269, -0.2103],
+            2: [0.5914, -2.3351, 0.6442, -0.1616],
+            3: [0.6618, -2.4548, 0.5733, -0.1273],
             4: [0.7113, -2.5383, 0.5142, -0.1027]
         }
         coefs = coefs_all[eta]
         kappa_ini = coefs[0]+coefs[1]*tau3+coefs[2]*tau3**2+coefs[3]*tau3**3
         # .. avoids large errors of interpolation
-        kappa_ini = 0.01 if abs(kappa_ini)>1 else kappa_ini
+        kappa_ini = 0.01 if abs(kappa_ini) > 1 else kappa_ini
 
         # Solve equation because kappa is outside of validity limits
         # See Wang et al (1997), Ratio between Eq. 21 and Eq. 20
-        fun = lambda k: (eta+3)/(eta+2)/3*(-(eta+4)*(eta+3)**(-k)\
-                                    +2*(eta+3)*(eta+2)**(-k)\
-                                    -(eta+2)*(eta+1)**(-k)) / \
-                                    (-(eta+2)**(-k)+(eta+1)**(-k))-tau3
+        def fun(k):
+            A = (eta+3)/(eta+2)/3
+            B = -(eta+4)*(eta+3)**(-k)
+            C = 2*(eta+3)*(eta+2)**(-k)-(eta+2)*(eta+1)**(-k)
+            D = (-(eta+2)**(-k)+(eta+1)**(-k))
+            return A*(B+C)/D-tau3
+
         # .. finds proper bounds
         deltak = 0.1
         k0 = kappa_ini-deltak
         niter = 0
-        while fun(k0)<0 and niter<10:
+        while fun(k0) < 0 and niter < 10:
             k0 -= deltak
             niter += 1
 
         k1 = kappa_ini+deltak
         niter = 0
-        while fun(k1)>0 and niter<10:
+        while fun(k1) > 0 and niter < 10:
             k1 += deltak
             niter += 1
 
         # .. solve within bounds
         f0, f1 = fun(k0), fun(k1)
-        if f0*f1<0:
+        if f0*f1 < 0:
             kappa = brentq(fun, k0, k1)
         else:
             # .. failed getting proper bounds
@@ -432,7 +433,6 @@ class GEV(FloodFreqDistribution):
         self.shape1 = kappa
         self.logscale = math.log(alpha)
         self.locn = tau
-
 
 
 class LogPearson3(FloodFreqDistribution):
@@ -458,7 +458,7 @@ class LogPearson3(FloodFreqDistribution):
 
     @property
     def support(self):
-        if self.beta<0:
+        if self.beta < 0:
             return [0, math.exp(max(-100, min(100, self.tau)))]
         else:
             return [math.exp(max(-100, min(100, self.tau))), np.inf]
@@ -481,20 +481,19 @@ class LogPearson3(FloodFreqDistribution):
 
     def ppf(self, q):
         kw = self.get_scipy_params()
-        qq = q if self.shape1>0 else 1-q
-        return np.exp(pearson3.ppf(qq, **kw))
+        return np.exp(pearson3.ppf(q, **kw))
 
     def params_guess(self, data):
         try:
             self.fit_lh_moments(data)
             assert np.all(self.in_support(data))
-        except:
+
+        except Exception:
             # Problem with gam, revert back to log norm
             self.shape1 = 0.01
-            logx = np.log(data[data>0])
+            logx = np.log(data[data > 0])
             self.locn = logx.mean()
             self.logscale = math.log((logx-self.locn).std(ddof=1))
-
 
     def rvs(self, size):
         kw = self.get_scipy_params()
@@ -503,7 +502,7 @@ class LogPearson3(FloodFreqDistribution):
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking (1990), http://lib.stat.cmu.edu/general/lmoments """
         errmsg = f"Expected eta=0, got {eta}."
-        assert eta==0, errmsg
+        assert eta == 0, errmsg
 
         # Get LH moments from log transform data
         lx = np.log(data)
@@ -517,10 +516,10 @@ class LogPearson3(FloodFreqDistribution):
 
         # Translation of routine PELPE3
         # See http://lib.stat.cmu.edu/general/lmoments, line 2866
-        C1,C2,C3 = 0.2906,  0.1882,  0.0442
-        D1,D2,D3 = 0.36067,-0.59567, 0.25361
-        D4,D5,D6 =-2.78861, 2.56096,-0.77045
-        pi3,rootpi = 9.4247780,1.7724539
+        C1, C2, C3 = 0.2906, 0.1882, 0.0442
+        D1, D2, D3 = 0.36067, -0.59567, 0.25361
+        D4, D5, D6 = -2.78861, 2.56096, -0.77045
+        pi3, rootpi = 9.4247780, 1.7724539
         SMALL = 1e-15
         # XMOM(1) -> lam1
         # XMOM(2) -> lam2
@@ -528,17 +527,16 @@ class LogPearson3(FloodFreqDistribution):
 
         T3 = np.abs(tau3)
 
-        idx1 = (lam2<=0) | (T3>=1.)
         alpha = None
-        if lam2<=0 or T3>=1:
+        if lam2 <= 0 or T3 >= 1:
             mu = 0.
             sigma = 0.
             gam = 0.
-        elif T3<=SMALL:
+        elif T3 <= SMALL:
             mu = lam1
             sigma = lam2*rootpi
             gam = 0.
-        elif T3>=1./3:
+        elif T3 >= 1./3:
             alpha = 0.
             Ti3 = 1.-T3
             alpha = Ti3*(D1+Ti3*(D2+Ti3*D3))/(1.+Ti3*(D4+Ti3*(D5+Ti3*D6)))
@@ -546,7 +544,7 @@ class LogPearson3(FloodFreqDistribution):
             Ti4 = pi3*T3*T3
             alpha = (1.+C1*Ti4)/(Ti4*(1.+Ti4*(C2+Ti4*C3)))
 
-        if not alpha is None:
+        if alpha is not None:
             rtalpha = math.sqrt(alpha)
 
             # .. check reasonable bounds
@@ -561,13 +559,12 @@ class LogPearson3(FloodFreqDistribution):
             mu = lam1
             sigma = beta*rtalpha
             gam = 2./rtalpha
-            if tau3<0:
+            if tau3 < 0:
                 gam *= -1
 
         self.shape1 = gam
         self.logscale = math.log(sigma)
         self.locn = mu
-
 
 
 class Gumbel(FloodFreqDistribution):
@@ -600,7 +597,7 @@ class Gumbel(FloodFreqDistribution):
     def fit_lh_moments(self, data, eta=0):
         """ See Wang et al. (1997). """
         errmsg = f"Expected eta in [0, 4], got {eta}."
-        assert eta<=4 and eta>=0, errmsg
+        assert eta <= 4 and eta >= 0, errmsg
 
         # Get LH moments
         lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
@@ -629,14 +626,14 @@ class Gumbel(FloodFreqDistribution):
                     break
 
             assert np.all(self.in_support(data))
-        except:
+
+        except Exception:
             # Revert to moment matching
             # See https://en.wikipedia.org/wiki/Gumbel_distribution
             alpha = data.var()*6/math.pi**2
             self.logscale = math.log(alpha)
             self.locn = data.mean()-EULER_CONSTANT*alpha
             self.shape1 = 0.01
-
 
 
 class LogNormal(FloodFreqDistribution):
@@ -668,17 +665,17 @@ class LogNormal(FloodFreqDistribution):
         return super(LogNormal, self).__getattribute__(name)
 
     def params_guess(self, data):
-        logx = np.log(data[data>0])
+        logx = np.log(data[data > 0])
         self.locn = logx.mean()
         self.logscale = math.log((logx-self.locn).std(ddof=1))
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 198. """
         errmsg = f"Expected eta=0, got {eta}."
-        assert eta==0, errmsg
+        assert eta == 0, errmsg
 
         # Get LH moments
-        lx = np.log(data[data>0])
+        lx = np.log(data[data > 0])
         lam1, lam2, _, _ = lh_moments(lx, eta, compute_lam4=False)
 
         self.locn = lam1
@@ -694,7 +691,7 @@ class GeneralizedPareto(FloodFreqDistribution):
     @property
     def support(self):
         tau, alpha, kappa = self.locn, self.scale, self.shape1
-        if kappa<0:
+        if kappa < 0:
             return tau, np.inf
         else:
             return tau, tau+alpha/kappa
@@ -724,19 +721,18 @@ class GeneralizedPareto(FloodFreqDistribution):
         smin, smax = self.support
         dmin, dmax = data.min(), data.max()
         tau, alpha = self.locn, self.scale
-        if smin>dmin:
+        if smin > dmin:
             self.locn = dmin-1e-3
 
         smin, smax = self.support
         tau, alpha, kappa = self.locn, self.scale, self.shape1
-        if smax<dmax and kappa>0:
+        if smax < dmax and kappa > 0:
             self.shape1 = alpha/(dmax-tau)*0.99
-
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 195. """
         errmsg = f"Expected eta=0, got {eta}."
-        assert eta==0, errmsg
+        assert eta == 0, errmsg
 
         # Get L moments
         lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
@@ -759,9 +755,9 @@ class GeneralizedLogistic(FloodFreqDistribution):
     def support(self):
         tau, alpha, kappa = self.locn, self.scale, self.shape1
         kt = self.kappa_transition
-        if kappa<-kt:
+        if kappa < -kt:
             return tau+alpha/kappa, np.inf
-        elif kappa>kt:
+        elif kappa > kt:
             return -np.inf, tau+alpha/kappa
         else:
             return -np.inf, np.inf
@@ -773,31 +769,37 @@ class GeneralizedLogistic(FloodFreqDistribution):
         if name in ["pdf", "cdf"]:
             kt = self.kappa_transition
             tau, alpha, kappa = self.locn, self.scale, self.shape1
+
             def fun(x):
                 z = (x-tau)/alpha
-                if abs(kappa)>kt:
+                if abs(kappa) > kt:
                     z = -1.0/kappa*np.log(1-kappa*z)
 
                 if name == "pdf":
                     return 1./alpha*np.exp(-(1-kappa)*z)/(1+np.exp(-z))**2
                 else:
                     return 1./(1+np.exp(-z))
+
             return fun
 
         elif name in ["logpdf", "logcdf"]:
             f = getattr(self, re.sub("log", "", name))
+
             def fun(x):
                 return np.log(f(x))
+
             return fun
 
         elif name == "ppf":
             kt = self.kappa_transition
             tau, alpha, kappa = self.locn, self.scale, self.shape1
+
             def fun(p):
-                if abs(kappa)>kt:
+                if abs(kappa) > kt:
                     return tau+alpha/kappa*(1-(1.0/p-1)**kappa)
                 else:
                     return tau+alpha*np.log(1.0/p-1)
+
             return fun
 
         elif name == "rvs":
@@ -814,17 +816,16 @@ class GeneralizedLogistic(FloodFreqDistribution):
         # .. Correct if lh moments is failing
         smin, smax = self.support
         dmin, dmax = data.min(), data.max()
-        tau, alpha, kappa = self.locn, self.scale, self.shape1
-        if smin>dmin:
+        tau, alpha = self.locn, self.scale
+        if smin > dmin:
             self.shape1 = alpha/(dmin-tau)*0.99
-        elif smax<dmax:
+        elif smax < dmax:
             self.shape1 = alpha/(dmax-tau)*0.99
-
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 197. """
         errmsg = f"Expected eta=0, got {eta}."
-        assert eta==0, errmsg
+        assert eta == 0, errmsg
 
         # Get L moments
         lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
@@ -852,7 +853,7 @@ class Gamma(FloodFreqDistribution):
     @locn.setter
     def locn(self, value):
         value = float(value)
-        assert value>0, f"Expected locn>0, got {value}."
+        assert value > 0, f"Expected locn > 0, got {value}."
         self._locn = value
 
     @property
@@ -879,20 +880,17 @@ class Gamma(FloodFreqDistribution):
         return super(Gamma, self).__getattribute__(name)
 
     def params_guess(self, data):
-        dok = data[~np.isnan(data)&(data>0)]
-        assert len(dok)>5, "Expected at least 5 samples valid and >0."
+        dok = data[~np.isnan(data) & (data > 0)]
+        assert len(dok) > 5, "Expected at least 5 samples valid and  > 0."
 
-        # See https://en.wikipedia.org/wiki/Gamma_distribution#Maximum_likelihood_estimation
-        #s = np.log(dok.mean())-np.mean(np.log(dok))
-        #kappa = (3-s+math.sqrt((s-3)**3+24*s))/12/s
-        #theta = dok.mean()/kappa
+        # See https://en.wikipedia.org/wiki/Gamma_distribution
+        #              #Maximum_likelihood_estimation
+        # s = np.log(dok.mean())-np.mean(np.log(dok))
+        # kappa = (3-s+math.sqrt((s-3)**3+24*s))/12/s
+        # theta = dok.mean()/kappa
 
         # Method of moments mean=alpha/beta, var=alpha/beta^2
         # locn=mean and scale=1/beta
         m, v = dok.mean(), dok.var()
         self.locn = m**2/v
         self.logscale = math.log(v/m)
-
-
-
-
