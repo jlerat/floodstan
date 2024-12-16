@@ -66,9 +66,9 @@ def test_report(allclose):
     params = smp.draws_pd()
 
     rep, _ = report.ams_report(sv.marginal, params)
-    assert rep.shape == (12, 11)
+    assert rep.shape == (12, 12)
 
     obs = {year: y[year] for year in [1973, 2021]}
     rep, _ = report.ams_report(sv.marginal, params, obs)
-    assert rep.shape == (16, 11)
+    assert rep.shape == (16, 12)
 
