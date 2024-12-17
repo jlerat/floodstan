@@ -161,14 +161,7 @@ class WheelABINone(bdist_wheel):
 
 setup(
     name = "floodstan",
-    author = "Julien Lerat",
-    author_email = "julien.lerat@csiro.au",
-    description = "Python tools to support hydrological modelling and data analysis",
-    packages=find_packages(),
-    package_dir={"": "src"},
-    # Extension marks this as platform-specific
     ext_modules=[Extension("floodstan.stan", [])],
-    # override the build and bdist commands
     cmdclass={\
         "build_ext": BuildModels, \
         "bdist_wheel": WheelABINone,\

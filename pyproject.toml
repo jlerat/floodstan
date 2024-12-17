@@ -2,5 +2,38 @@
 requires = ["setuptools", "wheel", "cmdstanpy>=1.0.7"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "floodstan"
+authors = [{name = "Julien Lerat, CSIRO Environment", email="julien.lerat@csiro.au"}]
+description = "Flood frequency analysis using Stan"
+readme = "README.md"
+license = {file = "LICENSE"}
+keywords = ["flood frequency analysis", "flood", "hydrology"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python 3",
+    "Programming Language :: C",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Hydrology"
+]    
+requires-python = ">= 3.8"
+dependencies = [
+    "numpy >= 1.20.0",
+    "scipy >= 1.0.0",
+    "pandas >= 2.0.0"
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/csiro-hydroinformatics/floodstan"
+Repository = "https://github.com/csiro-hydroinformatics/floodstan"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "floodstan.__version__"}
+
 [tool.isort]
 profile = "black"

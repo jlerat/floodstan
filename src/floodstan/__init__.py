@@ -6,6 +6,8 @@ from typing import Callable
 
 import cmdstanpy
 
+__version__ = "1.0"
+
 STAN_FILES_FOLDER = Path(__file__).parent / "stan"
 CMDSTAN_VERSION = "2.30.1"
 
