@@ -55,6 +55,8 @@ transformed parameters {
 }
 
 model {
+    // See https://mc-stan.org/docs/stan-users-guide/gaussian-processes.html#fit-gp.section
+
     // Subset of mean vector
     vector[Nvalid] mu;
     for(n in 1:Nvalid) {
@@ -67,7 +69,7 @@ model {
         K = gp_exp_quad_cov(w[ivalid], alpha, rho);
     }   
     else if(kernel==2) {
-        K = gp_exponential_cov(w, alpha, rho);
+        K = gp_exponential_cov(w[ivalid], alpha, rho);
     }
  
     real sq_sigma = square(sigma);
