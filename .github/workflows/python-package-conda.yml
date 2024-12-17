@@ -56,7 +56,7 @@ jobs:
           conda activate env_floodstan
           cd $GITHUB_WORKSPACE
           echo "--- floodstan test : located in $PWD ---"
-          pytest --ignore=src/hydrodiy --ntry=100 --cov=floodstan --cov-config=.coveragerc --junitxml=junit/test-results.xml --cov-report=xml --cov-report=html tests
+          pytest --ignore=src/hydrodiy --cov=floodstan --cov-config=.coveragerc --junitxml=junit/test-results.xml --cov-report=xml --cov-report=html tests
       
       - name: Upload pytest test results
         uses: actions/upload-artifact@v3
