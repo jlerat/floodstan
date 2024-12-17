@@ -1,0 +1,85 @@
+name: Build floodstan
+
+on: [push]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      max-parallel: 5
+    
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.10'
+     
+      - name: Add conda to system path
+        run: |
+          # $CONDA is an environment variable pointing to the root of the miniconda directory
+          echo $CONDA/bin >> $GITHUB_PATH
+      
+      - name: Create conda environment if needed
+        run: |
+           source $CONDA/etc/profile.d/conda.sh
+           conda env create -f env_floodstan.yml
+
+      - name : Install hydrodiy package in conda env 
+        run: |
+          source $CONDA/etc/profile.d/conda.sh
+          conda activate env_floodstan
+          cd $GITHUB_WORKSPACE
+          mkdir -p src
+          cd src
+          git clone https://github.com/csiro-hydroinformatics/hydrodiy.git
+          cd hydrodiy
+          echo "--- hydrodiy install : located in $PWD ---"
+          pip install -e .
+
+      - name : Install pyquasoare package in conda env 
+        run: |
+          source $CONDA/etc/profile.d/conda.sh
+          conda activate env_floodstan
+          cd $GITHUB_WORKSPACE
+          echo "--- floodstan install : located in $PWD ---"
+          pip install -e .
+
+      - name: Run tests
+        run: |
+          source $CONDA/etc/profile.d/conda.sh
+          conda activate env_floodstan
+          cd $GITHUB_WORKSPACE
+          echo "--- floodstan test : located in $PWD ---"
+          pytest --ignore=src/hydrodiy --ntry=100 --cov=floodstan --cov-config=.coveragerc --junitxml=junit/test-results.xml --cov-report=xml --cov-report=html tests
+      
+      - name: Upload pytest test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: pytest-results
+          path: junit/test-results.xml
+        
+        # Use always() to always run this step to publish test results when there are test failures
+        if: ${{ always() }}
+
+      - name: Upload pytest test log files
+        uses: actions/upload-artifact@v3
+        with:
+          name: pytest-logs
+          path: tests/*.log
+        
+        # Use always() to always run this step to publish test results when there are test failures
+        if: ${{ always() }}
+
+
+      - name: Upload to codecov
+        uses: codecov/codecov-action@v3        
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} 
+        
+       
