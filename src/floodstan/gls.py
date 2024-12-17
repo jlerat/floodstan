@@ -47,6 +47,31 @@ def prepare(x, w, y, \
             logrho_lower=-10, \
             logrho_upper=20, \
             kernel="Gaussian"):
+    """ Prepare stan data for GLS model sampling.
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Predictors. Array [NxP].
+    w : numpy.ndarray
+        Spatial coordinates. Array [Nx2].
+    y : numpy.ndarray
+        Predictand. Array [Nx1]
+    logrho_prior: list
+        Definition of normal prior (mean, std) for spatial
+        correlation parameter.
+    logalpha_prior: list
+        Definition of normal prior (mean, std) for spatial
+        correlation parameter.
+    logsigma_prior: list
+        Definition of normal prior (mean, std) for error
+        standard deviation.
+    theta_prior : numpy.ndarray
+        Definition of normal priors for each parameters.
+        Array [Px2] (mean and std for each parameter).
+    kernel : str
+        Kernel choice. Either Gaussian or Exponential.
+    """
 
     # Check inputs
     x = np.array(x).astype(np.float64)
