@@ -1,37 +1,41 @@
-import sys, re, math, json
+import sys
 from pathlib import Path
 import logging
-import numbers
-
-from datetime import datetime
-import time
 
 import numpy as np
 import pandas as pd
 
-from floodstan import marginals, discretes
+from floodstan import marginals
 
-from floodstan.copulas import COPULA_NAMES, \
-                        RHO_LOWER, RHO_UPPER
+from floodstan.copulas import COPULA_NAMES
+from floodstan.copulas import RHO_LOWER
+from floodstan.copulas import RHO_UPPER
 
-from floodstan.marginals import MARGINAL_NAMES, \
-                                    LOGSCALE_LOWER, LOGSCALE_UPPER, \
-                                    SHAPE1_LOWER, SHAPE1_UPPER
+from floodstan.marginals import MARGINAL_NAMES
+from floodstan.marginals import LOGSCALE_LOWER
+from floodstan.marginals import LOGSCALE_UPPER
+from floodstan.marginals import SHAPE1_LOWER
+from floodstan.marginals import SHAPE1_UPPER
 
-from floodstan.discretes import DISCRETE_NAMES, \
-                                    PHI_LOWER, PHI_UPPER, \
-                                    LOCN_LOWER, LOCN_UPPER, \
-                                    NEVENT_UPPER
+from floodstan.discretes import DISCRETE_NAMES
+from floodstan.discretes import PHI_LOWER
+from floodstan.discretes import PHI_UPPER
+from floodstan.discretes import LOCN_UPPER
+from floodstan.discretes import NEVENT_UPPER
 
-MARGINAL_CODES = {code:name for name, code in MARGINAL_NAMES.items()}
-COPULA_CODES = {code:name for name, code in COPULA_NAMES.items()}
-DISCRETE_CODES = {code:name for name, code in DISCRETE_NAMES.items()}
+
+MARGINAL_CODES = {code: name for name, code in MARGINAL_NAMES.items()}
+COPULA_CODES = {code: name for name, code in COPULA_NAMES.items()}
+DISCRETE_CODES = {code: name for name, code in DISCRETE_NAMES.items()}
+
+# Subset of copula currently supported in the stan model
+COPULA_NAMES_STAN = ["Gaussian", "Clayton", "Gumbel"]
 
 # Tight prior on shape parameter
 SHAPE1_PRIOR = [0, 1]
 
 # Prior on copula parameter
-RHO_PRIOR = [0.8, 1]
+RHO_PRIOR = [0.7, 1]
 
 # Prior on discrete parameters
 DISCRETE_LOCN_PRIOR = [1, 10]
@@ -43,13 +47,15 @@ CENSOR_DEFAULT = -1e10
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
 LOGGER_DATE_FORMAT = "%y-%m-%d %H:%M"
 
-def get_logger(level, flog=None, stan_logger=True):
+
+def get_logger(level="INFO", flog=None, stan_logger=True):
     """ Get logger object.
 
     Parameters
     ----------
     level : str
-        Logger level. See https://docs.python.org/3/howto/logging.html#logging-levels
+        Logger level. See
+        https://docs.python.org/3/howto/logging.html#logging-levels
     flog : str or Path
         Path to log file
     stan_logger : bool
@@ -63,7 +69,7 @@ def get_logger(level, flog=None, stan_logger=True):
         LOGGER = logging.getLogger(Path(__file__).resolve().stem)
 
     # Set logging level
-    if not level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
+    if level not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
         raise ValueError(f"{level} not a valid level")
 
     LOGGER.setLevel(getattr(logging, level))
@@ -85,14 +91,23 @@ def get_logger(level, flog=None, stan_logger=True):
     return LOGGER
 
 
+def format_prior(values):
+    values = np.array(values).astype(float)
+    if values.shape != (2, ):
+        errmess = f"Expected an array of shape (2, ), got {values.shape}."
+        raise ValueError(errmess)
+    return values
+
 
 class StanSamplingVariable():
-    def __init__(self, data=None, marginal_name=None, \
-                        censor=CENSOR_DEFAULT, \
-                        name="y", \
-                        tight_shape_prior=True):
+    def __init__(self,
+                 data=None,
+                 marginal_name=None,
+                 censor=CENSOR_DEFAULT,
+                 name="y",
+                 tight_shape_prior=True):
         self.name = str(name)
-        assert len(self.name)==1, "Expected one character for name."
+        assert len(self.name) == 1, "Expected one character for name."
         self._N = 0
         self._data = None
         self._marginal_code = None
@@ -106,9 +121,12 @@ class StanSamplingVariable():
         self.tight_shape_prior = bool(tight_shape_prior)
 
         # Set if the 3 inputs are set
-        if not data is None and not marginal_name is None\
-                        and not censor is None:
-            self.set(data, marginal_name, censor)
+        if data is not None and marginal_name is not None\
+                and censor is not None:
+            self.set_marginal(marginal_name)
+            self.set_data(data, censor)
+            self.set_initial_parameters()
+            self.set_priors()
 
     @property
     def N(self):
@@ -116,8 +134,11 @@ class StanSamplingVariable():
 
     @property
     def initial_parameters(self):
-        assert len(self._initial_parameters)>0, \
-                f"Variable {self.name}: Initial parameters have not been set."
+        if len(self._initial_parameters) == 0:
+            errmess = f"Variable {self.name}: "\
+                      + "Initial parameters have not been set."
+            raise ValueError(errmess)
+
         return self._initial_parameters
 
     @property
@@ -155,75 +176,113 @@ class StanSamplingVariable():
             raise ValueError(errmess)
         return self._data
 
-    def set(self, data, marginal_name, censor):
-        assert marginal_name in MARGINAL_NAMES, f"Cannot find marginal {marginal_name}."
+    @property
+    def locn_prior(self):
+        if self._locn_prior is None:
+            errmess = "locn_prior is not set."
+            raise ValueError(errmess)
+        return self._locn_prior
+
+    @locn_prior.setter
+    def locn_prior(self, values):
+        values = format_prior(values)
+        self._locn_prior = values
+        self._initial_parameters["locn"] = values[0]
+
+    @property
+    def logscale_prior(self):
+        if self._logscale_prior is None:
+            errmess = "logscale_prior is not set."
+            raise ValueError(errmess)
+        return self._logscale_prior
+
+    @logscale_prior.setter
+    def logscale_prior(self, values):
+        values = format_prior(values)
+        self._logscale_prior = values
+        self._initial_parameters["logscale"] = values[0]
+
+    @property
+    def shape1_prior(self):
+        if self._shape1_prior is None:
+            errmess = "shape1_prior is not set."
+            raise ValueError(errmess)
+        return self._shape1_prior
+
+    @shape1_prior.setter
+    def shape1_prior(self, values):
+        values = format_prior(values)
+        self._shape1_prior = values
+        self._initial_parameters["shape1"] = values[0]
+
+
+    def set_marginal(self, marginal_name):
+        if marginal_name not in MARGINAL_NAMES:
+            errmess = f"Cannot find marginal {marginal_name}."
+            raise ValueError(errmess)
+
         self._marginal_name = marginal_name
 
+    def set_data(self, data, censor):
         data = np.array(data).astype(np.float64)
-        assert data.ndim==1, "Expected data as 1d array."
-        assert (~np.isnan(data)).sum()>5, "Need more than 5 valid data points."
+
+        if data.ndim != 1:
+            errmess = "Expected data as 1d array."
+            raise ValueError(errmess)
+
+        if (~np.isnan(data)).sum() < 5:
+            errmess = "Need more than 5 valid data points."
+            raise ValueError(errmess)
+
         self._data = data
         self._N = len(data)
 
         dok = data[~np.isnan(data)]
-        assert len(dok)>0, "Expected at least one valid data value."
+        if len(dok) == 0:
+            errmess = "Expected at least one valid data value."
+            raise ValueError(errmess)
+
+        # Set indexes
+        self._is_miss = pd.isnull(data)
+        self._is_obs = data >= self.censor
+        self._is_cens = data < self.censor
+        self.i11 = np.where(self.is_obs)[0] + 1
+        self.i21 = np.where(self.is_cens)[0] + 1
+        # .. 3x3 due to stan code requirement. Only first 2 top left cells used
+        self.Ncases = np.zeros((3, 3), dtype=int)
+        self.Ncases[:2, 0] = [len(self.i11), len(self.i21)]
 
         # We set the censor close to data min to avoid potential
         # problems with computing log cdf for the censor
         censor = max(np.float64(censor), dok.min()-1e-10)
         self._censor = censor
 
-        # Set initial values
+    def set_initial_parameters(self):
         dist = marginals.factory(self.marginal_name)
         self._marginal = dist
+        dok = self.data[~np.isnan(self.data)]
         dist.params_guess(dok)
+
         # .. verify parameter is compatible
         lpdf = dist.logpdf(dok)
-        lcdf = dist.logcdf(censor)
-        errmsg = "Initial parameters incompatible with data"
-        assert not np.isnan(lpdf).any() or np.isnan(lcdf), errmsg
+        lcdf = dist.logcdf(self.censor)
+        if np.isnan(lpdf).any() or np.isnan(lcdf):
+            errmess = "NaN likelihood: initial parameters incompatible"\
+                     + " with data."
+            raise ValueError(errmess)
 
         self._initial_parameters["locn"] = dist.locn
         self._initial_parameters["logscale"] = dist.logscale
         self._initial_parameters["shape1"] = dist.shape1
 
-        # Set indexes
-        self._is_miss = pd.isnull(data)
-        self._is_obs = data>=self.censor
-        self._is_cens = data<self.censor
-        self.i11 = np.where(self.is_obs)[0]+1
-        self.i21 = np.where(self.is_cens)[0]+1
-        # .. 3x3 due to stan code requirement. Only first 2 top left cells used
-        self.Ncases = np.zeros((3, 3), dtype=int)
-        self.Ncases[:2, 0] = [len(self.i11), len(self.i21)]
-
-
-    def to_dict(self):
-        """ Export stan data to be used by stan program """
-        vn = self.name
-        dd = {
-            f"{vn}marginal": self.marginal_code, \
-            "N": self.N, \
-            vn: self.data, \
-            f"{vn}censor": self.censor, \
-            "logscale_lower": LOGSCALE_LOWER, \
-            "logscale_upper": LOGSCALE_UPPER, \
-            "shape1_lower": SHAPE1_LOWER, \
-            "shape1_upper": SHAPE1_UPPER, \
-            "i11": self.i11, \
-            "i21": self.i21, \
-            "Ncases": self.Ncases
-        }
-        for k, v in self.initial_parameters.items():
-            dd[f"{vn}{k}"] = v
-
+    def set_priors(self):
         start = self.initial_parameters
         locn_start = start["locn"]
-        dd[f"{vn}locn_prior"] = [locn_start, 10*abs(locn_start)]
+        self._locn_prior = [locn_start, 10*abs(locn_start)]
 
         logscale_start = start["logscale"]
         dscale = (LOGSCALE_UPPER-LOGSCALE_LOWER)/2
-        dd[f"{vn}logscale_prior"] = [logscale_start, dscale]
+        self._logscale_prior = [logscale_start, dscale]
 
         # defines prior depending if it's tight or not
         if self.tight_shape_prior:
@@ -232,24 +291,52 @@ class StanSamplingVariable():
             shape1_prior_loc = start["shape1"]
             shape1_prior_sig = marginals.SHAPE1_UPPER-marginals.SHAPE1_LOWER
 
-        dd[f"{vn}shape1_prior"] = [shape1_prior_loc, shape1_prior_sig]
+        self._shape1_prior = [shape1_prior_loc, shape1_prior_sig]
+
+    def to_dict(self):
+        """ Export stan data to be used by stan program """
+        vn = self.name
+        dd = {
+            f"{vn}marginal": self.marginal_code,
+            "N": self.N,
+            vn: self.data,
+            f"{vn}censor": self.censor,
+            f"{vn}locn_prior": self.locn_prior,
+            f"{vn}logscale_prior": self.logscale_prior,
+            f"{vn}shape1_prior": self.shape1_prior,
+            "logscale_lower": LOGSCALE_LOWER,
+            "logscale_upper": LOGSCALE_UPPER,
+            "shape1_lower": SHAPE1_LOWER,
+            "shape1_upper": SHAPE1_UPPER,
+            "i11": self.i11,
+            "i21": self.i21,
+            "Ncases": self.Ncases
+            }
 
         return dd
-
 
 
 class StanSamplingDataset():
     def __init__(self, stan_variables, copula_name, names=["y", "z"]):
         # Set stan variables
-        assert len(stan_variables)==2, "Only bivariate case accepted."
+        if len(stan_variables) != 2:
+            errmess = "Only bivariate case accepted."
+            raise ValueError(errmess)
+
         # .. changing names to y and z (Stan code requirement)
         stan_variables[0].name = names[0]
         stan_variables[1].name = names[1]
-        assert len(set([sv.N for sv in stan_variables]))==1, "Differing data size"
+        if len(set([sv.N for sv in stan_variables])) != 1:
+            errmess = "Differing data size"
+            raise ValueError(errmess)
+
         self._stan_variables = stan_variables
 
         # Set copula
-        assert copula_name in COPULA_NAMES, f"Cannot find copula {copula_name}."
+        if copula_name not in COPULA_NAMES_STAN:
+            errmess = f"Copula {copula_name} is not supported."
+            raise ValueError(errmess)
+
         self._copula_name = copula_name
 
         # Set indexes
@@ -266,6 +353,15 @@ class StanSamplingDataset():
     @property
     def stan_variables(self):
         return self._stan_variables
+
+    @property
+    def initial_parameters(self):
+        inits = {}
+        for vs in self._stan_variables:
+            inits.update(vs.initial_parameters)
+
+        inits["rho"] = RHO_PRIOR[0]
+        return inits
 
     def set_indexes(self):
         yv = self.stan_variables[0]
@@ -291,35 +387,35 @@ class StanSamplingDataset():
         self.i13 = np.where(yobs & zmiss)[0]+1
         self.i23 = np.where(ycens & zmiss)[0]+1
         self.i33 = np.where(ymiss & zmiss)[0]+1
-        assert len(self.i33) == 0, "Expected at least one variable to be valid."
+        assert len(self.i33) == 0, \
+            "Expected at least one variable to be valid."
 
-        self.Ncases = np.array([\
-                        [len(self.i11), len(self.i12), len(self.i13)], \
-                        [len(self.i21), len(self.i22), len(self.i23)], \
+        self.Ncases = np.array([
+                        [len(self.i11), len(self.i12), len(self.i13)],
+                        [len(self.i21), len(self.i22), len(self.i23)],
                         [len(self.i31), len(self.i32), len(self.i33)]
-                    ])
+                        ])
         assert N == np.sum(self.Ncases)
 
     def to_dict(self):
         dd = self.stan_variables[0].to_dict()
         dd.update(self.stan_variables[1].to_dict())
         dd.update({
-            "copula": self.copula_code, \
-            "rho_lower": RHO_LOWER, \
-            "rho_upper": RHO_UPPER, \
-            "rho_prior": RHO_PRIOR, \
-            "Ncases": self.Ncases, \
-            "i11": self.i11, \
-            "i21": self.i21, \
-            "i31": self.i31, \
-            "i12": self.i12, \
-            "i22": self.i22, \
-            "i32": self.i32, \
-            "i13": self.i13, \
+            "copula": self.copula_code,
+            "rho_lower": RHO_LOWER,
+            "rho_upper": RHO_UPPER,
+            "rho_prior": RHO_PRIOR,
+            "Ncases": self.Ncases,
+            "i11": self.i11,
+            "i21": self.i21,
+            "i31": self.i31,
+            "i12": self.i12,
+            "i22": self.i22,
+            "i32": self.i32,
+            "i13": self.i13,
             "i23": self.i23
-        })
+            })
         return dd
-
 
 
 class StanDiscreteVariable():
@@ -332,7 +428,7 @@ class StanDiscreteVariable():
         self._initial_parameters = {}
 
         # Set if the 2 inputs are set
-        if not data is None and not discrete_name is None:
+        if data is not None and discrete_name is not None:
             self.set(data, discrete_name)
 
     @property
@@ -341,8 +437,11 @@ class StanDiscreteVariable():
 
     @property
     def initial_parameters(self):
-        assert len(self._initial_parameters)>0, \
-                f"Variable {self.name}: Initial parameters have not been set."
+        if len(self._initial_parameters) == 0:
+            errmess = f"Variable {self.name}: "\
+                      + "Initial parameters have not been set."
+            raise ValueError(errmess)
+
         return self._initial_parameters
 
     @property
@@ -361,15 +460,26 @@ class StanDiscreteVariable():
         return self._data
 
     def set(self, data, discrete_name):
-        assert discrete_name in DISCRETE_NAMES, f"Cannot find discrete {discrete_name}."
+        if discrete_name not in DISCRETE_NAMES:
+            errmess = f"Cannot find discrete {discrete_name}."
+            raise ValueError(errmess)
+
         self._discrete_name = discrete_name
 
         data = np.array(data).astype(np.int64)
-        assert data.ndim==1, "Expected data as 1d array."
-        assert np.all(data>=0), "Need all data to be >=0."
+        if data.ndim != 1:
+            errmess = "Expected data as 1d array."
+            raise ValueError(errmess)
 
-        nmax = 1 if discrete_name=="Bernoulli" else NEVENT_UPPER
-        assert np.all(data<=nmax), f"Need all data to be <={nmax}."
+        if np.any(data < 0):
+            errmess = "Need all data to be >=0."
+            raise ValueError(errmess)
+
+        nmax = 1 if discrete_name == "Bernoulli" else NEVENT_UPPER
+        if np.any(data > nmax):
+            errmess = f"Need all data to be <={nmax}."
+            raise ValueError(errmess)
+
         self._data = data
         self._N = len(data)
 
@@ -382,21 +492,18 @@ class StanDiscreteVariable():
         vn = self.name
         isbern = self.discrete_name == "Bernoulli"
         dd = {
-            f"{vn}disc": self.discrete_code, \
-            "N": self.N, \
-            vn: self.data, \
-            "locn_upper": 1 if isbern else LOCN_UPPER, \
-            "phi_lower": PHI_LOWER, \
-            "phi_upper": PHI_UPPER, \
-            "nevent_upper": 1 if isbern else NEVENT_UPPER, \
-            f"{vn}locn_prior": [0.5, 3] if isbern else DISCRETE_LOCN_PRIOR, \
+            f"{vn}disc": self.discrete_code,
+            "N": self.N,
+            vn: self.data,
+            "locn_upper": 1 if isbern else LOCN_UPPER,
+            "phi_lower": PHI_LOWER,
+            "phi_upper": PHI_UPPER,
+            "nevent_upper": 1 if isbern else NEVENT_UPPER,
+            f"{vn}locn_prior": [0.5, 3] if isbern else DISCRETE_LOCN_PRIOR,
             f"{vn}phi_prior": DISCRETE_PHI_PRIOR
+            }
 
-        }
         for k, v in self.initial_parameters.items():
             dd[f"{vn}{k}"] = v
 
         return dd
-
-
-

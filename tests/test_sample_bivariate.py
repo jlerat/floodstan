@@ -20,16 +20,73 @@ from hydrodiy.plot import putils
 import importlib
 from tqdm import tqdm
 
-from floodstan import marginals, sample, copulas
+from floodstan import report, sample
 from floodstan import bivariate_censored_sampling
 
-from test_sample_univariate import get_stationids, get_ams, TQDM_DISABLE
-
-from tqdm import tqdm
+from test_sample_univariate import get_stationids, get_ams
 
 SEED = 5446
 
 FTESTS = Path(__file__).resolve().parent
+
+STATIONIDS = get_stationids()
+
+@pytest.mark.parametrize("copula", sample.COPULA_NAMES_STAN)
+@pytest.mark.parametrize("stationid", STATIONIDS)
+@pytest.mark.parametrize("censoring", [True, False])
+def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose):
+    if stationid != "204900" or copula != "Gaussian" or censoring:
+        pytest.skip()
+
+    LOGGER = sample.get_logger(stan_logger=True)
+
+    y = get_ams(stationid)
+    sids = STATIONIDS.copy()
+    sids.remove(stationid)
+    stationid2 = np.random.choice(sids)
+    z = get_ams(stationid2)
+    N = len(y)
+
+    z.iloc[-2] = np.nan # to add a missing data in z
+    df = pd.DataFrame({"y": y, "z": z}).sort_index()
+    y, z = df.y, df.z
+
+    censor = y.median() if censoring else -10
+    yv = sample.StanSamplingVariable(y, "GEV", censor)
+    censor = z.median() if censoring else -10
+    zv = sample.StanSamplingVariable(z, "GEV", censor)
+
+    sv = sample.StanSamplingDataset([yv, zv], copula)
+    stan_data = sv.to_dict()
+    stan_inits = sv.initial_parameters
+
+    stan_nwarm = 5000
+    stan_nsamples = 1000
+    stan_nchains = 5
+    fout_stan = FTESTS / "sampling" / "bivariate" / f"{stationid}_{copula}"
+    fout_stan.mkdir(exist_ok=True, parents=True)
+    smp = bivariate_censored_sampling(data=stan_data,
+                                      chains=stan_nchains,
+                                      seed=SEED,
+                                      iter_warmup=stan_nwarm,
+                                      iter_sampling=
+                                      stan_nsamples//stan_nchains,
+                                      output_dir=fout_stan,
+                                      inits=stan_inits,
+                                      show_progress=False)
+
+    diag = report.process_stan_diagnostic(smp.diagnose())
+    params = smp.draws_pd()
+
+    crs = ["treedepth", "ebfmi", "effsamplesz"]
+    for cr in crs:
+        assert diag[cr] == "satisfactory"
+
+    # Clean folder
+    for f in fout_stan.glob("bivariate_censored*"):
+        f.unlink()
+
+    fout_stan.rmdir()
 
 
 def test_bivariate_sampling(allclose):
@@ -39,7 +96,7 @@ def test_bivariate_sampling(allclose):
 
     stationids = get_stationids()
     nstations = 2
-    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    LOGGER = sample.get_logger(stan_logger=False)
 
     copula_names = sample.COPULA_NAMES
     plots = {i: n for i, n in enumerate(copula_names)}

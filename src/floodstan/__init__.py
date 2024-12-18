@@ -44,18 +44,25 @@ def load_stan_model(name: str) -> Callable:
             stan_file=STAN_FILES_FOLDER / f"{stan_name}.stan"
         )
     except ValueError:
-        warnings.warn(f"Failed to load pre-built model '{name}{suffix}', compiling")
-        model = cmdstanpy.CmdStanModel(
-            stan_file=STAN_FILES_FOLDER / f"{stan_name}.stan",
-            stanc_options={"O1": True},
-        )
+        warnmess = f"Failed to load pre-built model '{name}{suffix}', compiling"
+        warnings.warn(warnmess)
+
+        model = cmdstanpy.CmdStanModel(stan_file=STAN_FILES_FOLDER / f"{stan_name}.stan",
+                                       stanc_options={"O1": True})
         shutil.copy(
             model.exe_file,  # type: ignore
             STAN_FILES_FOLDER / f"{stan_name}{suffix}",
         )
 
     def fun(*args, **kwargs):
-        assert "data" in kwargs, "Expected data argument"
+        if "data" not in kwargs:
+            errmess = "Expected data argument"
+            raise ValueError(errmess)
+
+        if "inits" not in kwargs:
+            errmess = "Expected inits argument"
+            raise ValueError(errmess)
+
         if is_test:
             # .. specific argument to run a single iteration
             #    of the sampler.
@@ -70,14 +77,13 @@ def load_stan_model(name: str) -> Callable:
             kwargs["chains"] = kwargs.get("chains", NCHAINS_DEFAULT)
             kwargs["seed"] = kwargs.get("seed", SEED_DEFAULT)
             kwargs["iter_warmup"] = kwargs.get("iter_warmup", NWARM_DEFAULT)
-            kwargs["iter_sampling"] = kwargs.get("iter_sampling", \
-                                        NSAMPLES_DEFAULT//NCHAINS_DEFAULT)
-            # .. a bit dangerous, but so convenient
-            kwargs["inits"] = kwargs.get("inits", kwargs["data"])
-
+            kwargs["iter_sampling"] = kwargs.get("iter_sampling",
+                                                 NSAMPLES_DEFAULT//NCHAINS_DEFAULT)
         if "output_dir" in kwargs:
             fout = Path(kwargs["output_dir"])
-            assert fout.exists(), "Output directory does not exist."
+            if not fout.exists():
+                errmess = "Output directory does not exist."
+                raise ValueError(errmess)
 
         # the function returns the sample function only,
         # not the full stan model object

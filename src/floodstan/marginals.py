@@ -34,15 +34,19 @@ LOGSCALE_UPPER = 10
 
 def _prepare(data):
     data = np.array(data)
-    assert data.ndim == 1, f"Expected 1dim array, got ndim={data.ndim}."
+    if data.ndim != 1:
+        errmess = f"Expected 1dim array, got ndim={data.ndim}."
+        raise ValueError(errmess)
 
     data[np.isnan(data)] = -2e100
     data_sorted = np.sort(data, axis=0)
     data_sorted[data_sorted < -1e100] = np.nan
     nval = (~np.isnan(data_sorted)).sum()
 
-    errmsg = f"Expected length of valid data>=4, got {nval}."
-    assert nval >= 4, errmsg
+    if nval < 4:
+        errmess = f"Expected length of valid data>=4, got {nval}."
+        raise ValueError(errmess)
+
     return data_sorted, nval
 
 
