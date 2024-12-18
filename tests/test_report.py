@@ -17,9 +17,7 @@ from tqdm import tqdm
 from floodstan import marginals, sample, report
 from floodstan import univariate_censored_sampling
 
-from test_sample_univariate import get_stationids, get_ams, TQDM_DISABLE
-
-from tqdm import tqdm
+from test_sample_univariate import get_stationids, get_ams
 
 SEED = 5446
 

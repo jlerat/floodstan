@@ -33,12 +33,12 @@ STATIONIDS = get_stationids()
 
 @pytest.mark.parametrize("copula", sample.COPULA_NAMES_STAN)
 @pytest.mark.parametrize("stationid", STATIONIDS)
-@pytest.mark.parametrize("censoring", [True, False])
+@pytest.mark.parametrize("censoring", [False, True])
 def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose):
-    if stationid != "204900" or copula != "Gaussian" or censoring:
+    if stationid != "204031" or copula != "Gaussian" or censoring:
         pytest.skip()
 
-    LOGGER = sample.get_logger(stan_logger=True)
+    LOGGER = sample.get_logger(stan_logger=False)
 
     y = get_ams(stationid)
     sids = STATIONIDS.copy()

@@ -55,6 +55,8 @@ def load_stan_model(name: str) -> Callable:
         )
 
     def fun(*args, **kwargs):
+        kwargs["show_progress"] = kwargs.get("show_progress", False)
+
         if "data" not in kwargs:
             errmess = "Expected data argument"
             raise ValueError(errmess)
