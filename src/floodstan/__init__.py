@@ -59,7 +59,7 @@ def load_stan_model(name: str) -> Callable:
             errmess = "Expected data argument"
             raise ValueError(errmess)
 
-        if "inits" not in kwargs:
+        if "inits" not in kwargs and not is_test:
             errmess = "Expected inits argument"
             raise ValueError(errmess)
 
@@ -79,6 +79,7 @@ def load_stan_model(name: str) -> Callable:
             kwargs["iter_warmup"] = kwargs.get("iter_warmup", NWARM_DEFAULT)
             kwargs["iter_sampling"] = kwargs.get("iter_sampling",
                                                  NSAMPLES_DEFAULT//NCHAINS_DEFAULT)
+
         if "output_dir" in kwargs:
             fout = Path(kwargs["output_dir"])
             if not fout.exists():
