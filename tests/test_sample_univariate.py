@@ -53,7 +53,7 @@ def get_info():
     fs = FTESTS / "data" / "stations.csv"
     df = pd.read_csv(fs, skiprows=17)
 
-    df.columns = [re.sub(" |,", "_", re.sub(" \(.*", "", cn)) \
+    df.columns = [re.sub(" |,", "_", re.sub(" \\(.*", "", cn)) \
                             for cn in df.columns]
     df.loc[:, "Station_ID"] = df.Station_ID.astype(str)
     df = df.set_index("Station_ID")
