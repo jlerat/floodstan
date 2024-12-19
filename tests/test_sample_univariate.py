@@ -70,37 +70,36 @@ def test_stan_sampling_variable(allclose):
     sv = sample.StanSamplingVariable()
     censor = y.median()
 
-    msg = "Data is not set."
+    msg = "Data has not been set."
     with pytest.raises(ValueError, match=msg):
         d = sv.data
 
     msg = "Cannot find"
-    with pytest.raises(AssertionError, match=msg):
-        sv.set(y, "bidule", 1)
+    with pytest.raises(ValueError, match=msg):
+        sv.set_marginal("bidule")
 
     msg = "Expected data"
-    with pytest.raises(AssertionError, match=msg):
-        sv.set(y.values[:, None], "GEV", censor)
+    with pytest.raises(ValueError, match=msg):
+        sv.set_data(y.values[:, None], censor)
 
-    sv.set(y, "GEV", censor)
+    sv = sample.StanSamplingVariable(y, "GEV", censor)
     assert allclose(sv.censor, censor)
-
-    sv.set(y, "GEV", 1.)
     assert isinstance(sv.marginal, marginals.FloodFreqDistribution)
-    assert allclose(sv.censor, max(y.min(), 1.))
     assert allclose(sv.data, y)
     assert sv.N == len(y)
     assert sv.marginal_code == 3
     assert sv.marginal_name == "GEV"
-    assert allclose(sv.Ncases, [[55, 0, 0], [0, 0, 0], [0, 0, 0]])
-    assert allclose(sv.i11, np.arange(sv.N)+1)
+    nhigh, nlow = (y>=censor).sum(), (y<censor).sum()
+    assert allclose(sv.Ncases, [[nhigh, 0, 0], [nlow, 0, 0], [0, 0, 0]])
+
+    i11 = np.where(y>=censor)[0]+1
+    assert allclose(sv.i11, i11)
 
     dd = sv.to_dict()
-    keys = ["ymarginal", "y", \
-                "ycensor", "ylocn", \
-                "ylogscale", "yshape1", \
-                "ylocn_prior", "ylogscale_prior", \
-                "yshape1_prior"]
+    keys = ["ymarginal", "y",
+            "ycensor",
+            "ylocn_prior", "ylogscale_prior",
+            "yshape1_prior"]
     for key in keys:
         assert key in dd
 
@@ -108,9 +107,9 @@ def test_stan_sampling_variable(allclose):
 
     # Rapid setting
     sv = sample.StanSamplingVariable(y)
-    msg = "Data is not set."
+    msg = "Initial parameters"
     with pytest.raises(ValueError, match=msg):
-        d = sv.data
+        ip = sv.initial_parameters
 
     sv = sample.StanSamplingVariable(y, "GEV")
     d = sv.data
@@ -132,11 +131,8 @@ def test_stan_sampling_dataset(allclose):
     assert allclose(dset.Ncases, [[38, 3, 1], [6, 7, 0], [9, 1, 0]])
 
     dd = dset.to_dict()
-    keys = ["marginal", \
-                "censor", "locn", \
-                "logscale", "shape1", \
-                "locn_prior", "logscale_prior", \
-                "shape1_prior"]
+    keys = ["marginal", "censor", "locn_prior",
+            "logscale_prior", "shape1_prior"]
     for name, key in prod(["y", "z"], keys):
         assert f"{name}{key}" in dd
 

@@ -123,11 +123,17 @@ class StanSamplingVariable():
         self._is_cens = None
         self.tight_shape_prior = bool(tight_shape_prior)
 
-        # Set if the 3 inputs are set
-        if data is not None and marginal_name is not None\
-                and censor is not None:
-            self.set_marginal(marginal_name)
+        data_set = False
+        if data is not None and censor is not None:
             self.set_data(data, censor)
+            data_set = True
+
+        marginal_set = False
+        if marginal_name is not None:
+            self.set_marginal(marginal_name)
+            marginal_set = True
+
+        if data_set and marginal_set:
             self.set_initial_parameters()
             self.set_priors()
 
@@ -138,14 +144,16 @@ class StanSamplingVariable():
     @property
     def initial_parameters(self):
         if len(self._initial_parameters) == 0:
-            errmess = f"Variable {self.name}: "\
-                      + "Initial parameters have not been set."
+            errmess = "Initial parameters have not been set."
             raise ValueError(errmess)
 
         return self._initial_parameters
 
     @property
     def marginal(self):
+        if self._marginal is None:
+            errmess = "Marginal has not been set."
+            raise ValueError(errmess)
         return self._marginal
 
     @property
@@ -175,14 +183,14 @@ class StanSamplingVariable():
     @property
     def data(self):
         if self._data is None:
-            errmess = "Data is not set."
+            errmess = "Data has not been set."
             raise ValueError(errmess)
         return self._data
 
     @property
     def locn_prior(self):
         if self._locn_prior is None:
-            errmess = "locn_prior is not set."
+            errmess = "locn_prior has not been set."
             raise ValueError(errmess)
         return self._locn_prior
 
@@ -195,7 +203,7 @@ class StanSamplingVariable():
     @property
     def logscale_prior(self):
         if self._logscale_prior is None:
-            errmess = "logscale_prior is not set."
+            errmess = "logscale_prior has not been set."
             raise ValueError(errmess)
         return self._logscale_prior
 
@@ -208,7 +216,7 @@ class StanSamplingVariable():
     @property
     def shape1_prior(self):
         if self._shape1_prior is None:
-            errmess = "shape1_prior is not set."
+            errmess = "shape1_prior has not been set."
             raise ValueError(errmess)
         return self._shape1_prior
 
@@ -218,13 +226,15 @@ class StanSamplingVariable():
         self._shape1_prior = values
         self._initial_parameters["shape1"] = values[0]
 
-
     def set_marginal(self, marginal_name):
         if marginal_name not in MARGINAL_NAMES:
             errmess = f"Cannot find marginal {marginal_name}."
             raise ValueError(errmess)
 
         self._marginal_name = marginal_name
+
+        dist = marginals.factory(self.marginal_name)
+        self._marginal = dist
 
     def set_data(self, data, censor):
         data = np.array(data).astype(np.float64)
@@ -261,9 +271,8 @@ class StanSamplingVariable():
         self._censor = censor
 
     def set_initial_parameters(self):
-        dist = marginals.factory(self.marginal_name)
-        self._marginal = dist
         dok = self.data[~np.isnan(self.data)]
+        dist = self.marginal
         dist.params_guess(dok)
 
         # .. verify parameter is compatible
@@ -461,7 +470,7 @@ class StanDiscreteVariable():
     @property
     def data(self):
         if self._data is None:
-            errmess = "Data is not set."
+            errmess = "Data has not been set."
             raise ValueError(errmess)
         return self._data
 
