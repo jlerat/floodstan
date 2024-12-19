@@ -107,7 +107,10 @@ class StanSamplingVariable():
                  name="y",
                  tight_shape_prior=True):
         self.name = str(name)
-        assert len(self.name) == 1, "Expected one character for name."
+        if len(self.name) != 1:
+            errmess = "Expected one character for name."
+            raise ValueError(errmess)
+
         self._N = 0
         self._data = None
         self._marginal_code = None
@@ -387,15 +390,18 @@ class StanSamplingDataset():
         self.i13 = np.where(yobs & zmiss)[0]+1
         self.i23 = np.where(ycens & zmiss)[0]+1
         self.i33 = np.where(ymiss & zmiss)[0]+1
-        assert len(self.i33) == 0, \
-            "Expected at least one variable to be valid."
+        if len(self.i33)>0:
+            errmess = "Expected at least one variable to be valid."
+            raise ValueError(errmess)
 
         self.Ncases = np.array([
                         [len(self.i11), len(self.i12), len(self.i13)],
                         [len(self.i21), len(self.i22), len(self.i23)],
                         [len(self.i31), len(self.i32), len(self.i33)]
                         ])
-        assert N == np.sum(self.Ncases)
+        if N != np.sum(self.Ncases):
+            errmess = f"Expected total of Ncases to be {N},"\
+                      + f" got {np.sum(self.Ncases)}."
 
     def to_dict(self):
         dd = self.stan_variables[0].to_dict()
