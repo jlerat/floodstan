@@ -42,7 +42,7 @@ jobs:
           echo "--- hydrodiy install : located in $PWD ---"
           pip install -e .
 
-      - name : Install pyquasoare package in conda env 
+      - name : Install floodstan package in conda env 
         run: |
           source $CONDA/etc/profile.d/conda.sh
           conda activate env_floodstan
