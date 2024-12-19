@@ -10,10 +10,10 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.distance import pdist, squareform
 
-KERNEL_CODES = {\
-                "Gaussian": 1, \
-                "Exponential": 2
-            }
+KERNEL_CODES = {
+    "Gaussian": 1,
+    "Exponential": 2
+    }
 KERNEL_CODES_INV = {code:name for name, code in KERNEL_CODES.items()}
 
 
@@ -39,13 +39,13 @@ def kernel_covariance(w, rho, alpha, sigma, kernel):
     return alpha*alpha*K+sigma**2*np.eye(N)
 
 
-def prepare(x, w, y, \
-            logrho_prior, \
-            logalpha_prior, \
-            logsigma_prior, \
-            theta_prior=None, \
-            logrho_lower=-10, \
-            logrho_upper=20, \
+def prepare(x, w, y,
+            logrho_prior,
+            logalpha_prior,
+            logsigma_prior,
+            theta_prior=None,
+            logrho_lower=-10,
+            logrho_upper=20,
             kernel="Gaussian"):
     """ Prepare stan data for GLS model sampling.
 
@@ -98,23 +98,31 @@ def prepare(x, w, y, \
 
     # Create data dict
     stan_data = {
-        "N": N, \
-        "P": P, \
-        "Nvalid": Nvalid, \
-        "x": x, \
-        "w": w, \
-        "y": y, \
+        "N": N,
+        "P": P,
+        "Nvalid": Nvalid,
+        "x": x,
+        "w": w,
+        "y": y,
         "ivalid": ivalid,
-        "kernel": KERNEL_CODES[kernel], \
-        "logrho_prior": logrho_prior, \
-        "logalpha_prior": logalpha_prior, \
-        "logsigma_prior": logsigma_prior, \
-        "logrho_lower": logrho_lower, \
-        "logrho_upper": logrho_upper, \
+        "kernel": KERNEL_CODES[kernel],
+        "logrho_prior": logrho_prior,
+        "logalpha_prior": logalpha_prior,
+        "logsigma_prior": logsigma_prior,
+        "logrho_lower": logrho_lower,
+        "logrho_upper": logrho_upper,
         "theta_prior": theta_prior
     }
 
-    return stan_data
+    # Initial values set to prior mean
+    stan_inits = {
+        "logrho": logrho_prior[0],
+        "logalpha": logalpha_prior[0],
+        "logsigma": logsigma_prior[0],
+        "theta": theta_prior[0]
+    }
+
+    return stan_data, stan_inits
 
 
 def get_QR_matrices(x):

@@ -46,29 +46,33 @@ def generate_data(NX):
 
 def test_gls_prepare(allclose):
     x, w, y, N, P, NX = generate_data(20)
-    stan_data = gls.prepare(x, w, y, \
-                    logrho_prior=[0, 1], \
-                    logalpha_prior=[0, 2], \
-                    logsigma_prior=[0, 2])
+    stan_data, stan_inits = gls.prepare(x, w, y,
+                                        logrho_prior=[0, 1],
+                                        logalpha_prior=[0, 2],
+                                        logsigma_prior=[0, 2])
     assert stan_data["N"] == N
     assert stan_data["P"] == P
     assert stan_data["Nvalid"] == N
     assert stan_data["theta_prior"].shape == (2, P)
 
+    for vn in ["logsigma", "logalpha",
+               "logrho", "theta"]:
+        assert vn in stan_inits
+
     y[:3] = np.nan
-    stan_data = gls.prepare(x, w, y, \
-                    logrho_prior=[0, 1], \
-                    logalpha_prior=[0, 2], \
-                    logsigma_prior=[0, 2])
+    stan_data, _ = gls.prepare(x, w, y,
+                               logrho_prior=[0, 1],
+                               logalpha_prior=[0, 2],
+                               logsigma_prior=[0, 2])
     assert stan_data["N"] == N
     assert stan_data["Nvalid"] == N-3
     assert allclose(stan_data["ivalid"], np.arange(4, N+1))
 
     y[3] = np.inf
-    stan_data = gls.prepare(x, w, y, \
-                    logrho_prior=[0, 1], \
-                    logalpha_prior=[0, 2], \
-                    logsigma_prior=[0, 2])
+    stan_data, _ = gls.prepare(x, w, y,
+                               logrho_prior=[-1, 1],
+                               logalpha_prior=[0, 2],
+                               logsigma_prior=[0, 2])
     assert stan_data["N"] == N
     assert stan_data["Nvalid"] == N-4
     assert allclose(stan_data["ivalid"], np.arange(5, N+1))
@@ -165,16 +169,17 @@ def test_gls_generate_stan():
 
     for kernel in [1, 2]:
         stan_data = {
-            "N": N, \
-            "P": P, \
-            "x": x, \
-            "w": w, \
-            "beta": beta, \
+            "N": N,
+            "P": P,
+            "x": x,
+            "w": w,
+            "beta": beta,
             "logrho": math.log(rho),
-            "logalpha": math.log(alpha), \
-            "logsigma": math.log(sigma), \
+            "logalpha": math.log(alpha),
+            "logsigma": math.log(sigma),
             "kernel": kernel
         }
+        stan_inits = {}
 
         # Clean output folder
         fout = FTESTS / "sampling" / "gls_generate"
@@ -184,14 +189,14 @@ def test_gls_generate_stan():
 
         # Sample
         nsamples = 16
-        smp = gls_spatial_generate_sampling(\
-                    data=stan_data, \
-                    seed=SEED, \
-                    iter_warmup=10, \
-                    iter_sampling=nsamples, \
-                    adapt_engaged=True, \
-                    chains=1, \
-                    output_dir=fout)
+        smp = gls_spatial_generate_sampling(data=stan_data,
+                                            inits=stan_inits,
+                                            seed=SEED,
+                                            iter_warmup=10,
+                                            iter_sampling=nsamples,
+                                            adapt_engaged=True,
+                                            chains=1,
+                                            output_dir=fout)
         df = smp.draws_pd()
 
         y = df.filter(regex="^y", axis=1)
@@ -287,16 +292,17 @@ def test_gls_sample():
     rho = 2.
 
     stan_data = {
-        "N": N, \
-        "P": P, \
-        "x": x, \
-        "w": w, \
-        "beta": beta, \
+        "N": N,
+        "P": P,
+        "x": x,
+        "w": w,
+        "kernel": 1,
+        "beta": beta,
         "logrho": math.log(rho),
-        "logalpha": math.log(alpha), \
-        "logsigma": math.log(sigma), \
-        "kernel": 1
+        "logalpha": math.log(alpha),
+        "logsigma": math.log(sigma)
     }
+    stan_inits = {}
 
     # Clean output folder
     fout = FTESTS / "sampling" / "gls"
@@ -306,14 +312,14 @@ def test_gls_sample():
 
     # Generate
     nsamples = 1
-    smps = gls_spatial_generate_sampling(\
-                data=stan_data, \
-                seed=SEED, \
-                iter_warmup=10, \
-                iter_sampling=nsamples, \
-                adapt_engaged=True, \
-                chains=1, \
-                output_dir=fout)
+    smps = gls_spatial_generate_sampling(data=stan_data,
+                                         seed=SEED,
+                                         iter_warmup=10,
+                                         iter_sampling=nsamples,
+                                         adapt_engaged=True,
+                                         chains=1,
+                                         inits=stan_inits,
+                                         output_dir=fout)
     smp = smps.draws_pd().iloc[0]
 
     # Select points
@@ -323,14 +329,14 @@ def test_gls_sample():
     y[ipts] = np.nan
 
     # sample
-    stan_data = gls.prepare(x, w, y, \
-                    logrho_prior=[0, 3], \
-                    logalpha_prior=[0, 6], \
-                    logsigma_prior=[0, 6])
+    stan_data, stan_inits = gls.prepare(x, w, y,
+                                        logrho_prior=[0, 3],
+                                        logalpha_prior=[0, 6],
+                                        logsigma_prior=[0, 6])
 
-    smp = gls_spatial_sampling(\
-                data=stan_data, \
-                output_dir=fout)
+    smp = gls_spatial_sampling(data=stan_data,
+                               inits=stan_inits,
+                               output_dir=fout)
     df = smp.draws_pd()
 
     # Plot
@@ -360,14 +366,14 @@ def test_gls_sample():
                     "logsigma": logsigma, \
                     "kernel": 1
             }
-            smps = gls_spatial_generate_sampling(\
-                data=stan_data, \
-                seed=SEED, \
-                iter_warmup=10, \
-                iter_sampling=1, \
-                adapt_engaged=True, \
-                chains=1, \
-                output_dir=fout)
+            smps = gls_spatial_generate_sampling(data=stan_data,
+                                                 seed=SEED,
+                                                 iter_warmup=10,
+                                                 iter_sampling=1,
+                                                 adapt_engaged=True,
+                                                 inits=stan_inits,
+                                                 chains=1,
+                                                 output_dir=fout)
             smp = smps.draws_pd().iloc[0]
             ys = smp.filter(regex="^y").values.reshape((NX, NX))
             title = f"Sample {i}"

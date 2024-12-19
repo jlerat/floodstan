@@ -29,6 +29,7 @@ transformed data {
   matrix[N, P] Q_ast;
   matrix[P, P] R_ast;
   matrix[P, P] R_ast_inverse;
+
   // thin and scale the QR decomposition
   Q_ast = qr_thin_Q(x) * sqrt(N - 1);
   R_ast = qr_thin_R(x) / sqrt(N - 1);

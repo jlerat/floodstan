@@ -33,23 +33,23 @@ FTESTS = Path(__file__).resolve().parent
 def test_stan_discrete_variable(allclose):
     k = poisson(mu=2.5).rvs(size=100)
     msg = "Cannot find"
-    with pytest.raises(AssertionError, match=msg):
+    with pytest.raises(ValueError, match=msg):
         sv = sample.StanDiscreteVariable(k, "bidule")
 
     msg = "Expected data"
-    with pytest.raises(AssertionError, match=msg):
+    with pytest.raises(ValueError, match=msg):
         sv = sample.StanDiscreteVariable(k[:, None], "Poisson")
 
     kn = k.copy()
     kn[:3] = -1
     msg = "Need all data"
-    with pytest.raises(AssertionError, match=msg):
+    with pytest.raises(ValueError, match=msg):
         sv = sample.StanDiscreteVariable(kn, "Poisson")
 
     kn = k.copy()
     kn[:3] = 101
     msg = "Need all data"
-    with pytest.raises(AssertionError, match=msg):
+    with pytest.raises(ValueError, match=msg):
         sv = sample.StanDiscreteVariable(kn, "Poisson")
 
 
