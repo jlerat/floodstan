@@ -101,9 +101,12 @@ def add_aep_to_xaxis(ax, plot_type, full_line=True, \
 
 
 def plot_data(ax, data, plot_type, **kwargs):
-    assert data.ndim == 1
-    data_sorted = np.sort(data)
-    nval = len(data)
+    if data.ndim != 1:
+        errmess = "Expected 1-dimensional data."
+        raise ValueError(errmess)
+
+    data_sorted = np.sort(data[~np.isnan(data)])
+    nval = len(data_sorted)
 
     rvar = reduced_variate(nval, plot_type)
 
