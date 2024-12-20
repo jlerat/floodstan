@@ -305,8 +305,10 @@ class Normal(FloodFreqDistribution):
         self.logscale = math.log(np.std(data, ddof=1))
 
     def fit_lh_moments(self, data, eta=0):
-        errmsg = f"Expected eta=0, got {eta}."
-        assert eta == 0, errmsg
+        if eta != 0:
+            errmsg = f"Expected eta=0, got {eta}."
+            raise ValueError(errmsg)
+
         lam1, lam2, _, _ = lh_moments(data, eta, compute_lam4=False)
         sqpi = math.sqrt(math.pi)
         self.locn = lam1
@@ -369,8 +371,9 @@ class GEV(FloodFreqDistribution):
 
     def fit_lh_moments(self, data, eta=0):
         """ See Wang et al. (1997). """
-        errmsg = f"Expected eta in [0, 4], got {eta}."
-        assert eta <= 3 and eta >= 0, errmsg
+        if eta < 0 or eta > 3:
+            errmsg = f"Expected eta in [0, 3], got {eta}."
+            raise ValueError(errmsg)
 
         # Get LH moments
         lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
@@ -505,8 +508,9 @@ class LogPearson3(FloodFreqDistribution):
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking (1990), http://lib.stat.cmu.edu/general/lmoments """
-        errmsg = f"Expected eta=0, got {eta}."
-        assert eta == 0, errmsg
+        if eta > 0:
+            errmsg = f"Expected eta=0, got {eta}."
+            raise ValueError(errmes)
 
         # Get LH moments from log transform data
         lx = np.log(data)
@@ -600,8 +604,9 @@ class Gumbel(FloodFreqDistribution):
 
     def fit_lh_moments(self, data, eta=0):
         """ See Wang et al. (1997). """
-        errmsg = f"Expected eta in [0, 4], got {eta}."
-        assert eta <= 4 and eta >= 0, errmsg
+        if eta < 0 or eta > 4:
+            errmsg = f"Expected eta in [0, 4], got {eta}."
+            raise ValueError(errmsg)
 
         # Get LH moments
         lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
@@ -675,8 +680,9 @@ class LogNormal(FloodFreqDistribution):
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 198. """
-        errmsg = f"Expected eta=0, got {eta}."
-        assert eta == 0, errmsg
+        if eta != 0:
+            errmsg = f"Expected eta=0, got {eta}."
+            raise ValueError(errmsg)
 
         # Get LH moments
         lx = np.log(data[data > 0])
@@ -735,8 +741,9 @@ class GeneralizedPareto(FloodFreqDistribution):
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 195. """
-        errmsg = f"Expected eta=0, got {eta}."
-        assert eta == 0, errmsg
+        if eta != 0:
+            errmsg = f"Expected eta=0, got {eta}."
+            raise ValueError(errmsg)
 
         # Get L moments
         lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
@@ -828,8 +835,9 @@ class GeneralizedLogistic(FloodFreqDistribution):
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 197. """
-        errmsg = f"Expected eta=0, got {eta}."
-        assert eta == 0, errmsg
+        if eta != 0:
+            errmsg = f"Expected eta=0, got {eta}."
+            raise ValueError(errmsg)
 
         # Get L moments
         lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
