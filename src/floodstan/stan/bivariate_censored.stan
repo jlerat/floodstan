@@ -1,4 +1,3 @@
-
 /**
 * Bi-variate 
 *
@@ -198,8 +197,6 @@ model {
   // Case 23 : y is cens, z is missing
   // this is marginal cdf for y (analogous to case 32)
   target += Ncases[2,3]*marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
-
-  print("target = ", target());
 }
 
 

@@ -5,7 +5,7 @@ import pandas as pd
 
 from scipy.stats import norm, mvn
 from scipy.stats import multivariate_normal
-from scipy.special import lambertw
+from scipy.special import lambertw, owens_t
 
 import pytest
 
@@ -122,7 +122,7 @@ class Copula():
 class GaussianCopula(Copula):
     def __init__(self):
         super(GaussianCopula, self).__init__("Gaussian")
-        self.rho_max = 0.8
+        self._rho = np.nan
 
     def _transform(self, uv):
         uv = to2d(uv)
@@ -145,7 +145,6 @@ class GaussianCopula(Copula):
     def pdf(self, uv):
         uv, pq = self._transform(uv)
         theta = self.theta
-        #Sigma = np.array([[1, theta], [theta, 1]])
         # See Jones (2014), eq. 4.3 page 163
         s2 = (pq*pq).sum(axis=1)
         z = s2-2*theta*pq.prod(axis=1)
@@ -162,51 +161,18 @@ class GaussianCopula(Copula):
     def cdf(self, uv):
         uv, pq = self._transform(uv)
 
-        # Translation of the matlab code from Alan Genz
-        # https://www.math.wsu.edu/faculty/genz/software/matlab/bvn.m
-        # Note that this code was supposed to work for correlation < 0.925
-        # we are using it upto correlation = 0.951
-        tp = 2*math.pi
-        h = -norm.ppf(uv[:, 0][:, None])
-        k = -norm.ppf(uv[:, 1][:, None])
-        hk = h*k
-        bvn = 0
         r = self.theta
+        z1 = norm.ppf(uv[:, 0])
+        z2 = norm.ppf(uv[:, 1])
 
-        w = np.zeros(10)
-        x = np.zeros(10)
-        if abs(r) < 0.3:
-            # Gauss Legendre points and weights, n =  6
-            w[:3] = np.array([0.1713244923791705, 0.3607615730481384, 0.4679139345726904])
-            x[:3] = np.array([0.9324695142031522, 0.6612093864662647, 0.2386191860831970])
+        denom = math.sqrt((1 + r) * (1 - r))
+        a1 = (z2 / z1 - r) / denom
+        a2 = (z1 / z2 - r) / denom
+        product = z1 * z2
+        delta = (product < 0) | ((product == 0) & (z1 + z2 < 0))
 
-        elif abs(r) < 0.75:
-            # Gauss Legendre points and weights, n = 12
-            w[:3] = [.04717533638651177, 0.1069393259953183, 0.1600783285433464]
-            w[3:6] = [0.2031674267230659, 0.2334925365383547, 0.2491470458134029]
-
-            x[:3] = [0.9815606342467191, 0.9041172563704750, 0.7699026741943050]
-            x[3:6] = [0.5873179542866171, 0.3678314989981802, 0.1252334085114692]
-        else:
-            # Gauss Legendre points and weights, n = 20
-            w[:3] = [.01761400713915212, .04060142980038694, .06267204833410906]
-            w[3:6] = [.08327674157670475, 0.1019301198172404, 0.1181945319615184]
-            w[6:9] = [0.1316886384491766, 0.1420961093183821, 0.1491729864726037]
-            w[9] = 0.1527533871307259
-
-            x[:3] = [0.9931285991850949, 0.9639719272779138, 0.9122344282513259]
-            x[3:6] = [0.8391169718222188, 0.7463319064601508, 0.6360536807265150]
-            x[6:9] = [0.5108670019508271, 0.3737060887154196, 0.2277858511416451]
-            x[9] = 0.07652652113349733
-
-        w = np.concatenate([w, w])[None, :]
-        x = np.concatenate([1 - x,  1 + x])[None, :]
-
-        hs = ( h*h + k*k ) / 2
-        asr = np.arcsin(r) / 2
-        sn = np.sin(asr * x)
-        bvn = (np.exp((sn * hk - hs) / (1 - sn * sn)) * w).sum(axis=1);
-        return bvn * asr / tp + norm.cdf(-h[:, 0])*norm.cdf(-k[:, 0])
+        return 0.5 * (uv[:, 0] + uv[:, 1] - delta)\
+            - owens_t(z1, a1) - owens_t(z2, a2)
 
     def ppf_conditional(self, ucond, q):
         pcond = norm.ppf(ucond)

@@ -38,7 +38,7 @@ STATIONIDS = get_stationids()
 @pytest.mark.parametrize("stationid", STATIONIDS)
 @pytest.mark.parametrize("censoring", [False, True])
 def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose):
-    if stationid != "204031" or copula != "Gaussian" or censoring:
+    if copula != "Gaussian" or censoring:
         pytest.skip()
 
     LOGGER = sample.get_logger(stan_logger=False)
@@ -66,36 +66,11 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
     stan_nwarm = 5000
     stan_nsamples = 1000
     stan_nchains = 5
+
     fout_stan = FTESTS / "sampling" / "bivariate" / f"{stationid}_{copula}"
     fout_stan.mkdir(exist_ok=True, parents=True)
     for f in fout_stan.glob("*.*"):
         f.unlink()
-
-    #yd = yv.to_dict()
-    #for n in  ["locn", "logscale", "shape1"]:
-    #    yd[f"y{n}"] = stan_inits[f"y{n}"]
-    #ysmp = stan_test_marginal(data=yd)
-    #yF = ysmp.filter(regex="^cens")
-
-    #zv = sample.StanSamplingVariable(z, "GEV", censor)
-    #zd = zv.to_dict()
-
-    #for n in  ["locn", "logscale", "shape1"]:
-    #    zd[f"y{n}"] = stan_inits[f"y{n}"]
-    #zsmp = stan_test_marginal(data=zd)
-    #zF = zsmp.filter(regex="^cens")
-    #uv = np.column_stack([yF, zF])
-    #uv = uv[yF.notnull() & zF.notnull()]
-    #        np.all(~np.isnan(uv), axis=1)]
-
-    #c_data = {
-    #    "copula": sample.COPULA_NAMES["Gaussian"], \
-    #    "N": len(uv), \
-    #    "uv": uv, \
-    #    "rho": stan_inits["rho"]
-    #}
-    #csmp = stan_test_copula(data=c_data)
-    #lpdf = csmp.filter(regex="uncens")
 
     smp = bivariate_censored_sampling(data=stan_data,
                                       chains=stan_nchains,
