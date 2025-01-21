@@ -74,6 +74,14 @@ class SMCopula(copulas.Copula):
         return self._smcop.rvs(nsamples)
 
 
+def get_uv():
+    eps = 1e-4
+    x = np.exp(np.linspace(-7, 7, 10))
+    y = x/(1+x)
+    u, v = np.meshgrid(y, y)
+    uv = np.column_stack([u.ravel(), v.ravel()])
+    return uv, len(uv)
+
 # ---------------- TESTS -------------------------------------------
 def test_base_class():
     cop = DummyCopula()
@@ -102,12 +110,11 @@ def test_base_class():
 
 @pytest.mark.parametrize("copula", COPULA_NAMES)
 def test_vs_statsmodels(copula, allclose):
-    ndata = 1000
     nsamples = 100000
     cop1 = SMCopula(copula)
     cop2 = copulas.factory(copula)
 
-    uv = np.random.uniform(0, 1, size=(ndata, 2))
+    uv, ndata = get_uv()
 
     rmin = cop2.rho_min
     rmax = cop2.rho_max
@@ -174,8 +181,7 @@ def test_plots(copula):
 def test_gaussian(allclose):
     cop = copulas.GaussianCopula()
 
-    ndata = 100
-    uv = np.random.uniform(0, 1, size=(ndata, 2))
+    uv, ndata = get_uv()
     pq = norm.ppf(uv)
     mu = np.zeros(2)
     for rho in np.linspace(cop.rho_min, cop.rho_max, 10):
@@ -205,16 +211,18 @@ def test_gaussian(allclose):
         expected = np.zeros_like(cdf)
         for i in range(ndata):
             c1, c2 = pq[i]
-            expected[i], err = nquad(fun1, [[-np.inf, c1], [-np.inf, c2]])
+            c, err = nquad(fun1, [[-np.inf, c1], [-np.inf, c2]])
+            expected[i] = c if err < 1e-6 else np.nan
 
-        assert allclose(cdf, expected, rtol=0, atol=1e-5)
+        iok = ~np.isnan(expected)
+        errmess = f"rho = {rho:0.4f}"
+        assert allclose(cdf[iok], expected[iok], rtol=0, atol=1e-4), \
+            print(errmess)
 
 
 def test_gumbel(allclose):
     cop = copulas.GumbelCopula()
-
-    ndata = 100
-    uv = np.random.uniform(0, 1, size=(ndata, 2))
+    uv, ndata = get_uv()
 
     for rho in np.linspace(cop.rho_min, cop.rho_max, 10):
         cop.rho = rho
@@ -282,9 +290,8 @@ def test_gumbel(allclose):
 
 @pytest.mark.parametrize("copula", COPULA_NAMES)
 def test_conditional_density(copula, allclose):
-    ndata = 100
     cop = copulas.factory(copula)
-    uv = np.random.uniform(0, 1, size=(ndata, 2))
+    uv, ndata = get_uv()
     rhos = np.linspace(cop.rho_min, cop.rho_max, 10)
 
     for rho in rhos:

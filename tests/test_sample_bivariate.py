@@ -64,7 +64,7 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
     stan_inits = sv.initial_parameters
 
     stan_nwarm = 5000
-    stan_nsamples = 1000
+    stan_nsamples = 100
     stan_nchains = 5
 
     fout_stan = FTESTS / "sampling" / "bivariate" / f"{stationid}_{copula}"

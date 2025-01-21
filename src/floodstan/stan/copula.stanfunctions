@@ -8,8 +8,8 @@ real corr2param(int copula, real rho) {
 
     // Lower threshold for Gaussian copula due to 
     // limitation in cdf approximation algorithm
-    //if(copula==3)
-    //    rho_max = 0.8;
+    if(copula==3)
+        rho_max = 0.85;
 
     if(rho < rho_min)
         reject("Copula ", copula, ": rho (", rho, ") < ", rho_min);

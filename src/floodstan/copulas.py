@@ -122,6 +122,7 @@ class Copula():
 class GaussianCopula(Copula):
     def __init__(self):
         super(GaussianCopula, self).__init__("Gaussian")
+        self.rho_max = 0.85
         self._rho = np.nan
 
     def _transform(self, uv):

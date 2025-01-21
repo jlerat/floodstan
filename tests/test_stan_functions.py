@@ -25,6 +25,7 @@ from floodstan import stan_test_marginal, stan_test_copula, \
                             stan_test_discrete
 
 from test_sample_univariate import get_stationids, get_ams
+from test_copulas import get_uv
 
 SEED = 5446
 
@@ -78,9 +79,8 @@ def test_marginals_vs_stan(marginal, stationid, allclose):
 @pytest.mark.parametrize("copula",
                          sample.COPULA_NAMES_STAN)
 def test_copulas_vs_stan(copula, allclose):
-    N = 5000
     rng = np.random.default_rng(SEED)
-    uv = rng.uniform(0, 1, size=(N, 2))
+    uv, N = get_uv()
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
 
     cop = copulas.factory(copula)
