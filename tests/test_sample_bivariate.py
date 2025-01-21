@@ -38,9 +38,6 @@ STATIONIDS = get_stationids()
 @pytest.mark.parametrize("stationid", STATIONIDS)
 @pytest.mark.parametrize("censoring", [False, True])
 def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose):
-    if copula != "Gaussian" or censoring:
-        pytest.skip()
-
     LOGGER = sample.get_logger(stan_logger=False)
 
     y = get_ams(stationid)
@@ -64,7 +61,7 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
     stan_inits = sv.initial_parameters
 
     stan_nwarm = 5000
-    stan_nsamples = 100
+    stan_nsamples = 50
     stan_nchains = 5
 
     fout_stan = FTESTS / "sampling" / "bivariate" / f"{stationid}_{copula}"
