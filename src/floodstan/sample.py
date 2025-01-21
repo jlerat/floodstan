@@ -198,7 +198,6 @@ class StanSamplingVariable():
     def locn_prior(self, values):
         values = format_prior(values)
         self._locn_prior = values
-        self._initial_parameters["locn"] = values[0]
 
     @property
     def logscale_prior(self):
@@ -211,7 +210,6 @@ class StanSamplingVariable():
     def logscale_prior(self, values):
         values = format_prior(values)
         self._logscale_prior = values
-        self._initial_parameters["logscale"] = values[0]
 
     @property
     def shape1_prior(self):
@@ -224,7 +222,6 @@ class StanSamplingVariable():
     def shape1_prior(self, values):
         values = format_prior(values)
         self._shape1_prior = values
-        self._initial_parameters["shape1"] = values[0]
 
     def set_marginal(self, marginal_name):
         if marginal_name not in MARGINAL_NAMES:
