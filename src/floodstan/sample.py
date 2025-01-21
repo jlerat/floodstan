@@ -370,7 +370,10 @@ class StanSamplingDataset():
     def initial_parameters(self):
         inits = {}
         for vs in self._stan_variables:
-            inits.update(vs.initial_parameters)
+            n = vs.name
+            for pn, value in vs.initial_parameters.items():
+                ppn = f"{n}{pn}"
+                inits[ppn] = value
 
         inits["rho"] = RHO_PRIOR[0]
         return inits

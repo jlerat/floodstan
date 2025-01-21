@@ -114,6 +114,10 @@ def test_stan_sampling_variable(allclose):
     sv = sample.StanSamplingVariable(y, "GEV")
     d = sv.data
 
+    # Initial values
+    inits = sv.initial_parameters
+    for pn in ["locn", "logscale", "shape1"]:
+        assert pn in inits
 
 
 def test_stan_sampling_dataset(allclose):
@@ -143,6 +147,13 @@ def test_stan_sampling_dataset(allclose):
     i31 = dset.i31
     assert pd.isnull(df.y.iloc[i31-1]).all()
     assert pd.notnull(df.z.iloc[i31-1]).all()
+
+    # Initial values
+    inits = dset.initial_parameters
+    assert "rho" in inits
+    for pn in ["locn", "logscale", "shape1"]:
+        for n in ["y", "z"]:
+            assert f"{n}{pn}" in inits
 
 
 def test_univariate_sampling_short_syntax(allclose):

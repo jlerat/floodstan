@@ -78,7 +78,7 @@ def test_marginals_vs_stan(marginal, stationid, allclose):
 @pytest.mark.parametrize("copula",
                          sample.COPULA_NAMES_STAN)
 def test_copulas_vs_stan(copula, allclose):
-    N = 500
+    N = 5000
     rng = np.random.default_rng(SEED)
     uv = rng.uniform(0, 1, size=(N, 2))
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
