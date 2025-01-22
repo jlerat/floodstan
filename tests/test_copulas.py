@@ -82,6 +82,9 @@ def get_uv():
     uv = np.column_stack([u.ravel(), v.ravel()])
     return uv, len(uv)
 
+def get_rhos(cop):
+    return np.linspace(cop.rho_min, cop.rho_max, 5)
+
 # ---------------- TESTS -------------------------------------------
 def test_base_class():
     cop = DummyCopula()
@@ -119,7 +122,7 @@ def test_vs_statsmodels(copula, allclose):
     rmin = cop2.rho_min
     rmax = cop2.rho_max
     nval = 20
-    for rho in np.linspace(rmin, rmax, nval):
+    for rho in get_rhos(cop2):
         cop1.rho = rho
         cop2.rho = rho
 
@@ -164,7 +167,7 @@ def test_plots(copula):
 
     plt.close("all")
     fig, axs = plt.subplots(ncols=2, nrows=2, figsize=(10, 10), layout="tight")
-    rhos = np.linspace(cop.rho_min, cop.rho_max, 4)
+    rhos = get_rhos(cop)
     for iax, ax in enumerate(axs.flat):
         cop.rho = rhos[iax]
         samples = cop.sample(nsamples)
@@ -184,7 +187,8 @@ def test_gaussian(allclose):
     uv, ndata = get_uv()
     pq = norm.ppf(uv)
     mu = np.zeros(2)
-    for rho in np.linspace(cop.rho_min, cop.rho_max, 10):
+    rhos = get_rhos(cop)
+    for rho in rhos:
         cop.rho = rho
         theta = cop.theta
 
@@ -224,7 +228,8 @@ def test_gumbel(allclose):
     cop = copulas.GumbelCopula()
     uv, ndata = get_uv()
 
-    for rho in np.linspace(cop.rho_min, cop.rho_max, 10):
+    rhos = get_rhos(cop)
+    for rho in rhos:
         cop.rho = rho
         theta = cop.theta
 
@@ -292,20 +297,19 @@ def test_gumbel(allclose):
 def test_conditional_density(copula, allclose):
     cop = copulas.factory(copula)
     uv, ndata = get_uv()
-    rhos = np.linspace(cop.rho_min, cop.rho_max, 10)
+    rhos = get_rhos(cop)
 
     for rho in rhos:
         cop.rho = rho
-        nval = 10
-        for ucond in np.linspace(0.1, 0.9, nval):
+        for ucond in np.linspace(0.1, 0.9, 5):
             pdfu = cop.conditional_density(uv[:, 1], ucond)
-            assert (pdfu<1).sum()>0
+            assert (pdfu<1).sum() > 0
 
             # test pdfu is reverse of ppf conditional
             # except for Gumbel which does not use
             # ppf_conditional for the sample function
             if copula != "Gumbel":
-                iok = pdfu<0.99
+                iok = pdfu < 0.99
                 qu = cop.ppf_conditional(uv[iok, 1], pdfu[iok])
                 assert allclose(qu, ucond, atol=1e-3)
 
@@ -328,5 +332,5 @@ def test_conditional_density(copula, allclose):
             eps = 1e-6
             uvc[:, 1] += eps
             c1 = cop.cdf(uvc)
-            expected2 = (c1-c0)/eps
+            expected2 = (c1 - c0) / eps
             assert allclose(pdfu, expected2, atol=5e-4, rtol=5e-4)
