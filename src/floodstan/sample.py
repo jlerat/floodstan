@@ -8,8 +8,7 @@ import pandas as pd
 from floodstan import marginals
 
 from floodstan.copulas import COPULA_NAMES
-from floodstan.copulas import RHO_LOWER
-from floodstan.copulas import RHO_UPPER
+from floodstan.copulas import factory
 
 from floodstan.marginals import MARGINAL_NAMES
 from floodstan.marginals import LOGSCALE_LOWER
@@ -347,6 +346,7 @@ class StanSamplingDataset():
             raise ValueError(errmess)
 
         self._copula_name = copula_name
+        self._copula = factory(copula_name)
 
         # Set indexes
         self.set_indexes()
@@ -417,8 +417,8 @@ class StanSamplingDataset():
         dd.update(self.stan_variables[1].to_dict())
         dd.update({
             "copula": self.copula_code,
-            "rho_lower": RHO_LOWER,
-            "rho_upper": RHO_UPPER,
+            "rho_lower": self._copula.rho_min,
+            "rho_upper": self._copula.rho_max,
             "rho_prior": RHO_PRIOR,
             "Ncases": self.Ncases,
             "i11": self.i11,
