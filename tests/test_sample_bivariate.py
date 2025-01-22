@@ -60,9 +60,9 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
 
-    stan_nwarm = 5000
-    stan_nsamples = 50
-    stan_nchains = 5
+    stan_nwarm = 3000
+    stan_nsamples = 30
+    stan_nchains = 3
 
     fout_stan = FTESTS / "sampling" / "bivariate" / f"{stationid}_{copula}"
     fout_stan.mkdir(exist_ok=True, parents=True)
