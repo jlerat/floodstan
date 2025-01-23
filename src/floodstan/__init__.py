@@ -1,5 +1,6 @@
 import shutil
-import re, os
+import re
+import os
 import warnings
 from pathlib import Path
 from typing import Callable
@@ -15,7 +16,7 @@ CMDSTAN_VERSION = "2.30.1"
 NSAMPLES_DEFAULT = 10000
 NCHAINS_DEFAULT = 5
 NWARM_DEFAULT = 10000
-SEED_DEFAULT = 5446 # because that's my number
+SEED_DEFAULT = 5446
 
 
 # on Windows specifically, we should point cmdstanpy to the repackaged
@@ -23,6 +24,7 @@ SEED_DEFAULT = 5446 # because that's my number
 local_cmdstan = STAN_FILES_FOLDER / f"cmdstan-{CMDSTAN_VERSION}"
 if local_cmdstan.exists():
     cmdstanpy.set_cmdstan_path(str(local_cmdstan.resolve()))
+
 
 def load_stan_model(name: str) -> Callable:
     """
@@ -36,7 +38,7 @@ def load_stan_model(name: str) -> Callable:
     is_test = bool(re.search("^stan_test_", name))
 
     # Add exe suffix if we are running on windows
-    suffix = ".exe" if os.name=="nt" else ""
+    suffix = ".exe" if os.name == "nt" else ""
 
     try:
         model = cmdstanpy.CmdStanModel(
@@ -44,10 +46,12 @@ def load_stan_model(name: str) -> Callable:
             stan_file=STAN_FILES_FOLDER / f"{stan_name}.stan"
         )
     except ValueError:
-        warnmess = f"Failed to load pre-built model '{name}{suffix}', compiling"
+        warnmess = "Failed to load pre-built model "\
+                   + f"'{name}{suffix}', compiling"
         warnings.warn(warnmess)
 
-        model = cmdstanpy.CmdStanModel(stan_file=STAN_FILES_FOLDER / f"{stan_name}.stan",
+        stan_file = STAN_FILES_FOLDER / f"{stan_name}.stan"
+        model = cmdstanpy.CmdStanModel(stan_file=stan_file,
                                        stanc_options={"O1": True})
         shutil.copy(
             model.exe_file,  # type: ignore
@@ -79,8 +83,9 @@ def load_stan_model(name: str) -> Callable:
             kwargs["chains"] = kwargs.get("chains", NCHAINS_DEFAULT)
             kwargs["seed"] = kwargs.get("seed", SEED_DEFAULT)
             kwargs["iter_warmup"] = kwargs.get("iter_warmup", NWARM_DEFAULT)
-            kwargs["iter_sampling"] = kwargs.get("iter_sampling",
-                                                 NSAMPLES_DEFAULT//NCHAINS_DEFAULT)
+            its = kwargs.get("iter_sampling",
+                             NSAMPLES_DEFAULT//NCHAINS_DEFAULT)
+            kwargs["iter_sampling"] = its
 
         if "output_dir" in kwargs:
             fout = Path(kwargs["output_dir"])
@@ -104,7 +109,8 @@ def load_stan_model(name: str) -> Callable:
 univariate_censored_sampling = load_stan_model("univariate_censored_sampling")
 bivariate_censored_sampling = load_stan_model("bivariate_censored_sampling")
 gls_spatial_sampling = load_stan_model("gls_spatial_sampling")
-gls_spatial_generate_sampling = load_stan_model("gls_spatial_generate_sampling")
+gls_spatial_generate_sampling = \
+    load_stan_model("gls_spatial_generate_sampling")
 event_occurrence_sampling = load_stan_model("event_occurrence_sampling")
 
 # Stan test functions
@@ -112,4 +118,3 @@ stan_test_marginal = load_stan_model("stan_test_marginal")
 stan_test_copula = load_stan_model("stan_test_copula")
 stan_test_glsfun = load_stan_model("stan_test_glsfun")
 stan_test_discrete = load_stan_model("stan_test_discrete")
-

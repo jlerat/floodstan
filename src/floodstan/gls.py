@@ -1,10 +1,5 @@
-import sys, re, math, json
+import math
 from pathlib import Path
-import logging
-import numbers
-
-from datetime import datetime
-import time
 
 import numpy as np
 import pandas as pd
@@ -14,10 +9,7 @@ KERNEL_CODES = {
     "Gaussian": 1,
     "Exponential": 2
     }
-KERNEL_CODES_INV = {code:name for name, code in KERNEL_CODES.items()}
-
-
-# BOUNDS
+KERNEL_CODES_INV = {code: name for name, code in KERNEL_CODES.items()}
 
 # Path to priors
 FPRIORS = Path(__file__).resolve().parent / "priors"
@@ -72,24 +64,33 @@ def prepare(x, w, y,
     kernel : str
         Kernel choice. Either Gaussian or Exponential.
     """
-
     # Check inputs
     x = np.array(x).astype(np.float64)
     w = np.array(w).astype(np.float64)
     y = np.array(y).astype(np.float64)
-    assert x.ndim==2, "Expected 2d array for x."
-    assert w.ndim==2, "Expected 2d array for w."
-    assert w.shape[1] == 2, "Expected 2nd dim of w to be of length 2."
-    assert y.ndim==1, "Expected 1d array for y."
+    if x.ndim != 2:
+        raise ValueError("Expected 2d array for x.")
+
+    if w.ndim != 2:
+        raise ValueError("Expected 2d array for w.")
+
+    if w.shape[1] != 2:
+        raise ValueError("Expected 2nd dim of w to be of length 2.")
+
+    if y.ndim != 1:
+        raise ValueError("Expected 1d array for y.")
 
     N = len(y)
     P = x.shape[1]
-    assert x.shape[0] == N, f"Expected {N} points in x, got {x.shape[0]}."
-    assert w.shape[0] == N, f"Expected {N} points in w, got {w.shape[0]}."
+    if x.shape[0] != N:
+        raise ValueError(f"Expected {N} points in x, got {x.shape[0]}.")
+
+    if w.shape[0] != N:
+        raise ValueError(f"Expected {N} points in w, got {w.shape[0]}.")
 
     # theta priors
     if theta_prior is None:
-        theta_prior = np.row_stack([np.zeros(P), 3*np.ones(P)])
+        theta_prior = np.row_stack([np.zeros(P), 3 * np.ones(P)])
 
     # indexes
     valid = pd.notnull(y) & np.isfinite(y)
@@ -112,7 +113,7 @@ def prepare(x, w, y,
         "logrho_lower": logrho_lower,
         "logrho_upper": logrho_upper,
         "theta_prior": theta_prior
-    }
+        }
 
     # Initial values set to prior mean
     stan_inits = {
@@ -120,26 +121,28 @@ def prepare(x, w, y,
         "logalpha": logalpha_prior[0],
         "logsigma": logsigma_prior[0],
         "theta": theta_prior[0]
-    }
+        }
 
     return stan_data, stan_inits
 
 
 def get_QR_matrices(x):
     x = np.array(x).astype(np.float64)
-    assert x.ndim==2, "Expected 2d array for x."
+    if x.ndim != 2:
+        raise ValueError("Expected 2d array for x.")
+
     N = len(x)
     Q, R = np.linalg.qr(x)
 
     # Set diagonal of R positive
-    pos = np.diag((np.diag(R)>0).astype(int)*2-1)
+    pos = np.diag((np.diag(R) > 0).astype(int) * 2 - 1)
     R = pos.dot(R)
     Q = Q.dot(pos)
 
     # Standardise as per stan QR factorisation
     # See https://mc-stan.org/docs/stan-users-guide/QR-reparameterization.html
-    Q_ast = Q*math.sqrt(N-1)
-    R_ast = R/math.sqrt(N-1)
+    Q_ast = Q * math.sqrt(N-1)
+    R_ast = R / math.sqrt(N-1)
     return Q_ast, R_ast
 
 
@@ -166,12 +169,12 @@ def generate(stan_data, samples, conditional=False):
         mu = x.dot(beta)
         Sigma = kernel_covariance(w, rho, alpha, sigma, kernel)
         L = np.linalg.cholesky(Sigma)
-        raw = mu+L.dot(eps[i])
+        raw = mu + L.dot(eps[i])
 
         if conditional:
             Sigma22inv = np.linalg.inv(Sigma[ivalid[:, None], ivalid[None, :]])
             Sigma12 = Sigma[:, ivalid]
-            ys = raw+Sigma12.dot(Sigma22inv).dot(y[ivalid]-raw[ivalid])
+            ys = raw + Sigma12.dot(Sigma22inv).dot(y[ivalid] - raw[ivalid])
         else:
             ys = raw
 

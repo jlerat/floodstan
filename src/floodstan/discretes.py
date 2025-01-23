@@ -1,20 +1,14 @@
 import sys
-import math, re
 import numpy as np
-import pandas as pd
 
 from scipy.stats import poisson, nbinom, bernoulli
 
-from tqdm import tqdm
-
-from hydrodiy.data.containers import Vector
-
 # Distribution names
 DISCRETE_NAMES = {
-    "Poisson": 1, \
-    "NegativeBinomial": 2, \
+    "Poisson": 1,
+    "NegativeBinomial": 2,
     "Bernoulli": 3
-}
+    }
 
 PARAMETERS = ["locn", "phi"]
 
@@ -31,8 +25,9 @@ NEVENT_UPPER = 100
 
 def factory(distname):
     txt = "/".join(DISCRETE_NAMES.keys())
-    errmsg = f"Expected distnames in {txt}, got {distname}."
-    assert distname in DISCRETE_NAMES, errmsg
+    if distname not in DISCRETE_NAMES:
+        errmess = f"Expected distnames in {txt}, got {distname}."
+        raise ValueError(errmess)
 
     if distname == "Poisson":
         return Poisson()
@@ -41,7 +36,7 @@ def factory(distname):
     elif distname == "Bernoulli":
         return Bernoulli()
     else:
-        raise ValueError(errmsg)
+        raise ValueError()
 
 
 class DiscreteDistribution():
@@ -64,19 +59,17 @@ class DiscreteDistribution():
             txt += "\n"
         return txt
 
-
     def __setitem__(self, key, value):
-        if not key in PARAMETERS:
+        if key not in PARAMETERS:
             txt = "/".join(PARAMETERS)
             raise ValueError(f"Expected {key} in {txt}.")
         setattr(self, key, value)
 
     def __getitem__(self, key):
-        if not key in PARAMETERS:
+        if key not in PARAMETERS:
             txt = "/".join(list(self.params.names))
             raise ValueError(f"Expected {key} in {txt}.")
         return getattr(self, key)
-
 
     @property
     def locn(self):
@@ -88,9 +81,11 @@ class DiscreteDistribution():
     def locn(self, value):
         locn = float(value)
         locn_upper = 1 if self.isbern else LOCN_UPPER
-        assert locn>=LOCN_LOWER and locn<=locn_upper, \
-                f"Expected locn in ]{LOCN_LOWER}, {locn_upper}[, "+\
-                f"got {locn}."
+        if locn < LOCN_LOWER or locn > locn_upper:
+            errmess = f"Expected locn in ]{LOCN_LOWER}, {locn_upper}[, "\
+                + f"got {locn}."
+            raise ValueError(errmess)
+
         self._locn = locn
 
     @property
@@ -102,9 +97,11 @@ class DiscreteDistribution():
     @phi.setter
     def phi(self, value):
         phi = float(value)
-        assert phi>=PHI_LOWER and phi<=PHI_UPPER, \
-                f"Expected phi in ]{PHI_LOWER}, {PHI_UPPER}[, "+\
-                f"got {phi}."
+        if phi < PHI_LOWER or phi > PHI_UPPER:
+            errmess = f"Expected phi in ]{PHI_LOWER}, {PHI_UPPER}[, "\
+                + f"got {phi}."
+            raise ValueError(errmess)
+
         self._phi = phi
 
     @property
@@ -115,10 +112,11 @@ class DiscreteDistribution():
     def in_support(self, x):
         x0, x1 = self.support
         ok = np.ones_like(x).astype(bool)
-        return np.where((x>=x0)&(x<=x1), ok, ~ok)
+        return np.where((x >= x0) & (x <= x1), ok, ~ok)
 
     def get_scipy_params(self):
-        errmsg = f"Method get_scipy_params not implemented for class {self.name}."
+        errmsg = "Method get_scipy_params not implemented"\
+            + f" for class {self.name}."
         raise NotImplementedError(errmsg)
 
     def logpmf(self, x):
@@ -145,41 +143,44 @@ class DiscreteDistribution():
         errmsg = f"Method rvs not implemented for class {self.name}."
         raise NotImplementedError(errmsg)
 
-
     def pot2ams_cdf(self, pot_cdf, kmax=100):
         """ Convert pot cdf to ams cdf """
         if self.isbern:
-            raise ValueError("Function not implemented for Bernoulli variable.")
+            errmess = "Functior not implemented for Bernoulli variable."
+            raise ValueError(errmess)
 
         pot_cdf = np.atleast_1d(pot_cdf)
-        assert pot_cdf.ndim==1, "Expected pot_cdf as 1D array."
+        assert pot_cdf.ndim == 1, "Expected pot_cdf as 1D array."
         pot_cdf = pot_cdf[:, None]
 
         if self.name == "Poisson":
-            ams_cdf = np.exp(-self.locn*(1-pot_cdf))
+            ams_cdf = np.exp(-self.locn * (1 - pot_cdf))
         else:
             kk = np.arange(kmax)
             pp = self.pmf(kk)[None, :]
-            ams_cdf = np.sum(pp*(pot_cdf**kk[None, :]), axis=1)
+            ams_cdf = np.sum(pp * (pot_cdf**kk[None, :]), axis=1)
 
         ams_cdf = ams_cdf.squeeze()
-        notcool = (ams_cdf<0) | (ams_cdf>1) | np.iscomplex(ams_cdf)
+        notcool = (ams_cdf < 0) | (ams_cdf > 1) | np.iscomplex(ams_cdf)
         ams_cdf[notcool] = np.nan
 
         return ams_cdf
 
-
     def ams2pot_cdf(self, ams_cdf, kmax=100):
         """ Convert ams cdf to pot cdf """
         if self.isbern:
-            raise ValueError("Function not implemented for Bernoulli variable.")
+            errmess = "Function not implemented for Bernoulli variable."
+            raise ValueError(errmess)
 
         ams_cdf = np.atleast_1d(ams_cdf)
-        assert ams_cdf.ndim==1, "Expected ams_cdf as 1D array."
+        if ams_cdf.ndim != 1:
+            errmess = "Expected ams_cdf as 1D array."
+            raise ValueError(errmess)
+
         pot_cdf = np.zeros_like(ams_cdf)
 
         if self.name == "Poisson":
-            pot_cdf = 1+np.log(ams_cdf)/self.locn
+            pot_cdf = 1 + np.log(ams_cdf) / self.locn
         else:
             kk = np.arange(kmax)
             coefs0 = self.pmf(kk)
@@ -192,16 +193,15 @@ class DiscreteDistribution():
                 coefs[0] -= ac
                 roots = np.polynomial.Polynomial(coefs).roots()
 
-                roots = roots[(roots.real>0)]
+                roots = roots[(roots.real > 0)]
                 roots = roots[np.argmin(np.abs(roots.imag))]
                 pot_cdf[i] = roots.real
 
         pot_cdf = pot_cdf.squeeze()
-        notcool = (pot_cdf<0) | (pot_cdf>1) | np.iscomplex(pot_cdf)
+        notcool = (pot_cdf < 0) | (pot_cdf > 1) | np.iscomplex(pot_cdf)
         pot_cdf[notcool] = np.nan
 
         return pot_cdf
-
 
 
 class Poisson(DiscreteDistribution):
@@ -234,7 +234,6 @@ class Poisson(DiscreteDistribution):
         self.locn = np.mean(data)
 
 
-
 class NegativeBinomial(DiscreteDistribution):
     def __init__(self):
         super(NegativeBinomial, self).__init__("NegativeBinomial")
@@ -245,7 +244,6 @@ class NegativeBinomial(DiscreteDistribution):
         n = klocn**2/(v-klocn)
         p = klocn/v
         return {"n": n, "p": p}
-
 
     def __getattribute__(self, name):
         if name in ["pmf", "cdf", "ppf", "logpmf", "logcdf"]:
@@ -271,14 +269,12 @@ class NegativeBinomial(DiscreteDistribution):
         self.phi = 1.
 
 
-
 class Bernoulli(DiscreteDistribution):
     def __init__(self):
         super(Bernoulli, self).__init__("Bernoulli")
 
     def get_scipy_params(self):
         return {"p": self.locn}
-
 
     def __getattribute__(self, name):
         if name in ["pmf", "cdf", "ppf", "logpmf", "logcdf"]:
@@ -297,7 +293,7 @@ class Bernoulli(DiscreteDistribution):
 
     @property
     def support(self):
-        return 0, sys.maxsize-1
+        return 0, sys.maxsize - 1
 
     @property
     def locn(self):
@@ -306,12 +302,12 @@ class Bernoulli(DiscreteDistribution):
     @locn.setter
     def locn(self, value):
         locn = float(value)
-        assert locn>=LOCN_LOWER and locn<=1, \
-                f"Expected locn in ]{LOCN_LOWER}, 1[, "+\
-                f"got {locn}."
-        self._locn = locn
+        if locn < LOCN_LOWER or locn > 1:
+            errmess = f"Expected locn in ]{LOCN_LOWER}, 1[, "\
+                + f"got {locn}."
+            raise ValueError(errmess)
 
+        self._locn = locn
 
     def params_guess(self, data):
         self.locn = np.mean(data)
-

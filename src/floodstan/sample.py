@@ -263,7 +263,7 @@ class StanSamplingVariable():
 
         # We set the censor close to data min to avoid potential
         # problems with computing log cdf for the censor
-        censor = max(np.float64(censor), dok.min()-1e-10)
+        censor = max(np.float64(censor), dok.min() - 1e-10)
         self._censor = censor
 
     def set_initial_parameters(self):
@@ -286,10 +286,10 @@ class StanSamplingVariable():
     def set_priors(self):
         start = self.initial_parameters
         locn_start = start["locn"]
-        self._locn_prior = [locn_start, 10*abs(locn_start)]
+        self._locn_prior = [locn_start, 10 * abs(locn_start)]
 
         logscale_start = start["logscale"]
-        dscale = (LOGSCALE_UPPER-LOGSCALE_LOWER)/2
+        dscale = (LOGSCALE_UPPER-LOGSCALE_LOWER) / 2
         self._logscale_prior = [logscale_start, dscale]
 
         # defines prior depending if it's tight or not
@@ -388,18 +388,18 @@ class StanSamplingDataset():
         zcens = zv.is_cens
         zmiss = zv.is_miss
 
-        self.i11 = np.where(yobs & zobs)[0]+1
-        self.i21 = np.where(ycens & zobs)[0]+1
-        self.i31 = np.where(ymiss & zobs)[0]+1
+        self.i11 = np.where(yobs & zobs)[0] + 1
+        self.i21 = np.where(ycens & zobs)[0] + 1
+        self.i31 = np.where(ymiss & zobs)[0] + 1
 
-        self.i12 = np.where(yobs & zcens)[0]+1
-        self.i22 = np.where(ycens & zcens)[0]+1
-        self.i32 = np.where(ymiss & zcens)[0]+1
+        self.i12 = np.where(yobs & zcens)[0] + 1
+        self.i22 = np.where(ycens & zcens)[0] + 1
+        self.i32 = np.where(ymiss & zcens)[0] + 1
 
-        self.i13 = np.where(yobs & zmiss)[0]+1
-        self.i23 = np.where(ycens & zmiss)[0]+1
-        self.i33 = np.where(ymiss & zmiss)[0]+1
-        if len(self.i33)>0:
+        self.i13 = np.where(yobs & zmiss)[0] + 1
+        self.i23 = np.where(ycens & zmiss)[0] + 1
+        self.i33 = np.where(ymiss & zmiss)[0] + 1
+        if len(self.i33) > 0:
             errmess = "Expected at least one variable to be valid."
             raise ValueError(errmess)
 

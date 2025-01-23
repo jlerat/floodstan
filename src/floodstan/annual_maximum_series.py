@@ -1,11 +1,5 @@
-import re
-import json
-import warnings
-import math
 import numpy as np
 import pandas as pd
-
-import warnings
 
 
 def get_start_end_of_water_year(year, water_year_start):
@@ -20,7 +14,7 @@ def get_annual_indexes(se, water_year_start):
     for year in years:
         start, end = get_start_end_of_water_year(year,
                                                  water_year_start)
-        idx = (se.index>=start) & (se.index<=end)
+        idx = (se.index >= start) & (se.index <= end)
         annual_idx[idx] = year
 
     return annual_idx
@@ -31,7 +25,7 @@ def get_annual_maximums(se, annual_idx,
     df = []
     ievent = 1
     for year in np.sort(annual_idx.unique()):
-        if year<0:
+        if year < 0:
             continue
 
         idx = year == annual_idx
@@ -40,9 +34,9 @@ def get_annual_maximums(se, annual_idx,
         timepeak = pd.NaT
         eventid = "NA"
         peak = np.nan
-        if nvalid>0:
-            nstdok = (se.loc[idx].std()>1e-3).sum()
-            if nstdok>0:
+        if nvalid > 0:
+            nstdok = (se.loc[idx].std() > 1e-3).sum()
+            if nstdok > 0:
                 timepeak = se.loc[idx].idxmax()
                 peak = se.loc[timepeak]
                 eventid = f"F{ievent:03d}"
@@ -51,15 +45,15 @@ def get_annual_maximums(se, annual_idx,
         start, end = get_start_end_of_water_year(year,
                                                  water_year_start)
         dd = {
-            "EVENTID": eventid, \
-            "TIMEPEAK": timepeak, \
-            "PEAK": peak, \
-            "NVALYEAR": nvalyear, \
-            "NVALID": nvalid, \
-            "WATER_YEAR": year, \
-            "WATER_YEAR_START": start, \
+            "EVENTID": eventid,
+            "TIMEPEAK": timepeak,
+            "PEAK": peak,
+            "NVALYEAR": nvalyear,
+            "NVALID": nvalid,
+            "WATER_YEAR": year,
+            "WATER_YEAR_START": start,
             "WATER_YEAR_END": end
-        }
+            }
         df.append(dd)
 
     return pd.DataFrame(df)
@@ -90,9 +84,9 @@ def compute_ams(se, water_year_start="jan",
     # Check when events are too close
     # If yes, adjust annual_idx to avoid splitting events
     delta = ams.TIMEPEAK.diff().dt.days
-    tooshort = delta<gap_min
-    if tooshort.sum()>0:
-        for ievent in delta.index[tooshort & (delta.index>0)]:
+    tooshort = delta < gap_min
+    if tooshort.sum() > 0:
+        for ievent in delta.index[tooshort & (delta.index > 0)]:
             start, end = ams.TIMEPEAK[[ievent-1, ievent]]
             qq = ams.PEAK[[ievent-1, ievent]]
             if qq.isnull().any():
@@ -108,5 +102,3 @@ def compute_ams(se, water_year_start="jan",
 
     return get_annual_maximums(se, annual_idx,
                                water_year_start)
-
-

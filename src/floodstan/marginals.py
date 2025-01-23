@@ -59,9 +59,9 @@ def _comb(n, i):
     elif i == 1:
         return n
     elif i == 2:
-        return n*(n-1)/2
+        return n * (n - 1) / 2
     elif i == 3:
-        return n*(n-1)*(n-2)/6
+        return n * (n - 1) * (n - 2) / 6
     elif i == 4:
         return n*(n-1)*(n-2)*(n-3)/24
     elif i == 5:
@@ -138,8 +138,9 @@ def lh_moments(data, eta=0, compute_lam4=True):
 
 def factory(distname):
     txt = "/".join(MARGINAL_NAMES.keys())
-    errmsg = f"Expected distnames in {txt}, got {distname}."
-    assert distname in MARGINAL_NAMES, errmsg
+    if distname not in MARGINAL_NAMES:
+        errmsg = f"Expected distnames in {txt}, got {distname}."
+        raise ValueError(errmsg)
 
     if distname == "GEV":
         return GEV()
@@ -359,7 +360,8 @@ class GEV(FloodFreqDistribution):
                 if np.all(self.in_support(data)):
                     break
 
-            assert np.all(self.in_support(data))
+            if not np.all(self.in_support(data)):
+                raise ValueError()
 
         except Exception:
             # Revert to moment matching of Gumbel distribution
@@ -493,7 +495,8 @@ class LogPearson3(FloodFreqDistribution):
     def params_guess(self, data):
         try:
             self.fit_lh_moments(data)
-            assert np.all(self.in_support(data))
+            if not np.all(self.in_support(data)):
+                raise ValueError()
 
         except Exception:
             # Problem with gam, revert back to log norm
@@ -509,8 +512,8 @@ class LogPearson3(FloodFreqDistribution):
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking (1990), http://lib.stat.cmu.edu/general/lmoments """
         if eta > 0:
-            errmsg = f"Expected eta=0, got {eta}."
-            raise ValueError(errmes)
+            errmess = f"Expected eta=0, got {eta}."
+            raise ValueError(errmess)
 
         # Get LH moments from log transform data
         lx = np.log(data)
@@ -634,7 +637,8 @@ class Gumbel(FloodFreqDistribution):
                 if np.all(self.in_support(data)):
                     break
 
-            assert np.all(self.in_support(data))
+            if not np.all(self.in_support(data)):
+                raise ValueError()
 
         except Exception:
             # Revert to moment matching
@@ -865,7 +869,9 @@ class Gamma(FloodFreqDistribution):
     @locn.setter
     def locn(self, value):
         value = float(value)
-        assert value > 0, f"Expected locn > 0, got {value}."
+        if value <= 0:
+            errmess = f"Expected locn > 0, got {value}."
+            raise ValueError(errmess)
         self._locn = value
 
     @property
@@ -893,7 +899,9 @@ class Gamma(FloodFreqDistribution):
 
     def params_guess(self, data):
         dok = data[~np.isnan(data) & (data > 0)]
-        assert len(dok) > 5, "Expected at least 5 samples valid and  > 0."
+        if len(dok) <= 5:
+            errmess = "Expected at least 5 samples valid and  > 0."
+            raise ValueError(errmess)
 
         # See https://en.wikipedia.org/wiki/Gamma_distribution
         #              #Maximum_likelihood_estimation
