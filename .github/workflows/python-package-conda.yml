@@ -50,6 +50,13 @@ jobs:
           echo "--- floodstan install : located in $PWD ---"
           pip install -e .
 
+      - name: Lint with flake8
+        run: |
+          source $CONDA/etc/profile.d/conda.sh
+          conda activate env_floodstan
+          cd $GITHUB_WORKSPACE
+          flake8 src/floodstan
+
       - name: Run tests
         run: |
           source $CONDA/etc/profile.d/conda.sh

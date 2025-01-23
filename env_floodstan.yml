@@ -5,6 +5,7 @@ channels:
 dependencies:
   - cmdstanpy=1.2.2
   - cython=3.0.10
+  - flake8=7.1.1
   - matplotlib=3.8.4
   - numpy=1.26.4
   - pandas=2.2.1
@@ -15,5 +16,4 @@ dependencies:
   - scipy=1.13.0
   - statsmodels=0.14.1
   - pip:
-    - versioneer
     - pytest-allclose
