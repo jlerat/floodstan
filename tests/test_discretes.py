@@ -42,11 +42,11 @@ def test_discretedist(allclose):
     assert dist.locn == 10
 
     msg = "Expected locn in"
-    with pytest.raises(AssertionError, match=msg):
+    with pytest.raises(ValueError, match=msg):
         dist.locn = -1
 
     msg = "Expected phi in"
-    with pytest.raises(AssertionError, match=msg):
+    with pytest.raises(ValueError, match=msg):
         dist.phi = -1
 
     for pn in discretes.PARAMETERS:
