@@ -22,7 +22,7 @@ def test_variate(allclose):
     nval = 4
     data = np.linspace(0, 1, nval)
     for plot_type in freqplots.PLOT_TYPES:
-        rv = freqplots.reduced_variate(nval, plot_type)
+        rv = freqplots.reduced_variate_equidistant(nval, plot_type)
         if plot_type == "gumbel":
             expected = np.array([-0.66572981,  0.03554335,  0.73485899,  1.86982471])
         elif plot_type == "normal":
@@ -33,7 +33,7 @@ def test_variate(allclose):
 
 def test_reduced_variate_gumbel(allclose):
     nval = 20
-    rv = freqplots.reduced_variate(nval, "gumbel")
+    rv = freqplots.reduced_variate_equidistant(nval, "gumbel")
     prob = (np.arange(1, nval+1)-0.4)/(nval+1-0.8)
     expected = -np.log(-np.log(prob))
     assert allclose(rv, expected, rtol=0, atol=1e-2)
@@ -50,7 +50,7 @@ def test_plot_data():
         fig.savefig(fp)
 
 
-def test_plot_marginal():
+def test_plot_marginal_cdf():
     streamflow = get_ams("203014")
 
     plt.close("all")
@@ -62,7 +62,7 @@ def test_plot_marginal():
     for eta in range(4):
         gev.fit_lh_moments(streamflow, eta)
         lab = f"GEV $\eta$={eta}"
-        freqplots.plot_marginal(ax, gev, ptype, label=lab, Tmax=500)
+        freqplots.plot_marginal_cdf(ax, gev, ptype, label=lab, Tmax=500)
 
     retp = [5, 10, 100, 500]
     aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
@@ -72,7 +72,7 @@ def test_plot_marginal():
     fig.savefig(fp)
 
 
-def test_plot_marginal_censored():
+def test_plot_marginal_cdf_censored():
     streamflow = get_ams("203014")
 
     gev = marginals.GEV()
@@ -87,7 +87,7 @@ def test_plot_marginal_censored():
     ptype = "gumbel"
     freqplots.plot_data(ax, streamflow, ptype)
 
-    freqplots.plot_marginal(ax, gev, ptype, \
+    freqplots.plot_marginal_cdf(ax, gev, ptype, \
                             truncated_probability=truncated_probability, \
                             Tmax=500)
 
@@ -100,7 +100,7 @@ def test_plot_marginal_censored():
 
 
 
-def test_plot_marginal_uncertainty():
+def test_plot_marginal_params():
     streamflow = get_ams("203014")
 
     plt.close("all")
@@ -114,14 +114,63 @@ def test_plot_marginal_uncertainty():
     params = p0+np.abs(p0)*0.1*np.random.normal(size=(100, 3))
     params = pd.DataFrame(params, columns=["locn", "logscale", "shape1"])
 
-    freqplots.plot_marginal(ax, gev, ptype, params=params, label="GEV", \
+    freqplots.plot_marginal_params(ax, gev, params, ptype, label="GEV", \
                         Tmax=500, edgecolor="tab:green")
 
     retp = [5, 10, 100, 500]
     aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
 
     ax.legend()
-    fp = FIMG/ "freqplots_marginal_uncertainty.png"
+    fp = FIMG/ "freqplots_marginal_params.png"
+    fig.savefig(fp)
+
+
+def test_plot_marginal_quantiles():
+    streamflow = get_ams("203014")
+
+    plt.close("all")
+    fig, ax = plt.subplots()
+    ptype = "gumbel"
+    freqplots.plot_data(ax, streamflow, ptype)
+
+    # Generate data
+    gev = marginals.GEV()
+    gev.fit_lh_moments(streamflow)
+    p0 = np.array([gev.locn, gev.logscale, gev.shape1])[None, :]
+    params = p0+np.abs(p0)*0.1*np.random.normal(size=(100, 3))
+    params = pd.DataFrame(params, columns=["locn", "logscale", "shape1"])
+
+    aris = np.array([2, 5, 10, 20, 50, 100, 500, 1000])
+    probtrunc = 1 - 1./aris
+    ys = []
+    for _, p in params.iterrows():
+        gev.locn = p.locn
+        gev.logscale = p.logscale
+        gev.shape1 = p.shape1
+        ys.append(gev.ppf(probtrunc))
+
+    ys = pd.DataFrame(ys).T
+    ym = ys.mean(axis=1).values
+    quantiles = pd.DataFrame({"mean": ym})
+
+    coverage = 0.9
+    qq = (1 - coverage) / 2
+    q0 = ys.quantile(qq, axis=1).values
+    quantiles.loc[:, "q0"] = q0
+
+    q1 = ys.quantile(1 - qq, axis=1).values
+    quantiles.loc[:, "q1"] = q1
+
+    # plot
+    freqplots.plot_marginal_quantiles(ax, aris, quantiles, ptype,
+                                      label="GEV",
+                                      edgecolor="tab:green")
+
+    retp = [5, 10, 100, 500]
+    aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
+
+    ax.legend()
+    fp = FIMG/ "freqplots_marginal_quantiles.png"
     fig.savefig(fp)
 
 

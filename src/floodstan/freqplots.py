@@ -15,7 +15,7 @@ def _check_plot_type(ptype):
     assert ptype in PLOT_TYPES, errmsg
 
 
-def get_quantiles(prob, plot_type):
+def reduced_variate(prob, plot_type):
     _check_plot_type(plot_type)
     if plot_type == "gumbel":
         return -np.log(-np.log(prob))
@@ -23,7 +23,7 @@ def get_quantiles(prob, plot_type):
         return norm.ppf(prob)
 
 
-def reduced_variate(nval, plot_type, cst=0.4):
+def reduced_variate_equidistant(nval, plot_type, cst=0.4):
     """Generate reduced variates.
 
     Parameters
@@ -42,7 +42,7 @@ def reduced_variate(nval, plot_type, cst=0.4):
         1D array containing reduced variates.
     """
     ppos = sutils.ppos(nval, cst=0.4)
-    return get_quantiles(ppos, plot_type)
+    return reduced_variate(ppos, plot_type)
 
 
 def xaxis_label(ax, plot_type):
@@ -70,7 +70,7 @@ def add_aep_to_xaxis(ax, plot_type, full_line=True,
         List of reference return periods to plot.
     """
     aeps = 1. / np.array(return_periods) * 100
-    xpos = get_quantiles(1 - aeps / 100, plot_type)
+    xpos = reduced_variate(1 - aeps / 100, plot_type)
 
     # Handle non-linear axis transforms
     delta = 0.02
@@ -109,7 +109,7 @@ def plot_data(ax, data, plot_type, **kwargs):
 
     data_sorted = np.sort(data[~np.isnan(data)])
     nval = len(data_sorted)
-    rvar = reduced_variate(nval, plot_type)
+    rvar = reduced_variate_equidistant(nval, plot_type)
 
     kwargs["marker"] = kwargs.get("marker", "o")
     kwargs["markerfacecolor"] = kwargs.get("markerfacecolor", "w")
@@ -121,47 +121,91 @@ def plot_data(ax, data, plot_type, **kwargs):
     return rvar, data_sorted
 
 
-def plot_marginal(ax, marginal, plot_type, params=None, Tmin=1.1, Tmax=200,
-                  label="", coverage=0.9, truncated_probability=0.,
-                  color="tab:blue", edgecolor="none",
-                  facecolor="none", alpha=0.5, y_min_clip=0.,
-                  **kwargs):
-    # Compute probabilitie including censoring shift
-    prob = np.linspace(1 - 1. / Tmin, 1 - 1. / Tmax, 500)
+def compute_marginal_plot_data(aris, truncated_probability,
+                               plot_type):
+    prob = 1 - 1./aris
     probtrunc = (prob - truncated_probability) / (1 - truncated_probability)
-    x = get_quantiles(prob, plot_type)
+    x = reduced_variate(prob, plot_type)
+    return x, probtrunc
 
-    if params is not None:
-        if len(params) == 0:
-            errmess = "0 parameter sets provided"
-            raise ValueError(errmess)
 
-    # Colors
+def plot_marginal_quantiles(ax, aris, quantiles, plot_type,
+                            label="", truncated_probability=0.,
+                            color="tab:blue", edgecolor="none",
+                            facecolor="none", alpha=0.5, ymin_clip=0.,
+                            mean_column="mean", q0_column="none",
+                            q1_column="none",
+                            **kwargs):
+    x, probtrunc = compute_marginal_plot_data(aris,
+                                              truncated_probability,
+                                              plot_type)
     kwargs["color"] = kwargs.get("color", color)
     facecolor = color if facecolor == "none" else facecolor
 
-    if params is None:
-        ys = marginal.ppf(probtrunc)
-        ax.plot(x, ys, label=label, **kwargs)
-    else:
-        ys = []
-        for _, p in params.iterrows():
-            marginal.locn = p.locn
-            marginal.logscale = p.logscale
-            marginal.shape1 = p.shape1
-            ys.append(marginal.ppf(probtrunc))
+    ym = quantiles.loc[:, mean_column].clip(ymin_clip)
+    ax.plot(x, ym, label=label, **kwargs)
 
-        ys = pd.DataFrame(ys).T
-        ym = ys.mean(axis=1).clip(y_min_clip)
-        ax.plot(x, ym, label=label, **kwargs)
+    if q0_column != "none" and q1_column != "none":
+        yq1 = quantiles.loc[:, q0_column].clip(ymin_clip)
+        yq2 = quantiles.loc[:, q1_column].clip(ymin_clip)
+        ax.fill_between(x, yq1, yq2,
+                        edgecolor=edgecolor,
+                        facecolor=facecolor,
+                        alpha=alpha)
+    return x
 
-        if coverage > 0:
-            qq = (1 - coverage) / 2
-            yq1 = ys.quantile(qq, axis=1).clip(y_min_clip)
-            yq2 = ys.quantile(1 - qq, axis=1).clip(y_min_clip)
 
-            ax.fill_between(x, yq1, yq2,
-                            edgecolor=edgecolor,
-                            facecolor=facecolor,
-                            alpha=alpha)
-    return x, ys
+def plot_marginal_cdf(ax, marginal, plot_type,
+                  Tmin=1.1, Tmax=200,
+                  label="", truncated_probability=0.,
+                  color="tab:blue", facecolor="none",
+                  ymin_clip=0., **kwargs):
+    aris = np.linspace(Tmin, Tmax, 500)
+    x, probtrunc = compute_marginal_plot_data(aris,
+                                              truncated_probability,
+                                              plot_type)
+    quantiles = marginal.ppf(probtrunc).clip(ymin_clip).squeeze()
+    quantiles = pd.DataFrame({"mean": quantiles})
+    return plot_marginal_quantiles(ax, aris, quantiles, plot_type,
+                                   label, truncated_probability,
+                                   color, "none", facecolor,
+                                   0., ymin_clip, "mean",
+                                   "none", "none", **kwargs)
+
+
+def plot_marginal_params(ax, marginal, params, plot_type,
+                  Tmin=1.1, Tmax=200,
+                  label="", coverage=0.9, truncated_probability=0.,
+                  color="tab:blue", edgecolor="none",
+                  facecolor="none", alpha=0.5, ymin_clip=0.,
+                  param_prefix="",
+                  **kwargs):
+    aris = np.linspace(Tmin, Tmax, 500)
+    x, probtrunc = compute_marginal_plot_data(aris,
+                                              truncated_probability,
+                                              plot_type)
+    ys = []
+    for _, p in params.iterrows():
+        marginal.locn = p.loc[f"{param_prefix}locn"]
+        marginal.logscale = p.loc[f"{param_prefix}logscale"]
+        marginal.shape1 = p.loc[f"{param_prefix}shape1"]
+        ys.append(marginal.ppf(probtrunc))
+
+    ys = pd.DataFrame(ys).T
+    ym = ys.mean(axis=1).clip(ymin_clip).values
+    quantiles = pd.DataFrame({"mean": ym})
+
+    if coverage > 0:
+        qq = (1 - coverage) / 2
+        q0 = ys.quantile(qq, axis=1).clip(ymin_clip).values
+        quantiles.loc[:, "q0"] = q0
+
+        q1 = ys.quantile(1 - qq, axis=1).clip(ymin_clip).values
+        quantiles.loc[:, "q1"] = q1
+
+    return plot_marginal_quantiles(ax, aris, quantiles, plot_type,
+                                   label, truncated_probability,
+                                   color, edgecolor, facecolor,
+                                   alpha, ymin_clip, "mean",
+                                   "q0", "q1", **kwargs)
+
