@@ -63,30 +63,29 @@ jobs:
           conda activate env_floodstan
           cd $GITHUB_WORKSPACE
           echo "--- floodstan test : located in $PWD ---"
-          pytest --ignore=src/hydrodiy --cov=floodstan --cov-config=.coveragerc --junitxml=junit/test-results.xml --cov-report=xml --cov-report=html tests
+          pytest --ignore=src/hydrodiy --cov=floodstan --cov-report=xml --cov-report=html --cov-report=term-missing tests
       
-      - name: Upload pytest test results
-        uses: actions/upload-artifact@v3
-        with:
-          name: pytest-results
-          path: junit/test-results.xml
-        
-        # Use always() to always run this step to publish test results when there are test failures
-        if: ${{ always() }}
-
       - name: Upload pytest test log files
         uses: actions/upload-artifact@v3
         with:
           name: pytest-logs
           path: tests/*.log
         
-        # Use always() to always run this step to publish test results when there are test failures
-        if: ${{ always() }}
-
-
-      - name: Upload to codecov
-        uses: codecov/codecov-action@v3        
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
         with:
-          token: ${{ secrets.CODECOV_TOKEN }} 
-        
-       
+          name: pytest-coverage
+          path: htmlcov/*.*
+
+      - name: Parse coverage report
+        run: |
+          python -c "import xml.etree.ElementTree as ET; coverage = float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100; print(f'{round(coverage)}%')" > coverage.txt
+
+      - name: Update gist
+        run: |
+          echo "{\"files\": {\"coverage.json\": {\"content\": \"$(cat coverage.txt)\"}}}" > coverage.json
+          curl -X PATCH -H "Authorization: token ${{ secrets.COVERAGE_GIST_TOKEN }}" \
+                -d @coverage.json \
+                "https://api.github.com/gists/${{ secrets.COVERAGE_GIST_ID }}"
+
+
