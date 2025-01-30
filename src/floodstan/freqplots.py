@@ -6,24 +6,42 @@ from scipy.stats import norm
 
 from hydrodiy.stat import sutils
 
-PLOT_TYPES = ["gumbel", "normal"]
+PLOT_TYPES = ["gumbel", "normal", "log"]
+PLOT_TYPE_LABELS = {
+    "gumbel": "Gumbel reduced variate",
+    "normal": "Normal standard deviate",
+    "log": "Log reduced variate"
+    }
 
 
 def _check_plot_type(ptype):
     txt = "/".join(PLOT_TYPES)
-    errmsg = f"Expected plot type in {txt}, got {ptype}."
-    assert ptype in PLOT_TYPES, errmsg
+    if ptype not in PLOT_TYPES:
+        errmsg = f"Expected plot type in {txt}, got {ptype}."
+        raise ValueError(errmsg)
 
 
-def reduced_variate(prob, plot_type):
+def prob_to_reduced_variate(prob, plot_type):
     _check_plot_type(plot_type)
     if plot_type == "gumbel":
         return -np.log(-np.log(prob))
     elif plot_type == "normal":
         return norm.ppf(prob)
+    elif plot_type == "log":
+        return -np.log(1-prob)
 
 
-def reduced_variate_equidistant(nval, plot_type, cst=0.4):
+def reduced_variate_to_prob(x, plot_type):
+    _check_plot_type(plot_type)
+    if plot_type == "gumbel":
+        return np.exp(-np.exp(-x))
+    elif plot_type == "normal":
+        return norm.cdf(x)
+    elif plot_type == "log":
+        return 1-np.exp(-x)
+
+
+def prob_to_reduced_variate_equidistant(nval, plot_type, cst=0.4):
     """Generate reduced variates.
 
     Parameters
@@ -42,7 +60,7 @@ def reduced_variate_equidistant(nval, plot_type, cst=0.4):
         1D array containing reduced variates.
     """
     ppos = sutils.ppos(nval, cst=0.4)
-    return reduced_variate(ppos, plot_type)
+    return prob_to_reduced_variate(ppos, plot_type)
 
 
 def xaxis_label(ax, plot_type):
@@ -70,7 +88,7 @@ def add_aep_to_xaxis(ax, plot_type, full_line=True,
         List of reference return periods to plot.
     """
     aeps = 1. / np.array(return_periods) * 100
-    xpos = reduced_variate(1 - aeps / 100, plot_type)
+    xpos = prob_to_reduced_variate(1 - aeps / 100, plot_type)
 
     # Handle non-linear axis transforms
     delta = 0.02
@@ -109,7 +127,7 @@ def plot_data(ax, data, plot_type, **kwargs):
 
     data_sorted = np.sort(data[~np.isnan(data)])
     nval = len(data_sorted)
-    rvar = reduced_variate_equidistant(nval, plot_type)
+    rvar = prob_to_reduced_variate_equidistant(nval, plot_type)
 
     kwargs["marker"] = kwargs.get("marker", "o")
     kwargs["markerfacecolor"] = kwargs.get("markerfacecolor", "w")
@@ -121,12 +139,22 @@ def plot_data(ax, data, plot_type, **kwargs):
     return rvar, data_sorted
 
 
-def compute_marginal_plot_data(aris, truncated_probability,
-                               plot_type):
+def aris_to_x(aris, truncated_probability,
+              plot_type):
     prob = 1 - 1./aris
     probtrunc = (prob - truncated_probability) / (1 - truncated_probability)
-    x = reduced_variate(prob, plot_type)
+    x = prob_to_reduced_variate(prob, plot_type)
     return x, probtrunc
+
+
+def aris_to_x_equidistant(Tmin, Tmax, nval, truncated_probability,
+                          plot_type):
+    x0 = prob_to_reduced_variate(1-1/Tmin, plot_type)
+    x1 = prob_to_reduced_variate(1-1/Tmax, plot_type)
+    xx = np.linspace(x0, x1, nval)
+    aris = 1/(1-reduced_variate_to_prob(xx, plot_type))
+    x, probtrunc = aris_to_x(aris, truncated_probability, plot_type)
+    return aris, x, probtrunc
 
 
 def plot_marginal_quantiles(ax, aris, quantiles, plot_type,
@@ -136,9 +164,8 @@ def plot_marginal_quantiles(ax, aris, quantiles, plot_type,
                             mean_column="mean", q0_column="none",
                             q1_column="none",
                             **kwargs):
-    x, probtrunc = compute_marginal_plot_data(aris,
-                                              truncated_probability,
-                                              plot_type)
+    x, probtrunc = aris_to_x(aris, truncated_probability,
+                             plot_type)
     kwargs["color"] = kwargs.get("color", color)
     facecolor = color if facecolor == "none" else facecolor
 
@@ -152,18 +179,20 @@ def plot_marginal_quantiles(ax, aris, quantiles, plot_type,
                         edgecolor=edgecolor,
                         facecolor=facecolor,
                         alpha=alpha)
+
+    xlab = f"{PLOT_TYPE_LABELS[plot_type]} [-]"
+    ax.set_xlabel(xlab)
     return x
 
 
 def plot_marginal_cdf(ax, marginal, plot_type,
-                  Tmin=1.1, Tmax=200,
-                  label="", truncated_probability=0.,
-                  color="tab:blue", facecolor="none",
-                  ymin_clip=0., **kwargs):
-    aris = np.linspace(Tmin, Tmax, 500)
-    x, probtrunc = compute_marginal_plot_data(aris,
-                                              truncated_probability,
-                                              plot_type)
+                      Tmin=1.1, Tmax=200,
+                      label="", truncated_probability=0.,
+                      color="tab:blue", facecolor="none",
+                      ymin_clip=0., **kwargs):
+    aris, x, probtrunc = aris_to_x_equidistant(Tmin, Tmax, 500,
+                                               truncated_probability,
+                                               plot_type)
     quantiles = marginal.ppf(probtrunc).clip(ymin_clip).squeeze()
     quantiles = pd.DataFrame({"mean": quantiles})
     return plot_marginal_quantiles(ax, aris, quantiles, plot_type,
@@ -174,16 +203,15 @@ def plot_marginal_cdf(ax, marginal, plot_type,
 
 
 def plot_marginal_params(ax, marginal, params, plot_type,
-                  Tmin=1.1, Tmax=200,
-                  label="", coverage=0.9, truncated_probability=0.,
-                  color="tab:blue", edgecolor="none",
-                  facecolor="none", alpha=0.5, ymin_clip=0.,
-                  param_prefix="",
-                  **kwargs):
-    aris = np.linspace(Tmin, Tmax, 500)
-    x, probtrunc = compute_marginal_plot_data(aris,
-                                              truncated_probability,
-                                              plot_type)
+                         Tmin=1.1, Tmax=200,
+                         label="", coverage=0.9, truncated_probability=0.,
+                         color="tab:blue", edgecolor="none",
+                         facecolor="none", alpha=0.5, ymin_clip=0.,
+                         param_prefix="",
+                         **kwargs):
+    aris, x, probtrunc = aris_to_x_equidistant(Tmin, Tmax, 500,
+                                               truncated_probability,
+                                               plot_type)
     ys = []
     for _, p in params.iterrows():
         marginal.locn = p.loc[f"{param_prefix}locn"]
@@ -208,4 +236,3 @@ def plot_marginal_params(ax, marginal, params, plot_type,
                                    color, edgecolor, facecolor,
                                    alpha, ymin_clip, "mean",
                                    "q0", "q1", **kwargs)
-
