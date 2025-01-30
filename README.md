@@ -1,7 +1,9 @@
 # floodstan
 
 [![Build floodstan](https://github.com/jlerat/floodstan/actions/workflows/python-package-conda.yml/badge.svg)](https://github.com/jlerat/floodstan/actions/workflows/python-package-conda.yml)
-![Coverage](https://gist.github.com/jlerat/daace85ec62e6e030fcd0332a8119c93)<img src="https://gist.github.com/jlerat/daace85ec62e6e030fcd0332a8119c93">
+![Coverage](https://gist.github.com/jlerat/daace85ec62e6e030fcd0332a8119c93#file-floodstan-coverage-badge-svg)<img src="https://gist.github.com/jlerat/daace85ec62e6e030fcd0332a8119c93#file-floodstan-coverage-badge-svg">
+
+https://gist.github.com/jlerat/daace85ec62e6e030fcd0332a8119c93)
 
 Bayesian flood frequency analysis using Stan in python.
 
