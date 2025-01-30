@@ -38,9 +38,9 @@ def _prepare(data):
         errmess = f"Expected 1dim array, got ndim={data.ndim}."
         raise ValueError(errmess)
 
-    data[np.isnan(data)] = -2e100
+    data[np.isnan(data)] = -2e10
     data_sorted = np.sort(data, axis=0)
-    data_sorted[data_sorted < -1e100] = np.nan
+    data_sorted[data_sorted < -1e10] = np.nan
     nval = (~np.isnan(data_sorted)).sum()
 
     if nval < 4:
