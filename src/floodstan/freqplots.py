@@ -141,6 +141,7 @@ def plot_data(ax, data, plot_type, **kwargs):
 
 def aris_to_x(aris, truncated_probability,
               plot_type):
+    aris = np.array(aris)
     prob = 1 - 1./aris
     probtrunc = (prob - truncated_probability) / (1 - truncated_probability)
     x = prob_to_reduced_variate(prob, plot_type)
