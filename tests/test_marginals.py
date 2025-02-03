@@ -60,6 +60,15 @@ def test_floodfreqdist(allclose):
 
     dist.logshape = -1
 
+    dist.params = [10, 1, 0.1]
+    assert allclose(dist.locn, 10)
+    assert allclose(dist.logscale, 1)
+    assert allclose(dist.shape1, 0.1)
+
+    with pytest.raises(ValueError, match="Expected shape"):
+        dist.params = [10, 1, 1000]
+
+
 
 @pytest.mark.parametrize("distname",
                          marginals.MARGINAL_NAMES)

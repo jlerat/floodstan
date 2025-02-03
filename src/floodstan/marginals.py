@@ -232,6 +232,18 @@ class FloodFreqDistribution():
         self._shape1 = value
 
     @property
+    def params(self):
+        return np.array([self.locn, self.logscale,
+                         self.shape1])
+
+    @params.setter
+    def params(self, value):
+        locn, logscale, shape1 = value
+        self.locn = locn
+        self.logscale = logscale
+        self.shape1 = shape1
+
+    @property
     def support(self):
         errmsg = f"Property support not implemented for class {self.name}."
         raise NotImplementedError(errmsg)
