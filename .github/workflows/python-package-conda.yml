@@ -66,13 +66,13 @@ jobs:
           pytest --ignore=src/hydrodiy --cov=floodstan --cov-report=xml --cov-report=html --cov-report=term-missing tests
       
       - name: Upload pytest test log files
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pytest-logs
           path: tests/*.log
         
       - name: Upload coverage report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pytest-coverage
           path: htmlcov/*.*
