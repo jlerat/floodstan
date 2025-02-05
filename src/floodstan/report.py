@@ -93,6 +93,21 @@ def ams_report(marginal, params, observed=None,
         errmess = "Expected truncated probability in [0, 0.99]."
         raise ValueError(errmess)
 
+    # Prepare aris
+    design_aris = np.array(design_aris)
+    design_cdf = 1 - 1./design_aris
+    # .. correct CDF with truncated probability
+    design_cdf = (design_cdf - truncated_probability)\
+        / (1 - truncated_probability)
+    design_columns = [f"DESIGN_ARI{ari}" for ari in design_aris]
+
+    # Prepare obs
+    if observed is not None:
+        obs_idx = list(observed.keys())
+        obs_values = np.array([observed[k] for k in obs_idx])
+        obs_columns_aep = [f"{obs_prefix}{o}_AEP[%]" for o in obs_idx]
+        obs_columns_ari = [f"{obs_prefix}{o}_ARI[yr]" for o in obs_idx]
+
     # Initialise report data
     report_df = params.copy()
 
@@ -102,7 +117,7 @@ def ams_report(marginal, params, observed=None,
                            for hkey, _ in observed.items()]
         report_columns += [f"{obs_prefix}{hkey}_ARI[yr]"
                            for hkey, _ in observed.items()]
-    report_columns += [f"DESIGN_ARI{a}" for a in design_aris]
+    report_columns += design_columns
     report_df.loc[:, report_columns] = np.nan
 
     # Detect parameter names
@@ -119,33 +134,37 @@ def ams_report(marginal, params, observed=None,
 
         params_columns[pname] = cc[0]
 
+    # Prepare numpy array to store set values
+    ndesign = len(design_columns)
+    nset = ndesign
+    columns = design_columns
+    if observed is not None:
+        nobs = len(obs_columns_aep)
+        nset += 2*nobs
+        columns += obs_columns_aep + obs_columns_ari
+
+    toset = np.zeros((len(params), nset))
+
     # Loop through parameters
-    for pidx, p in params.iterrows():
+    for iparams, (_, p) in enumerate(params.iterrows()):
         # .. set parameters
         marginal.locn = p[params_columns["locn"]]
         marginal.logscale = p[params_columns["logscale"]]
         marginal.shape1 = p[params_columns["shape1"]]
 
+        # .. compute design streamflow
+        toset[iparams, :ndesign] = marginal.ppf(design_cdf)
+
         # .. compute aep of historical floods
         if observed is not None:
-            for hkey, qh in observed.items():
-                # .. correct CDF with truncated probability
-                cdf = truncated_probability\
-                    + (1 - truncated_probability) * marginal.cdf(qh)
-                # .. store cdf
-                cn = f"{obs_prefix}{hkey}_AEP[%]"
-                report_df.loc[pidx, cn] = (1 - cdf) * 100
+            cdf = truncated_probability\
+                    + (1 - truncated_probability) * marginal.cdf(obs_values)
+            toset[iparams, ndesign: ndesign + nobs] = (1. - cdf) * 100
 
-                cn = f"{obs_prefix}{hkey}_ARI[yr]"
-                report_df.loc[pidx, cn] = 1. / (1 - cdf)
+            aris = 1. / (1. - cdf)
+            toset[iparams, ndesign + nobs: ndesign + 2 * nobs] = aris
 
-        # .. compute streamflow
-        for ari in design_aris:
-            cdf = 1 - 1./ari
-            # .. correct CDF with truncated probability
-            cdf = (cdf - truncated_probability) / (1 - truncated_probability)
-            # .. compute design value
-            report_df.loc[pidx, f"DESIGN_ARI{ari}"] = marginal.ppf(cdf)
+    report_df.loc[:, columns] = toset
 
     # Build stat report
     # .. compute stat

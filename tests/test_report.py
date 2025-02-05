@@ -45,6 +45,7 @@ def test_report(allclose):
     stan_data = sv.to_dict()
 
     # Clean output folder
+    LOGGER = sample.get_logger(stan_logger=False)
     fout = FTESTS / "report" / stationid
     fout.mkdir(parents=True, exist_ok=True)
     for f in fout.glob("*.*"):
@@ -63,10 +64,13 @@ def test_report(allclose):
     # Get sample data
     params = smp.draws_pd()
 
-    rep, _ = report.ams_report(sv.marginal, params)
+    # Run report without obs
+    rep, _ = report.ams_report(sv.marginal, params) #, design_aris=[100])
     assert rep.shape == (12, 12)
 
-    obs = {year: y[year] for year in [1973, 2021]}
+    # Run report with obs
+    years = np.arange(1973, 2022)
+    obs = {year: y[year] for year in years}
     rep, _ = report.ams_report(sv.marginal, params, obs)
-    assert rep.shape == (16, 12)
+    assert rep.shape == (12 + 2 * len(obs), 12)
 
