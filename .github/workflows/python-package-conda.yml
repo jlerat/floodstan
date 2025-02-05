@@ -77,15 +77,17 @@ jobs:
           name: pytest-coverage
           path: htmlcov/*.*
 
-      - name: Parse coverage report
+      - name: Parse coverage report and create badge
         run: |
-          python -c "import xml.etree.ElementTree as ET; coverage = float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100; print(f'{round(coverage)}%')" > coverage.txt
+          source $CONDA/etc/profile.d/conda.sh
+          conda activate env_floodstan
+          python -c "import xml.etree.ElementTree as ET; from anybadge import Badge; cov = float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100; covbadge = Badge('Coverage', value=f'{cov:0.0f}%', thresholds={60:'red', 70:'orange', 80:'lightgreen', 90:'green'}); covbadge.write_badge('coverage_badge.svg', True)"
 
-      - name: Update gist
+      - name: Update gist badge
         run: |
-          echo "{\"files\": {\"coverage.json\": {\"content\": \"$(cat coverage.txt)\"}}}" > coverage.json
+          sed 's/\"/\\\"/g' coverage_badge.svg > coverage_badge.txt
+          echo "{\"files\": {\"coverage_badge.svg\": {\"content\": \"$(cat coverage_badge.txt)\"}}}" > coverage_badge.json
           curl -X PATCH -H "Authorization: token ${{ secrets.COVERAGE_GIST_TOKEN }}" \
-                -d @coverage.json \
+                -d @coverage_badge.json \
                 "https://api.github.com/gists/${{ secrets.COVERAGE_GIST_ID }}"
-
 
