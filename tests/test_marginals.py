@@ -309,3 +309,26 @@ def test_fit_lh_moments_flike(distname, station, censoring, allclose):
     elif distname == "LogNormal":
         assert allclose(samples.locn, fit.loc[0, 1], rtol=0, atol=1e-2)
         assert allclose(samples.scale, fit.loc[1, 1], rtol=0, atol=1e-2)
+
+
+@pytest.mark.parametrize("distname",
+                         marginals.MARGINAL_NAMES)
+#@pytest.mark.parametrize("distname", ["Gamma"])
+@pytest.mark.parametrize("stationid",
+                         get_stationids())
+def test_marginals_mle(distname, stationid, allclose):
+    streamflow = get_ams(stationid)
+    marginal = marginals.factory(distname)
+    censor = streamflow.quantile(0.33)
+    ll_mle, theta_mle, dcens, ncens = marginal.mle(streamflow, censor)
+
+    # Perturb ll param and check we get lower ll
+    perturb = np.random.normal(loc=0., scale=1.0,
+                               size=(50000, 3))
+    for pert in perturb:
+        theta = theta_mle + pert
+        ll = -marginal.negloglike(theta, dcens, censor, ncens)
+        if np.isfinite(ll) and not np.isnan(ll):
+            mess =f"theta = {theta}  theta_mle = {theta_mle}"
+            assert ll < ll_mle, print(mess)
+

@@ -1,11 +1,12 @@
 import re
 import math
+import warnings
 import numpy as np
 
 from scipy.stats import genextreme, pearson3, gumbel_r
 from scipy.stats import gamma as gamma_dist
 from scipy.stats import lognorm, norm, genpareto
-from scipy.optimize import brentq
+from scipy.optimize import brentq, minimize
 from scipy.special import gamma, gammaln
 
 # Distribution names
@@ -72,6 +73,16 @@ def _comb(n, i):
         return n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)*(n-6)/5040
     elif i == 8:
         return n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)*(n-6)*(n-7)/40320
+
+
+def _prepare_censored_data(data, low_censor):
+    data = np.array(data)
+    low_censor = -1e10 if low_censor is None else float(low_censor)
+    dcens = data[data > low_censor]
+    if len(dcens) < 5:
+        errmess = "Expected at least 5 uncensored values"
+        raise ValueError(errmess)
+    return dcens, len(data)-len(dcens)
 
 
 def lh_moments(data, eta=0, compute_lam4=True):
@@ -238,6 +249,10 @@ class FloodFreqDistribution():
 
     @params.setter
     def params(self, value):
+        if len(value) != 3:
+            errmess = "Expected 3 parameters, got {len(theta)}."
+            raise ValueError(errmess)
+
         locn, logscale, shape1 = value
         self.locn = locn
         self.logscale = logscale
@@ -285,6 +300,61 @@ class FloodFreqDistribution():
     def rvs(self, size):
         errmsg = f"Method rvs not implemented for class {self.name}."
         raise NotImplementedError(errmsg)
+
+    def negloglike(self, theta, data_censored, low_censor, ncens):
+        try:
+            self.params = theta
+        except ValueError:
+            return np.inf
+
+        nlpdf = -self.logpdf(data_censored).sum()
+        if ncens > 0:
+            nlpdf -= self.logcdf(low_censor)*ncens
+
+        if not np.isfinite(nlpdf) or np.isnan(nlpdf):
+            return np.inf
+
+        return nlpdf
+
+    def mle(self, data, low_censor=None, nexplore=1000,
+            explore_scale=1.):
+        """ Maximum likelihood estimate """
+        # Prepare data
+        dcens, ncens = _prepare_censored_data(data, low_censor)
+
+        # Initial parameter exploration
+        self.params_guess(data)
+        theta0 = self.params
+        perturb = np.random.normal(loc=0, scale=1.,
+                                   size=(nexplore, 3))
+        perturb[nexplore // 3:2 * nexplore // 3] *= 10
+        perturb[2 * nexplore // 3:] *= 0.1
+        explore = theta0[None, :] + perturb
+        # .. keep guessed parameter last
+        explore[-1] = theta0
+        # .. loop throught explored parameter and check loglike
+        nll_min = np.inf
+        for theta in explore:
+            nll = self.negloglike(theta, dcens, low_censor, ncens)
+            if nll < nll_min and np.isfinite(nll) and not np.isnan(nll):
+                theta0 = theta
+                nll_min = nll
+
+        # Nelder-Mead fit
+        options = dict(xatol=1e-5, fatol=1e-5,
+                       maxiter=10000, maxfev=50000)
+        opt = minimize(self.negloglike, theta0,
+                       args=(dcens, low_censor, ncens),
+                       method="Nelder-Mead",
+                       options=options)
+        self.params = opt.x
+
+        if not opt.success:
+            warnmess = "Nelder-Mead optimisation did not converge."\
+                       + f"Message: {opt.message}."
+            warnings.warn(warnmess)
+
+        return -opt.fun, opt.x, dcens, ncens
 
 
 class Normal(FloodFreqDistribution):
