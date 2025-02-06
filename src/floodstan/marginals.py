@@ -316,7 +316,7 @@ class FloodFreqDistribution():
 
         return nlpdf
 
-    def mle(self, data, low_censor=None, nexplore=1000,
+    def mle(self, data, low_censor=None, nexplore=3000,
             explore_scale=1.):
         """ Maximum likelihood estimate """
         # Prepare data
