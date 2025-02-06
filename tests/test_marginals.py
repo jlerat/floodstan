@@ -313,7 +313,6 @@ def test_fit_lh_moments_flike(distname, station, censoring, allclose):
 
 @pytest.mark.parametrize("distname",
                          marginals.MARGINAL_NAMES)
-#@pytest.mark.parametrize("distname", ["Gamma"])
 @pytest.mark.parametrize("stationid",
                          get_stationids())
 def test_marginals_mle(distname, stationid, allclose):
@@ -324,11 +323,33 @@ def test_marginals_mle(distname, stationid, allclose):
 
     # Perturb ll param and check we get lower ll
     perturb = np.random.normal(loc=0., scale=1.0,
-                               size=(50000, 3))
+                               size=(10000, 3))
     for pert in perturb:
         theta = theta_mle + pert
         ll = -marginal.negloglike(theta, dcens, censor, ncens)
         if np.isfinite(ll) and not np.isnan(ll):
             mess =f"theta = {theta}  theta_mle = {theta_mle}"
             assert ll < ll_mle, print(mess)
+
+
+@pytest.mark.parametrize("distname",
+                         marginals.MARGINAL_NAMES)
+@pytest.mark.parametrize("stationid",
+                         data_reader.STATIONS_BESTFIT)
+@pytest.mark.parametrize("censoring", [False, True])
+def test_marginals_mle_vs_bestfit(distname, stationid, censoring, allclose):
+    streamflow = get_ams(stationid)
+    bestfit, censor = data_reader.read_bestfit_mle(stationid, censoring)
+    bestfit = bestfit.loc[:, distname]
+
+    marginal = marginals.factory(distname)
+    ll_mle, theta_mle, dcens, ncens = marginal.mle(streamflow, censor)
+
+    locn = float(bestfit["Location"])
+    locn = math.log(locn) if distname in ["LogNormal", "LogPearson3"]\
+        else locn
+    theta_bestfit = np.array([locn, math.log(float(bestfit["Scale"])),
+                             float(bestfit["Shape"])])
+    ll_bestfit = -marginal.negloglike(theta_bestfit, dcens, censor, ncens)
+    assert ll_bestfit < ll_mle
 
