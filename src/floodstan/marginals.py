@@ -316,8 +316,7 @@ class FloodFreqDistribution():
 
         return nlpdf
 
-    def mle(self, data, low_censor=None, nexplore=3000,
-            explore_scale=1.):
+    def mle(self, data, low_censor=None, nexplore=1000):
         """ Maximum likelihood estimate """
         # Prepare data
         dcens, ncens = _prepare_censored_data(data, low_censor)
@@ -325,11 +324,11 @@ class FloodFreqDistribution():
         # Initial parameter exploration
         self.params_guess(data)
         theta0 = self.params
-        perturb = np.random.normal(loc=0, scale=1.,
+        perturb = np.random.normal(loc=0, scale=1,
                                    size=(nexplore, 3))
-        perturb[nexplore // 3:2 * nexplore // 3] *= 10
-        perturb[2 * nexplore // 3:] *= 0.1
         explore = theta0[None, :] + perturb
+        # .. locn multiplicative change
+        explore[:, 0] = theta0[0] * (1 + np.maximum(1e-2, perturb[:, 0]))
         # .. keep guessed parameter last
         explore[-1] = theta0
         # .. loop throught explored parameter and check loglike
