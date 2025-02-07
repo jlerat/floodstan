@@ -151,7 +151,7 @@ def read_bestfit_mle(station, censoring):
 
     # Censor
     elems = fp.stem.split("_")
-    censor = float(elems[-1]) if censoring else None
+    censor = float(elems[-1]) if censoring else 0.
 
     return params, censor
 
