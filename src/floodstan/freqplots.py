@@ -2,15 +2,15 @@ import re
 import numpy as np
 import pandas as pd
 
-from scipy.stats import norm
+from scipy.stats import norm, lognorm
 
 from hydrodiy.stat import sutils
 
-PLOT_TYPES = ["gumbel", "normal", "log"]
+PLOT_TYPES = ["gumbel", "normal", "lognormal"]
 PLOT_TYPE_LABELS = {
     "gumbel": "Gumbel reduced variate",
     "normal": "Normal standard deviate",
-    "log": "Log reduced variate"
+    "lognormal": "LogNormal standard deviate"
     }
 
 
@@ -21,27 +21,27 @@ def _check_plot_type(ptype):
         raise ValueError(errmsg)
 
 
-def prob_to_reduced_variate(prob, plot_type):
+def cdf_to_reduced_variate(prob, plot_type):
     _check_plot_type(plot_type)
     if plot_type == "gumbel":
         return -np.log(-np.log(prob))
     elif plot_type == "normal":
         return norm.ppf(prob)
-    elif plot_type == "log":
-        return -np.log(1-prob)
+    elif plot_type == "lognormal":
+        return lognorm.ppf(prob, s=1)
 
 
-def reduced_variate_to_prob(x, plot_type):
+def reduced_variate_to_cdf(x, plot_type):
     _check_plot_type(plot_type)
     if plot_type == "gumbel":
         return np.exp(-np.exp(-x))
     elif plot_type == "normal":
         return norm.cdf(x)
-    elif plot_type == "log":
-        return 1-np.exp(-x)
+    elif plot_type == "lognormal":
+        return lognorm.cdf(x, s=1)
 
 
-def prob_to_reduced_variate_equidistant(nval, plot_type, cst=0.4):
+def cdf_to_reduced_variate_equidistant(nval, plot_type, cst=0.4):
     """Generate reduced variates.
 
     Parameters
@@ -60,7 +60,7 @@ def prob_to_reduced_variate_equidistant(nval, plot_type, cst=0.4):
         1D array containing reduced variates.
     """
     ppos = sutils.ppos(nval, cst=0.4)
-    return prob_to_reduced_variate(ppos, plot_type)
+    return cdf_to_reduced_variate(ppos, plot_type)
 
 
 def xaxis_label(ax, plot_type):
@@ -88,7 +88,7 @@ def add_aep_to_xaxis(ax, plot_type, full_line=True,
         List of reference return periods to plot.
     """
     aeps = 1. / np.array(return_periods) * 100
-    xpos = prob_to_reduced_variate(1 - aeps / 100, plot_type)
+    xpos = cdf_to_reduced_variate(1 - aeps / 100, plot_type)
 
     # Handle non-linear axis transforms
     delta = 0.02
@@ -127,7 +127,7 @@ def plot_data(ax, data, plot_type, **kwargs):
 
     data_sorted = np.sort(data[~np.isnan(data)])
     nval = len(data_sorted)
-    rvar = prob_to_reduced_variate_equidistant(nval, plot_type)
+    rvar = cdf_to_reduced_variate_equidistant(nval, plot_type)
 
     kwargs["marker"] = kwargs.get("marker", "o")
     kwargs["markerfacecolor"] = kwargs.get("markerfacecolor", "w")
@@ -144,35 +144,71 @@ def aris_to_x(aris, truncated_probability,
     aris = np.array(aris)
     prob = 1 - 1./aris
     probtrunc = (prob - truncated_probability) / (1 - truncated_probability)
-    x = prob_to_reduced_variate(prob, plot_type)
+    if np.any(probtrunc < 0):
+        errmess = "Some cdf are negative after truncation."
+        raise ValueError(errmess)
+
+    x = cdf_to_reduced_variate(prob, plot_type)
     return x, probtrunc
 
 
 def aris_to_x_equidistant(Tmin, Tmax, nval, truncated_probability,
                           plot_type):
-    x0 = prob_to_reduced_variate(1-1/Tmin, plot_type)
-    x1 = prob_to_reduced_variate(1-1/Tmax, plot_type)
+    x0 = cdf_to_reduced_variate(1. - 1. / Tmin, plot_type)
+    x1 = cdf_to_reduced_variate(1. - 1. / Tmax, plot_type)
     xx = np.linspace(x0, x1, nval)
-    aris = 1/(1-reduced_variate_to_prob(xx, plot_type))
+    aris = 1. / (1. - reduced_variate_to_cdf(xx, plot_type))
     x, probtrunc = aris_to_x(aris, truncated_probability, plot_type)
     return aris, x, probtrunc
+
+
+def set_cdf_as_xticklabels(ax, plot_type, cdfs=None):
+    if cdfs is None:
+        cdfs = np.array([0.99, 0.9, 0.5, 0.1, 0.01, 0.005])
+    x = cdf_to_reduced_variate(cdfs, plot_type)
+    ax.set_xticks(x)
+    xlabs = [f"{c:0.1e}" for c in cdfs]
+    ax.set_xticklabels(xlabs)
 
 
 def plot_marginal_quantiles(ax, aris, quantiles, plot_type,
                             label="", truncated_probability=0.,
                             color="tab:blue", edgecolor="none",
                             facecolor="none", alpha=0.5, ymin_clip=0.,
-                            mean_column="mean", q0_column="none",
+                            center_column=None, q0_column="none",
                             q1_column="none",
                             **kwargs):
+    # Check inputs
+    if not isinstance(quantiles, pd.DataFrame):
+        errmess = "Expected quantiles of type pd.DataFrame,"\
+                  + f" got {type(quantiles)}."
+        raise ValueError(errmess)
+
+    # Detect the column name of central value
+    for nm in [str(center_column), "mean", "mle"]:
+        if nm in quantiles.columns:
+            center_column = nm
+    if center_column is None:
+        errmess = "No name available for center_column."
+        raise ValueError(errmess)
+
+    # Convert aris to prob
     x, probtrunc = aris_to_x(aris, truncated_probability,
                              plot_type)
     kwargs["color"] = kwargs.get("color", color)
     facecolor = color if facecolor == "none" else facecolor
 
-    ym = quantiles.loc[:, mean_column].clip(ymin_clip)
+    # Sort values
+    k = np.argsort(x)
+    x = x[k]
+    probtrunc = probtrunc[k]
+    quantiles = quantiles.iloc[k]
+
+    # Plot center value
+    ym = quantiles.loc[:, center_column].clip(ymin_clip)
     ax.plot(x, ym, label=label, **kwargs)
 
+    # Plot uncertainty band
     if q0_column != "none" and q1_column != "none":
         yq1 = quantiles.loc[:, q0_column].clip(ymin_clip)
         yq2 = quantiles.loc[:, q1_column].clip(ymin_clip)
