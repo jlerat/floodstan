@@ -269,7 +269,12 @@ class StanSamplingVariable():
     def set_initial_parameters(self):
         dok = self.data[~np.isnan(self.data)]
         dist = self.marginal
-        dist.params_guess(dok)
+
+        # Set initial close to posterior max
+        dist.maximum_posterior_estimate(dok, self.censor,
+                                        shape_width_prior=0.1)
+        dist.logscale += 0.05 # Tiny shift to avoid zero gradient
+                              # at posterior max
 
         # .. verify parameter is compatible
         lpdf = dist.logpdf(dok)
