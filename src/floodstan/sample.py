@@ -273,8 +273,8 @@ class StanSamplingVariable():
         # Set initial close to posterior max
         dist.maximum_posterior_estimate(dok, self.censor,
                                         shape_width_prior=0.1)
-        dist.logscale += 0.05 # Tiny shift to avoid zero gradient
-                              # at posterior max
+        # Tiny shift to avoid zero gradient at posterior max
+        dist.logscale += 0.05
 
         # .. verify parameter is compatible
         lpdf = dist.logpdf(dok)
