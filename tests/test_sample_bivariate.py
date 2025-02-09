@@ -40,6 +40,10 @@ STATIONIDS = get_stationids()
 def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose):
     LOGGER = sample.get_logger(stan_logger=False)
 
+    stan_nwarm = 5000
+    stan_nsamples = 1000
+    stan_nchains = 5
+
     y = get_ams(stationid)
     sids = STATIONIDS.copy()
     sids.remove(stationid)
@@ -52,17 +56,15 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
     y, z = df.y, df.z
 
     censor = y.median() if censoring else -10
-    yv = sample.StanSamplingVariable(y, "GEV", censor)
+    yv = sample.StanSamplingVariable(y, "GEV", censor,
+                                     ninits=stan_nchains)
     censor = z.median() if censoring else -10
-    zv = sample.StanSamplingVariable(z, "GEV", censor)
+    zv = sample.StanSamplingVariable(z, "GEV", censor,
+                                     ninits=stan_nchains)
 
     sv = sample.StanSamplingDataset([yv, zv], copula)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
-
-    stan_nwarm = 3000
-    stan_nsamples = 60
-    stan_nchains = 3
 
     fout_stan = FTESTS / "sampling" / "bivariate" / f"{stationid}_{copula}"
     fout_stan.mkdir(exist_ok=True, parents=True)

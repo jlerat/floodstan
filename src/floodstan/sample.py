@@ -7,6 +7,8 @@ import pandas as pd
 
 from floodstan import marginals
 
+from floodstan import NCHAINS_DEFAULT
+
 from floodstan.copulas import COPULA_NAMES
 from floodstan.copulas import factory
 
@@ -31,7 +33,7 @@ DISCRETE_CODES = {code: name for name, code in DISCRETE_NAMES.items()}
 COPULA_NAMES_STAN = ["Gaussian", "Clayton", "Gumbel"]
 
 # Tight prior on shape parameter
-SHAPE1_PRIOR = [0, 1]
+SHAPE1_PRIOR = [0, 0.2]
 
 # Prior on copula parameter
 RHO_PRIOR = [0.7, 1]
@@ -104,7 +106,8 @@ class StanSamplingVariable():
                  marginal_name=None,
                  censor=CENSOR_DEFAULT,
                  name="y",
-                 tight_shape_prior=True):
+                 ninits=NCHAINS_DEFAULT,
+                 init_perturb_scale=0.1):
         self.name = str(name)
         if len(self.name) != 1:
             errmess = "Expected one character for name."
@@ -116,11 +119,13 @@ class StanSamplingVariable():
         self._marginal_name = None
         self._marginal = None
         self._censor = float(censor)
-        self._initial_parameters = {}
+        self._guess_parameters = []
+        self._initial_parameters = []
         self._is_miss = None
         self._is_obs = None
         self._is_cens = None
-        self.tight_shape_prior = bool(tight_shape_prior)
+        self.ninits = ninits
+        self.init_perturb_scale = init_perturb_scale
 
         data_set = False
         if data is not None and censor is not None:
@@ -133,12 +138,21 @@ class StanSamplingVariable():
             marginal_set = True
 
         if data_set and marginal_set:
+            self.set_guess_parameters()
             self.set_initial_parameters()
             self.set_priors()
 
     @property
     def N(self):
         return self._N
+
+    @property
+    def guess_parameters(self):
+        if len(self._guess_parameters) == 0:
+            errmess = "Guess parameters have not been set."
+            raise ValueError(errmess)
+
+        return self._guess_parameters
 
     @property
     def initial_parameters(self):
@@ -266,30 +280,60 @@ class StanSamplingVariable():
         censor = max(np.float64(censor), dok.min() - 1e-10)
         self._censor = censor
 
-    def set_initial_parameters(self):
+    def set_guess_parameters(self):
         dok = self.data[~np.isnan(self.data)]
         dist = self.marginal
 
-        # Set initial close to posterior max
-        dist.maximum_posterior_estimate(dok, self.censor,
-                                        shape_width_prior=0.1)
-        # Tiny shift to avoid zero gradient at posterior max
-        dist.logscale += 0.05
+        # Get guess parameter set
+        dist.params_guess(dok)
+        params0 = dist.params
+        self._guess_parameters = {
+                "locn": params0[0],
+                "logscale": params0[1],
+                "shape1": params0[2]
+                }
 
-        # .. verify parameter is compatible
-        lpdf = dist.logpdf(dok)
-        lcdf = dist.logcdf(self.censor)
-        if np.isnan(lpdf).any() or np.isnan(lcdf):
-            errmess = "NaN likelihood: initial parameters incompatible"\
-                     + " with data."
-            raise ValueError(errmess)
+    def set_initial_parameters(self):
+        dok = self.data[~np.isnan(self.data)]
+        dist = self.marginal
+        gp = self.guess_parameters
+        params0 = np.array([gp["locn"], gp["logscale"],
+                            gp["shape1"]])
 
-        self._initial_parameters["locn"] = dist.locn
-        self._initial_parameters["logscale"] = dist.logscale
-        self._initial_parameters["shape1"] = dist.shape1
+        # Create a random sample for each chain
+        inits = []
+        while len(inits) < self.ninits:
+            perturb = np.random.normal(loc=0,
+                                       scale=self.init_perturb_scale,
+                                       size=3)
+            params = params0 + perturb
+            params[0] = params0[0]*max(5e-2, 1+perturb[0])
+            dist.params = params
+
+            # Shift in scale to ensure valid start
+            niter = 0
+            while True and niter < 5:
+                lpdf = dist.logpdf(dok)
+                lcdf = dist.logcdf(self.censor)
+                if np.isnan(lpdf).any() or np.isnan(lcdf):
+                    dist.logscale += 0.1
+                    valid = False
+                else:
+                    valid = True
+                    break
+
+            if valid:
+                # Parameter is valid, we can store it
+                inits.append({
+                    "locn": dist.locn,
+                    "logscale": dist.logscale,
+                    "shape1": dist.shape1
+                    })
+
+        self._initial_parameters = inits
 
     def set_priors(self):
-        start = self.initial_parameters
+        start = self.guess_parameters
         locn_start = start["locn"]
         self._locn_prior = [locn_start, 10 * abs(locn_start)]
 
@@ -297,14 +341,7 @@ class StanSamplingVariable():
         dscale = (LOGSCALE_UPPER-LOGSCALE_LOWER) / 2
         self._logscale_prior = [logscale_start, dscale]
 
-        # defines prior depending if it's tight or not
-        if self.tight_shape_prior:
-            shape1_prior_loc, shape1_prior_sig = SHAPE1_PRIOR
-        else:
-            shape1_prior_loc = start["shape1"]
-            shape1_prior_sig = marginals.SHAPE1_UPPER-marginals.SHAPE1_LOWER
-
-        self._shape1_prior = [shape1_prior_loc, shape1_prior_sig]
+        self._shape1_prior = SHAPE1_PRIOR
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
@@ -370,14 +407,19 @@ class StanSamplingDataset():
 
     @property
     def initial_parameters(self):
-        inits = {}
-        for vs in self._stan_variables:
-            n = vs.name
-            for pn, value in vs.initial_parameters.items():
-                ppn = f"{n}{pn}"
-                inits[ppn] = value
+        inits = []
+        ninits = min([vs.ninits for vs in self._stan_variables])
+        for i in range(ninits):
+            init = {}
+            for vs in self._stan_variables:
+                n = vs.name
+                for pn, value in vs.initial_parameters[i].items():
+                    ppn = f"{n}{pn}"
+                    init[ppn] = value
 
-        inits["rho"] = RHO_PRIOR[0]
+            init["rho"] = RHO_PRIOR[0]
+            inits.append(init)
+
         return inits
 
     def set_indexes(self):

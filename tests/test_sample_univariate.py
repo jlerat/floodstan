@@ -65,7 +65,9 @@ def get_info():
 
 # ------------------------------------------------
 
-def test_stan_sampling_variable(allclose):
+@pytest.mark.parametrize("distname",
+                         marginals.MARGINAL_NAMES)
+def test_stan_sampling_variable(distname, allclose):
     y = get_ams("203010")
     sv = sample.StanSamplingVariable()
     censor = y.median()
@@ -82,15 +84,16 @@ def test_stan_sampling_variable(allclose):
     with pytest.raises(ValueError, match=msg):
         sv.set_data(y.values[:, None], censor)
 
-    sv = sample.StanSamplingVariable(y, "GEV", censor)
+    sv = sample.StanSamplingVariable(y, distname, censor)
     assert allclose(sv.censor, censor)
     assert isinstance(sv.marginal, marginals.FloodFreqDistribution)
     assert allclose(sv.data, y)
     assert sv.N == len(y)
-    assert sv.marginal_code == 3
-    assert sv.marginal_name == "GEV"
+    assert sv.marginal_code == marginals.MARGINAL_NAMES[distname]
+    assert sv.marginal_name == distname
     nhigh, nlow = (y>=censor).sum(), (y<censor).sum()
-    assert allclose(sv.Ncases, [[nhigh, 0, 0], [nlow, 0, 0], [0, 0, 0]])
+    Ncases = [[nhigh, 0, 0], [nlow, 0, 0], [0, 0, 0]]
+    assert allclose(sv.Ncases, Ncases)
 
     i11 = np.where(y>=censor)[0]+1
     assert allclose(sv.i11, i11)
@@ -111,24 +114,27 @@ def test_stan_sampling_variable(allclose):
     with pytest.raises(ValueError, match=msg):
         ip = sv.initial_parameters
 
-    sv = sample.StanSamplingVariable(y, "GEV")
+    sv = sample.StanSamplingVariable(y, distname)
     d = sv.data
 
     # Initial values
     inits = sv.initial_parameters
-    for pn in ["locn", "logscale", "shape1"]:
-        assert pn in inits
+    for init in inits:
+        for pn in ["locn", "logscale", "shape1"]:
+            assert pn in init
 
 
-def test_stan_sampling_dataset(allclose):
+@pytest.mark.parametrize("distname",
+                         marginals.MARGINAL_NAMES)
+def test_stan_sampling_dataset(distname, allclose):
     y = get_ams("203010")
     z = get_ams("201001")
     z.iloc[-2] = np.nan # to add a missing data in z
     df = pd.DataFrame({"y": y, "z": z}).sort_index()
     y, z = df.y, df.z
 
-    yv = sample.StanSamplingVariable(y, "GEV", 100)
-    zv = sample.StanSamplingVariable(z, "GEV", 100)
+    yv = sample.StanSamplingVariable(y, distname, 100)
+    zv = sample.StanSamplingVariable(z, distname, 100)
     dset = sample.StanSamplingDataset([yv, zv], "Gaussian")
 
     assert dset.copula_name == "Gaussian"
@@ -150,10 +156,11 @@ def test_stan_sampling_dataset(allclose):
 
     # Initial values
     inits = dset.initial_parameters
-    assert "rho" in inits
-    for pn in ["locn", "logscale", "shape1"]:
-        for n in ["y", "z"]:
-            assert f"{n}{pn}" in inits
+    for init in inits:
+        assert "rho" in init
+        for pn in ["locn", "logscale", "shape1"]:
+            for n in ["y", "z"]:
+                assert f"{n}{pn}" in init
 
 
 def test_univariate_sampling_short_syntax(allclose):
@@ -166,12 +173,20 @@ def test_univariate_sampling_short_syntax(allclose):
     sv = sample.StanSamplingVariable(y, marginal)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
+    stan_inits3 = stan_inits[:3]
 
     # Clean output folder
     fout = FTESTS / "sampling" / "univariate_short_syntax"
     fout.mkdir(parents=True, exist_ok=True)
     for f in fout.glob("*.*"):
         f.unlink()
+
+    # Wrong number of inits
+    msg = "Expected 1 or"
+    with pytest.raises(ValueError, match=msg):
+        smp = univariate_censored_sampling(data=stan_data,
+                                       inits=stan_inits3,
+                                       output_dir=fout)
 
     # Sample
     smp = univariate_censored_sampling(data=stan_data,
@@ -190,6 +205,8 @@ def test_univariate_sampling(marginal, stationid, allclose):
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
     # Journal of Computational and Graphical Statistics, 15:3, 675-692,
     # DOI: 10.1198/106186006X136976
+
+    nchains = 5
 
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
 
@@ -217,7 +234,8 @@ def test_univariate_sampling(marginal, stationid, allclose):
     dist = marginals.factory(marginal)
     dist.params_guess(y)
 
-    if dist.shape1<marginals.SHAPE1_LOWER or dist.shape1>marginals.SHAPE1_UPPER:
+    if dist.shape1<marginals.SHAPE1_LOWER \
+            or dist.shape1>marginals.SHAPE1_UPPER:
         pytest.skip("Shape parameter outside of accepted bounds.")
 
     # Prior distribution centered around dist params
@@ -246,7 +264,8 @@ def test_univariate_sampling(marginal, stationid, allclose):
 
         # Configure stan data and initialisation
         try:
-            sv = sample.StanSamplingVariable(ysmp, marginal)
+            sv = sample.StanSamplingVariable(ysmp, marginal,
+                                             ninits=nchains)
         except:
             continue
 
@@ -267,7 +286,7 @@ def test_univariate_sampling(marginal, stationid, allclose):
         try:
             smp = univariate_censored_sampling(data=stan_data,
                                                inits=stan_inits,
-                                               chains=4,
+                                               chains=nchains,
                                                seed=SEED,
                                                iter_warmup=5000,
                                                iter_sampling=500,

@@ -14,7 +14,7 @@ CMDSTAN_VERSION = "2.30.1"
 
 # default stan sampling setup
 NSAMPLES_DEFAULT = 10000
-NCHAINS_DEFAULT = 5
+NCHAINS_DEFAULT = 10
 NWARM_DEFAULT = 10000
 SEED_DEFAULT = 5446
 
@@ -86,6 +86,15 @@ def load_stan_model(name: str) -> Callable:
             its = kwargs.get("iter_sampling",
                              NSAMPLES_DEFAULT//NCHAINS_DEFAULT)
             kwargs["iter_sampling"] = its
+
+            # Check inits is of the right size
+            ninits = len(kwargs["inits"])
+            if ninits != 1:
+                if ninits != kwargs["chains"]:
+                    nchains = kwargs["chains"]
+                    errmess = f"Expected 1 or {nchains} initial "\
+                              + f"parameter sets, got {ninits}."
+                    raise ValueError(errmess)
 
         if "output_dir" in kwargs:
             fout = Path(kwargs["output_dir"])
