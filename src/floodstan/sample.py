@@ -481,17 +481,23 @@ class StanSamplingDataset():
 
 
 class StanDiscreteVariable():
-    def __init__(self, data, discrete_name):
+    def __init__(self, data, discrete_name,
+                 ninits=NCHAINS_DEFAULT):
         self.name = "k"
         self._N = 0
         self._data = None
         self._discrete_code = None
         self._discrete_name = None
-        self._initial_parameters = {}
+        self._initial_parameters = []
+        self.ninits = ninits
 
         # Set if the 2 inputs are set
         if data is not None and discrete_name is not None:
-            self.set(data, discrete_name)
+            self.set_data(data, discrete_name)
+            data_set = True
+
+        if data_set:
+            self.set_initial_parameters()
 
     @property
     def N(self):
@@ -521,7 +527,7 @@ class StanDiscreteVariable():
             raise ValueError(errmess)
         return self._data
 
-    def set(self, data, discrete_name):
+    def set_data(self, data, discrete_name):
         if discrete_name not in DISCRETE_NAMES:
             errmess = f"Cannot find discrete {discrete_name}."
             raise ValueError(errmess)
@@ -545,9 +551,14 @@ class StanDiscreteVariable():
         self._data = data
         self._N = len(data)
 
-        # Set initial values
-        self._initial_parameters["locn"] = data.mean()
-        self._initial_parameters["phi"] = 1.
+    def set_initial_parameters(self):
+        inits = []
+        for i in range(self.ninits):
+            inits.append({
+                "locn": self.data.mean()*max(0.05, np.random.normal(scale=0.2)),
+                "phi": 1
+                })
+        self._initial_parameters = inits
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
@@ -564,8 +575,5 @@ class StanDiscreteVariable():
             f"{vn}locn_prior": [0.5, 3] if isbern else DISCRETE_LOCN_PRIOR,
             f"{vn}phi_prior": DISCRETE_PHI_PRIOR
             }
-
-        for k, v in self.initial_parameters.items():
-            dd[f"{vn}{k}"] = v
 
         return dd
