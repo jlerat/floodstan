@@ -18,35 +18,37 @@ FTESTS = Path(__file__).resolve().parent
 FIMG = FTESTS / "images"
 FIMG.mkdir(exist_ok=True)
 
-def test_reduced_variate(allclose):
+@pytest.mark.parametrize("ptype",
+                         freqplots.PLOT_TYPES)
+def test_reduced_variate(ptype, allclose):
     nval = 1000
-    for plot_type in freqplots.PLOT_TYPES:
-        prob = (np.arange(1, nval+1)-0.4)/(nval+1-0.8)
-        rv = freqplots.prob_to_reduced_variate(prob, plot_type)
-        prob2 = freqplots.reduced_variate_to_prob(rv, plot_type)
-        assert allclose(prob, prob2)
+    prob = (np.arange(1, nval+1)-0.4)/(nval+1-0.8)
+    rv = freqplots.cdf_to_reduced_variate(prob, ptype)
+    prob2 = freqplots.reduced_variate_to_cdf(rv, ptype)
+    assert allclose(prob, prob2)
 
-        rv2 = freqplots.prob_to_reduced_variate(prob2, plot_type)
-        assert allclose(rv, rv2)
+    rv2 = freqplots.cdf_to_reduced_variate(prob2, ptype)
+    assert allclose(rv, rv2)
 
-def test_reduced_variate_equidistant(allclose):
+@pytest.mark.parametrize("ptype",
+                         freqplots.PLOT_TYPES)
+def test_reduced_variate_equidistant(ptype, allclose):
     nval = 4
     data = np.linspace(0, 1, nval)
-    for plot_type in freqplots.PLOT_TYPES:
-        rv = freqplots.prob_to_reduced_variate_equidistant(nval, plot_type)
-        if plot_type == "gumbel":
-            expected = np.array([-0.66572981,  0.03554335,  0.73485899,  1.86982471])
-        elif plot_type == "normal":
-            expected = np.array([-1.06757052, -0.30298045,  0.30298045,  1.06757052])
-        elif plot_type == "log":
-            expected = np.array([0.15415068, 0.47957308, 0.9650809 , 1.94591015])
+    rv = freqplots.cdf_to_reduced_variate_equidistant(nval, ptype)
+    if ptype == "gumbel":
+        expected = np.array([-0.66572981,  0.03554335,  0.73485899,  1.86982471])
+    elif ptype == "normal":
+        expected = np.array([-1.06757052, -0.30298045,  0.30298045,  1.06757052])
+    elif ptype == "lognormal":
+        expected = np.array([0.34384286, 0.73861354, 1.35388799, 2.90830525])
 
-        assert allclose(rv, expected)
+    assert allclose(rv, expected)
 
 
-def test_prob_to_reduced_variate_gumbel(allclose):
+def test_cdf_to_reduced_variate_gumbel(allclose):
     nval = 20
-    rv = freqplots.prob_to_reduced_variate_equidistant(nval, "gumbel")
+    rv = freqplots.cdf_to_reduced_variate_equidistant(nval, "gumbel")
     prob = (np.arange(1, nval+1)-0.4)/(nval+1-0.8)
     expected = -np.log(-np.log(prob))
     assert allclose(rv, expected, rtol=0, atol=1e-2)
@@ -92,7 +94,8 @@ def test_plot_marginal_cdf_censored(ptype):
     streamflow = get_ams("203014")
 
     gev = marginals.GEV()
-    cens = streamflow.median()
+    pcens = 0.4
+    cens = streamflow.quantile(pcens)
     icens = streamflow>=cens
     truncated_probability = (~icens).sum()/len(streamflow)
 
@@ -102,10 +105,16 @@ def test_plot_marginal_cdf_censored(ptype):
     fig, ax = plt.subplots()
     freqplots.plot_data(ax, streamflow, ptype)
 
-    freqplots.plot_marginal_cdf(ax, gev, ptype, \
-                            truncated_probability=truncated_probability, \
-                            Tmax=500)
+    with pytest.raises(ValueError, match="Some cdf are negative"):
+        freqplots.plot_marginal_cdf(ax, gev, ptype,
+                                truncated_probability=truncated_probability,
+                                Tmin=1./(1-pcens)-0.1,
+                                Tmax=500)
 
+    freqplots.plot_marginal_cdf(ax, gev, ptype,
+                                truncated_probability=truncated_probability,
+                                Tmin=1./(1-pcens),
+                                Tmax=500)
     retp = [5, 10, 100, 500]
     aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
 
