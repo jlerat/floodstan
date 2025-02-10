@@ -71,7 +71,8 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
     for f in fout_stan.glob("*.*"):
         f.unlink()
 
-    smp = bivariate_censored_sampling(data=stan_data,
+    try:
+        smp = bivariate_censored_sampling(data=stan_data,
                                       chains=stan_nchains,
                                       seed=SEED,
                                       iter_warmup=stan_nwarm,
@@ -80,6 +81,9 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
                                       output_dir=fout_stan,
                                       inits=stan_inits,
                                       show_progress=False)
+    except Exception as err:
+        print(err)
+        import pdb; pdb.set_trace()
 
     diag = report.process_stan_diagnostic(smp.diagnose())
     params = smp.draws_pd()
@@ -97,8 +101,7 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
 
 def test_bivariate_sampling(allclose):
     # Same background than univariate sampling tests
-    return
-    # TODO !
+    pytest.skip("TODO")
 
     stationids = get_stationids()
     nstations = 2

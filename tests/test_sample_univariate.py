@@ -123,6 +123,10 @@ def test_stan_sampling_variable(distname, allclose):
         for pn in ["locn", "logscale", "shape1"]:
             assert pn in init
 
+    cdfs = sv.initial_cdfs
+    assert len(cdfs) == len(inits)
+    assert len(cdfs[0]) == len(sv.data)
+
 
 @pytest.mark.parametrize("distname",
                          marginals.MARGINAL_NAMES)

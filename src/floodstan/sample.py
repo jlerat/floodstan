@@ -36,7 +36,7 @@ COPULA_NAMES_STAN = ["Gaussian", "Clayton", "Gumbel"]
 SHAPE1_PRIOR = [0, 0.2]
 
 # Prior on copula parameter
-RHO_PRIOR = [0.7, 1]
+RHO_PRIOR = [0.7, 1.]
 
 # Prior on discrete parameters
 DISCRETE_LOCN_PRIOR = [1, 10]
@@ -124,8 +124,12 @@ class StanSamplingVariable():
         self._is_miss = None
         self._is_obs = None
         self._is_cens = None
+
+        # Initial parameters
         self.ninits = ninits
         self.init_perturb_scale = init_perturb_scale
+        self._initial_parameters = []
+        self._initial_cdfs = []
 
         data_set = False
         if data is not None and censor is not None:
@@ -161,6 +165,14 @@ class StanSamplingVariable():
             raise ValueError(errmess)
 
         return self._initial_parameters
+
+    @property
+    def initial_cdfs(self):
+        if len(self._initial_cdfs) == 0:
+            errmess = "Initial cdfs have not been set."
+            raise ValueError(errmess)
+
+        return self._initial_cdfs
 
     @property
     def marginal(self):
@@ -294,7 +306,8 @@ class StanSamplingVariable():
                 }
 
     def set_initial_parameters(self):
-        dok = self.data[~np.isnan(self.data)]
+        data = self.data
+        notnan = ~np.isnan(data)
         dist = self.marginal
         gp = self.guess_parameters
         params0 = np.array([gp["locn"], gp["logscale"],
@@ -312,12 +325,17 @@ class StanSamplingVariable():
 
             # Shift in scale to ensure valid start
             niter = 0
-            while True and niter < 5:
-                lpdf = dist.logpdf(dok)
-                lcdf = dist.logcdf(self.censor)
-                if np.isnan(lpdf).any() or np.isnan(lcdf):
-                    dist.logscale += 0.1
+            while True and niter < 10:
+                cdf_data = dist.cdf(data)
+                cdf_data_min = cdf_data[notnan].min()
+                cdf_data_max = cdf_data[notnan].max()
+                cdf_censor = dist.cdf(self.censor)
+                notok = (cdf_data_min < 1e-2) | (cdf_data_max > 0.99)
+                notok |= (cdf_censor < 1e-2) | (cdf_censor > 0.99)
+                if notok:
+                    dist.logscale += 0.2
                     valid = False
+                    niter += 1
                 else:
                     valid = True
                     break
@@ -329,6 +347,13 @@ class StanSamplingVariable():
                     "logscale": dist.logscale,
                     "shape1": dist.shape1
                     })
+                # .. and the data cdf
+                self._initial_cdfs.append(cdf_data)
+            else:
+                self._initial_parameters = []
+                self._initial_cdfs = []
+                errmess = "Cannot find initial marginal parameter."
+                raise ValueError(errmess)
 
         self._initial_parameters = inits
 
@@ -392,6 +417,7 @@ class StanSamplingDataset():
 
         # Set indexes
         self.set_indexes()
+        self.set_initial_parameters()
 
     @property
     def copula_name(self):
@@ -407,20 +433,11 @@ class StanSamplingDataset():
 
     @property
     def initial_parameters(self):
-        inits = []
-        ninits = min([vs.ninits for vs in self._stan_variables])
-        for i in range(ninits):
-            init = {}
-            for vs in self._stan_variables:
-                n = vs.name
-                for pn, value in vs.initial_parameters[i].items():
-                    ppn = f"{n}{pn}"
-                    init[ppn] = value
+        if len(self._initial_parameters) == 0:
+            errmess = "Initial parameters have not been set."
+            raise ValueError(errmess)
 
-            init["rho"] = RHO_PRIOR[0]
-            inits.append(init)
-
-        return inits
+        return self._initial_parameters
 
     def set_indexes(self):
         yv = self.stan_variables[0]
@@ -458,6 +475,53 @@ class StanSamplingDataset():
         if N != np.sum(self.Ncases):
             errmess = f"Expected total of Ncases to be {N},"\
                       + f" got {np.sum(self.Ncases)}."
+
+    def set_initial_parameters(self):
+        copula = self._copula
+        inits = []
+        ninits = min([vs.ninits for vs in self._stan_variables])
+        for i in range(ninits):
+            init = {}
+            cdfs = []
+            for ivs, vs in enumerate(self._stan_variables):
+                n = vs.name
+                for pn, value in vs.initial_parameters[i].items():
+                    ppn = f"{n}{pn}"
+                    init[ppn] = value
+
+                cdfs.append(vs.initial_cdfs[ivs])
+
+            rho = np.random.normal(loc=RHO_PRIOR[0], scale=0.2)
+            rho_min = self._copula.rho_min+0.05
+            rho_max = self._copula.rho_max-0.05
+            rho = max(min(rho, rho_max), rho_min)
+
+            # Check likelihood and reduce correlation if needed
+            cdfs = np.column_stack(cdfs)
+            notnan = ~np.any(np.isnan(cdfs), axis=1)
+            cdfs = cdfs[notnan]
+            niter = 0
+            copula.rho = rho
+            while True and niter < 10:
+                copula_pdf = copula.pdf(cdfs)
+                notok = np.any(np.isnan(copula_pdf))
+                if notok:
+                    copula.rho = copula.rho*0.5
+                    valid = False
+                    niter += 1
+                else:
+                    valid = True
+                    break
+
+            if valid:
+                init["rho"] = copula.rho
+            else:
+                errmess = f"Cannot find initial copula parameter (rho={rho})."
+                raise ValueError(errmess)
+
+            inits.append(init)
+
+        self._initial_parameters = inits
 
     def to_dict(self):
         dd = self.stan_variables[0].to_dict()
