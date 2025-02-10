@@ -554,8 +554,9 @@ class StanDiscreteVariable():
     def set_initial_parameters(self):
         inits = []
         for i in range(self.ninits):
+            locn = self.data.mean()*max(0.05, np.random.normal(scale=0.2))
             inits.append({
-                "locn": self.data.mean()*max(0.05, np.random.normal(scale=0.2)),
+                "locn": locn,
                 "phi": 1
                 })
         self._initial_parameters = inits
