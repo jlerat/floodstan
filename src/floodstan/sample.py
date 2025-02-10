@@ -341,11 +341,14 @@ class StanSamplingVariable():
                     valid = False
                     niter += 1
 
-                    warnmess = "[iter {niter}] Invalid initial parameters: "\
-                               + f" cdf-data = [{cdf_data_min:0.1e}, "\
-                               + f"{cdf_data_max:0.1e}], "\
-                               + f" cdf-censor = {cdf_censor:0.1e}."\
-                               + f" Setting logscale to {dist.logscale:0.1e}."
+                    warnmess = f"\n[iter {niter}] Invalid initial "\
+                               + "marginal parameters:\n"\
+                               + f"locn = {dist.locn:0.1e}\n"\
+                               + f"logscale = {dist.logscale:0.1e}\n"\
+                               + f"shape1 = {dist.shape1:0.1e}\n"\
+                               + f"cdf-data = [{cdf_data_min:0.1e}, "\
+                               + f"{cdf_data_max:0.1e}]\n"\
+                               + f"cdf-censor = {cdf_censor:0.1e}\n"
                     warnings.warn(warnmess)
                 else:
                     valid = True
@@ -518,15 +521,15 @@ class StanSamplingDataset():
                 isnan = np.isnan(copula_pdf)
                 notok = np.any(isnan)
                 if notok:
+                    warnmess = f"\n[Iter {niter}] Invalid initial copula "\
+                               + "parameters:\n"\
+                               + f"rho = {copula.rho:0.2f}\n"\
+                               + f"{isnan.sum()} points are non valid.\n"
+                    warnings.warn(warnmess)
+
                     valid = False
                     niter += 1
                     copula.rho = copula.rho*0.5
-
-                    warnmess = f"[Iter {niter}] Invalid initial parameters: "\
-                               + f"{isnan.sum()} points are non valid"\
-                               + "in copula pdf."\
-                               + f" Setting rho to {copula.rho:0.2f}."
-                    warnings.warn(warnmess)
                 else:
                     valid = True
                     break

@@ -51,11 +51,7 @@ def test_marginals_vs_stan(marginal, stationid, allclose):
         dist.params_guess(yboot)
         y0, y1 = dist.support
 
-        try:
-            sv = sample.StanSamplingVariable(yboot, marginal)
-        except Exception as err:
-            import pdb; pdb.set_trace()
-
+        sv = sample.StanSamplingVariable(yboot, marginal)
         sv.name = "y"
         stan_data = sv.to_dict()
 
