@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 import logging
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -43,6 +44,8 @@ DISCRETE_LOCN_PRIOR = [1, 10]
 DISCRETE_PHI_PRIOR = [1, 10]
 
 CENSOR_DEFAULT = -1e10
+
+STAN_VARIABLE_INITIAL_CDF_MIN = 1e-3
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
@@ -330,12 +333,20 @@ class StanSamplingVariable():
                 cdf_data_min = cdf_data[notnan].min()
                 cdf_data_max = cdf_data[notnan].max()
                 cdf_censor = dist.cdf(self.censor)
-                notok = (cdf_data_min < 1e-2) | (cdf_data_max > 0.99)
-                notok |= (cdf_censor < 1e-2) | (cdf_censor > 0.99)
+                thresh = STAN_VARIABLE_INITIAL_CDF_MIN
+                notok = (cdf_data_min < thresh) | (cdf_data_max > 1 - thresh)
+                notok |= (cdf_censor < thresh) | (cdf_censor > 1 - thresh)
                 if notok:
                     dist.logscale += 0.2
                     valid = False
                     niter += 1
+
+                    warnmess = "[iter {niter}] Invalid initial parameters: "\
+                               + f" cdf-data = [{cdf_data_min:0.1e}, "\
+                               + f"{cdf_data_max:0.1e}], "\
+                               + f" cdf-censor = {cdf_censor:0.1e}."\
+                               + f" Setting logscale to {dist.logscale:0.1e}."
+                    warnings.warn(warnmess)
                 else:
                     valid = True
                     break
@@ -504,11 +515,18 @@ class StanSamplingDataset():
             copula.rho = rho
             while True and niter < 10:
                 copula_pdf = copula.pdf(cdfs)
-                notok = np.any(np.isnan(copula_pdf))
+                isnan = np.isnan(copula_pdf)
+                notok = np.any(isnan)
                 if notok:
-                    copula.rho = copula.rho*0.5
                     valid = False
                     niter += 1
+                    copula.rho = copula.rho*0.5
+
+                    warnmess = f"[Iter {niter}] Invalid initial parameters: "\
+                               + f"{isnan.sum()} points are non valid"\
+                               + "in copula pdf."\
+                               + f" Setting rho to {copula.rho:0.2f}."
+                    warnings.warn(warnmess)
                 else:
                     valid = True
                     break

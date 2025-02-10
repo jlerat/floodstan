@@ -65,11 +65,12 @@ def load_stan_model(name: str) -> Callable:
             errmess = "Expected data argument"
             raise ValueError(errmess)
 
-        if "inits" not in kwargs and not is_test:
-            errmess = "Expected inits argument"
-            raise ValueError(errmess)
-
         if is_test:
+            if "inits" in kwargs:
+                errmess = "Expected no inits argument."\
+                          + " Supply parameter values through stan_data."
+                raise ValueError(errmess)
+
             # .. specific argument to run a single iteration
             #    of the sampler.
             kwargs["chains"] = 1
@@ -79,6 +80,10 @@ def load_stan_model(name: str) -> Callable:
             kwargs["fixed_param"] = True
             kwargs["show_progress"] = False
         else:
+            if "inits" not in kwargs:
+                errmess = "Expected inits argument"
+                raise ValueError(errmess)
+
             # .. set defaults as per package variables
             kwargs["chains"] = kwargs.get("chains", NCHAINS_DEFAULT)
             kwargs["seed"] = kwargs.get("seed", SEED_DEFAULT)
