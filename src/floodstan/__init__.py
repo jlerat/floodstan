@@ -89,7 +89,7 @@ def load_stan_model(name: str) -> Callable:
 
             # Check inits is of the right size
             ninits = len(kwargs["inits"])
-            if ninits != 1:
+            if ninits != 1 and not isinstance(kwargs["inits"], dict):
                 if ninits != kwargs["chains"]:
                     nchains = kwargs["chains"]
                     errmess = f"Expected 1 or {nchains} initial "\
