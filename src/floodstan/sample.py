@@ -1,8 +1,6 @@
 import sys
 from pathlib import Path
 import logging
-import warnings
-import math
 
 import numpy as np
 import pandas as pd
@@ -313,8 +311,8 @@ class StanSamplingVariable():
         data = self.data
         notnan = ~np.isnan(data)
         data_nonan = data[notnan]
-        data_max = data[notnan].max()
-        data_min = data[notnan].min()
+        data_max = data_nonan.max()
+        data_min = data_nonan.min()
         censor = self.censor
 
         dist = self.marginal
