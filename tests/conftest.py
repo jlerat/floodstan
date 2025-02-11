@@ -7,20 +7,20 @@ def pytest_terminal_summary(terminalreporter):
 
 
 def pytest_addoption(parser):
-    parser.addoption("--runslow", action="store_true", default=False, \
-                                help="run slow tests")
+    parser.addoption("--cook", action="store_true", default=False, \
+                                help="run cook tests")
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "slow: mark test as slow.")
+    config.addinivalue_line("markers", "cook: mark test as cook.")
 
 
 def pytest_collection_modifyitems(config, items):
-    if config.getoption("--runslow"):
-        # -- runslow given in cli: do not skip slow tests
-        return
-
-    skip_slow = pytest.mark.skip(reason="need --runslow option to run")
+    has_cook_opts = config.getoption("--cook")
+    skip_cook = pytest.mark.skip(reason="need --cook option to run")
+    skip_nocook = pytest.mark.skip(reason="cannot run if --cook is set")
 
     for item in items:
-        if "slow" in item.keywords:
-            item.add_marker(skip_slow)
+        if "cook" in item.keywords and not has_cook_opts:
+            item.add_marker(skip_cook)
+        elif "cook" not in item.keywords and has_cook_opts:
+            item.add_marker(skip_nocook)

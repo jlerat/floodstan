@@ -31,6 +31,8 @@ FTESTS = Path(__file__).resolve().parent
 
 
 def test_stan_discrete_variable(allclose):
+    pytest.skip("Skip - to be removed from package")
+
     k = poisson(mu=2.5).rvs(size=100)
     msg = "Cannot find"
     with pytest.raises(ValueError, match=msg):
@@ -72,7 +74,7 @@ def test_occurence_modelling(allclose):
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
     # Journal of Computational and Graphical Statistics, 15:3, 675-692,
     # DOI: 10.1198/106186006X136976
-    pytest.skip("Skipping this test")
+    pytest.skip("Skip - to be removed from package")
 
     stan_nchains = 10
 
