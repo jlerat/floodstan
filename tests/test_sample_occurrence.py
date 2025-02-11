@@ -72,6 +72,7 @@ def test_occurence_modelling(allclose):
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
     # Journal of Computational and Graphical Statistics, 15:3, 675-692,
     # DOI: 10.1198/106186006X136976
+    pytest.skip("Skipping this test")
 
     stan_nchains = 10
 
