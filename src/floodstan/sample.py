@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 import logging
 import warnings
+import math
 
 import numpy as np
 import pandas as pd
@@ -311,50 +312,40 @@ class StanSamplingVariable():
     def set_initial_parameters(self):
         data = self.data
         notnan = ~np.isnan(data)
+        data_nonan = data[notnan]
+        data_max = data[notnan].max()
+        data_min = data[notnan].min()
+        censor = self.censor
+
         dist = self.marginal
         gp = self.guess_parameters
         params0 = np.array([gp["locn"], gp["logscale"],
                             gp["shape1"]])
 
         # Create a random sample for each chain
-        inits = []
-        while len(inits) < self.ninits:
+        ninits = self.ninits
+        niter = 0
+        inits, cdfs = [], []
+        while len(inits) < ninits and niter < ninits * 10:
+            # Perturb guess parameters
             perturb = np.random.normal(loc=0,
                                        scale=self.init_perturb_scale,
                                        size=3)
             params = params0 + perturb
-            params[0] = params0[0]*max(5e-2, 1+perturb[0])
+            params[0] = params0[0]*max(5e-1, 1+perturb[0])
             dist.params = params
 
-            # Shift in scale to ensure valid start
-            niter = 0
-            while True and niter < 10:
-                cdf_data = dist.cdf(data)
-                cdf_data_min = cdf_data[notnan].min()
-                cdf_data_max = cdf_data[notnan].max()
-                cdf_censor = dist.cdf(self.censor)
-                thresh = STAN_VARIABLE_INITIAL_CDF_MIN
-                notok = (cdf_data_min < thresh) | (cdf_data_max > 1 - thresh)
-                notok |= (cdf_censor < thresh) | (cdf_censor > 1 - thresh)
-                if notok:
-                    dist.logscale += 0.2
-                    valid = False
-                    niter += 1
+            cdf_data_min = dist.cdf(data_min)
+            cdf_data_max = dist.cdf(data_max)
+            if cdf_data_min > cdf_data_max:
+                cdf_data_min, cdf_data_max = cdf_data_max, \
+                    cdf_data_min
 
-                    warnmess = f"\n[iter {niter}] Invalid initial "\
-                               + "marginal parameters:\n"\
-                               + f"locn = {dist.locn:0.1e}\n"\
-                               + f"logscale = {dist.logscale:0.1e}\n"\
-                               + f"shape1 = {dist.shape1:0.1e}\n"\
-                               + f"cdf-data = [{cdf_data_min:0.1e}, "\
-                               + f"{cdf_data_max:0.1e}]\n"\
-                               + f"cdf-censor = {cdf_censor:0.1e}\n"
-                    warnings.warn(warnmess)
-                else:
-                    valid = True
-                    break
-
-            if valid:
+            cdf_censor = dist.cdf(censor)
+            thresh = STAN_VARIABLE_INITIAL_CDF_MIN
+            isok = (cdf_data_min >= thresh) & (cdf_data_max <= 1 - thresh)
+            isok &= (cdf_censor >= thresh) & (cdf_censor <= 1 - thresh)
+            if isok:
                 # Parameter is valid, we can store it
                 inits.append({
                     "locn": dist.locn,
@@ -362,14 +353,21 @@ class StanSamplingVariable():
                     "shape1": dist.shape1
                     })
                 # .. and the data cdf
-                self._initial_cdfs.append(cdf_data)
-            else:
-                self._initial_parameters = []
-                self._initial_cdfs = []
-                errmess = "Cannot find initial marginal parameter."
-                raise ValueError(errmess)
+                cdfs.append(dist.cdf(data))
+
+        # Fill up inits with params0
+        if len(inits) < ninits:
+            for i in range(ninits - len(inits)):
+                dist.params = params0
+                inits.append({
+                    "locn": dist.locn,
+                    "logscale": dist.logscale,
+                    "shape1": dist.shape1
+                    })
+                cdfs.append(dist.cdf(data))
 
         self._initial_parameters = inits
+        self._initial_cdfs = cdfs
 
     def set_priors(self):
         start = self.guess_parameters
@@ -492,8 +490,11 @@ class StanSamplingDataset():
 
     def set_initial_parameters(self):
         copula = self._copula
+        rho_min = copula.rho_min + 0.02
+        rho_max = copula.rho_max - 0.02
         inits = []
         ninits = min([vs.ninits for vs in self._stan_variables])
+
         for i in range(ninits):
             init = {}
             cdfs = []
@@ -505,40 +506,25 @@ class StanSamplingDataset():
 
                 cdfs.append(vs.initial_cdfs[ivs])
 
-            rho = np.random.normal(loc=RHO_PRIOR[0], scale=0.2)
-            rho_min = self._copula.rho_min+0.05
-            rho_max = self._copula.rho_max-0.05
-            rho = max(min(rho, rho_max), rho_min)
-
-            # Check likelihood and reduce correlation if needed
             cdfs = np.column_stack(cdfs)
             notnan = ~np.any(np.isnan(cdfs), axis=1)
             cdfs = cdfs[notnan]
+
             niter = 0
-            copula.rho = rho
-            while True and niter < 10:
-                copula_pdf = copula.pdf(cdfs)
-                isnan = np.isnan(copula_pdf)
-                notok = np.any(isnan)
-                if notok:
-                    warnmess = f"\n[Iter {niter}] Invalid initial copula "\
-                               + "parameters:\n"\
-                               + f"rho = {copula.rho:0.2f}\n"\
-                               + f"{isnan.sum()} points are non valid.\n"
-                    warnings.warn(warnmess)
+            while True and niter < 100:
+                rho = np.random.normal(loc=RHO_PRIOR[0], scale=0.2)
+                rho = max(min(rho, rho_max), rho_min)
 
-                    valid = False
-                    niter += 1
-                    copula.rho = copula.rho*0.5
-                else:
-                    valid = True
+                # Check likelihood and reduce correlation if needed
+                copula.rho = rho
+                niter = 0
+                copula_pdfs = copula.pdf(cdfs)
+                isok = np.all(~np.isnan(copula_pdfs))
+                if isok:
+                    init["rho"] = copula.rho
                     break
-
-            if valid:
-                init["rho"] = copula.rho
-            else:
-                errmess = f"Cannot find initial copula parameter (rho={rho})."
-                raise ValueError(errmess)
+                else:
+                    niter += 1
 
             inits.append(init)
 

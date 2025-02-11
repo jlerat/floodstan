@@ -400,6 +400,14 @@ class Normal(FloodFreqDistribution):
         return super(Normal, self).__getattribute__(name)
 
     @property
+    def shape1(self):
+        return 0.
+
+    @shape1.setter
+    def shape1(self, value):
+        self._shape1 = 0.
+
+    @property
     def support(self):
         return -np.inf, np.inf
 
@@ -688,6 +696,14 @@ class Gumbel(FloodFreqDistribution):
         super(Gumbel, self).__init__("Gumbel")
 
     @property
+    def shape1(self):
+        return 0.
+
+    @shape1.setter
+    def shape1(self, value):
+        self._shape1 = 0.
+
+    @property
     def support(self):
         return -np.inf, np.inf
 
@@ -757,6 +773,14 @@ class LogNormal(FloodFreqDistribution):
 
     def __init__(self):
         super(LogNormal, self).__init__("LogNormal")
+
+    @property
+    def shape1(self):
+        return 0.
+
+    @shape1.setter
+    def shape1(self, value):
+        self._shape1 = 0.
 
     @property
     def support(self):
@@ -972,6 +996,14 @@ class Gamma(FloodFreqDistribution):
 
     def __init__(self):
         super(Gamma, self).__init__("Gamma")
+
+    @property
+    def shape1(self):
+        return 0.
+
+    @shape1.setter
+    def shape1(self, value):
+        self._shape1 = 0.
 
     @property
     def locn(self):
