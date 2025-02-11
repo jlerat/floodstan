@@ -234,9 +234,4 @@ if __name__ == "__main__":
         for x, y in zip(xx, yy):
             v1 =  bvnu(-x, -y, rho)
             v2 = scipy_fun(x, y, rho)
-            try:
-                assert np.isclose(v1, v2)
-            except:
-                import pdb; pdb.set_trace()
-
-
+            assert np.isclose(v1, v2)
