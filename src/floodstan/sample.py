@@ -46,6 +46,8 @@ CENSOR_DEFAULT = -1e10
 
 STAN_VARIABLE_INITIAL_CDF_MIN = 1e-3
 
+MAX_INIT_PARAM_SEARCH = 10
+
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
 LOGGER_DATE_FORMAT = "%y-%m-%d %H:%M"
@@ -324,7 +326,8 @@ class StanSamplingVariable():
         ninits = self.ninits
         niter = 0
         inits, cdfs = [], []
-        while len(inits) < ninits and niter < ninits * 10:
+        while len(inits) < ninits \
+                and niter < ninits + MAX_INIT_PARAM_SEARCH:
             # Perturb guess parameters
             perturb = np.random.normal(loc=0,
                                        scale=self.init_perturb_scale,
@@ -509,7 +512,7 @@ class StanSamplingDataset():
             cdfs = cdfs[notnan]
 
             niter = 0
-            while True and niter < 100:
+            while True and niter < MAX_INIT_PARAM_SEARCH:
                 rho = np.random.normal(loc=RHO_PRIOR[0], scale=0.2)
                 rho = max(min(rho, rho_max), rho_min)
 
