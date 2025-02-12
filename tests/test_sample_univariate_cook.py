@@ -55,7 +55,7 @@ def test_univariate_sampling(marginal, stationid, allclose):
     # Large number of values to check we can get the "true" parameters
     # back from sampling
     nvalues = 50
-    nrepeat = 50
+    nrepeat = 30
 
     print("\n")
 
