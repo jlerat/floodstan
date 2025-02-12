@@ -1,12 +1,13 @@
 import re
 import math
+import warnings
 import numpy as np
 
 from scipy.stats import genextreme, pearson3, gumbel_r
 from scipy.stats import gamma as gamma_dist
 from scipy.stats import lognorm, norm, genpareto
-from scipy.optimize import brentq
-from scipy.special import gamma, gammaln
+from scipy.optimize import brentq, minimize
+from scipy.special import gamma, gammaln, polygamma
 
 # Distribution names
 MARGINAL_NAMES = {
@@ -38,9 +39,9 @@ def _prepare(data):
         errmess = f"Expected 1dim array, got ndim={data.ndim}."
         raise ValueError(errmess)
 
-    data[np.isnan(data)] = -2e100
+    data[np.isnan(data)] = -2e10
     data_sorted = np.sort(data, axis=0)
-    data_sorted[data_sorted < -1e100] = np.nan
+    data_sorted[data_sorted < -1e10] = np.nan
     nval = (~np.isnan(data_sorted)).sum()
 
     if nval < 4:
@@ -52,6 +53,7 @@ def _prepare(data):
 
 def _comb(n, i):
     """ Function much faster than scipy.comb """
+    n = float(n)  # To avoid overflow if i == 8
     if i > n:
         return 0
     elif i == 0:
@@ -72,6 +74,31 @@ def _comb(n, i):
         return n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)*(n-6)/5040
     elif i == 8:
         return n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)*(n-6)*(n-7)/40320
+
+
+def _prepare_censored_data(data, low_censor):
+    data = np.array(data)
+    low_censor = -1e10 if low_censor is None else float(low_censor)
+    dcens = data[data > low_censor]
+    if len(dcens) < 5:
+        errmess = "Expected at least 5 uncensored values"
+        raise ValueError(errmess)
+    return dcens, len(data)-len(dcens)
+
+
+def _check_param_value(x):
+    errmess = f"Invalid parameter value '{x}."
+    if x is None:
+        raise ValueError(errmess)
+    try:
+        x = float(x)
+    except Exception:
+        raise ValueError(errmess)
+
+    if np.isnan(x) or not np.isfinite(x):
+        raise ValueError(errmess)
+
+    return x
 
 
 def lh_moments(data, eta=0, compute_lam4=True):
@@ -202,7 +229,7 @@ class FloodFreqDistribution():
 
     @locn.setter
     def locn(self, value):
-        self._locn = float(value)
+        self._locn = _check_param_value(value)
 
     @property
     def logscale(self):
@@ -210,7 +237,7 @@ class FloodFreqDistribution():
 
     @logscale.setter
     def logscale(self, value):
-        self._logscale = float(value)
+        self._logscale = _check_param_value(value)
 
     @property
     def scale(self):
@@ -222,14 +249,30 @@ class FloodFreqDistribution():
 
     @shape1.setter
     def shape1(self, value):
-        value = float(value)
+        self._shape1 = _check_param_value(value)
 
-        if value < SHAPE1_LOWER or value > SHAPE1_UPPER:
+        # Check shape bounds
+        sh1 = self._shape1
+        if sh1 < SHAPE1_LOWER or sh1 > SHAPE1_UPPER:
             errmess = f"Expected shape in ]{SHAPE1_LOWER}, "\
-                      + f"{SHAPE1_UPPER}[, got {value}."
+                      + f"{SHAPE1_UPPER}[, got {sh1}."
             raise ValueError(errmess)
 
-        self._shape1 = value
+    @property
+    def params(self):
+        return np.array([self.locn, self.logscale,
+                         self.shape1])
+
+    @params.setter
+    def params(self, value):
+        if len(value) != 3:
+            errmess = "Expected 3 parameters, got {len(theta)}."
+            raise ValueError(errmess)
+
+        locn, logscale, shape1 = value
+        self.locn = locn
+        self.logscale = logscale
+        self.shape1 = shape1
 
     @property
     def support(self):
@@ -274,6 +317,68 @@ class FloodFreqDistribution():
         errmsg = f"Method rvs not implemented for class {self.name}."
         raise NotImplementedError(errmsg)
 
+    def neglogpost(self, theta, data_censored, low_censor,
+                   ncens, shape_width_prior=None):
+        try:
+            self.params = theta
+        except ValueError:
+            return np.inf
+
+        nlp = -self.logpdf(data_censored).sum()
+        if ncens > 0:
+            nlp -= self.logcdf(low_censor)*ncens
+
+        if not np.isfinite(nlp) or np.isnan(nlp):
+            return np.inf
+
+        if shape_width_prior is not None:
+            nlp += norm.logpdf(theta[-1], loc=0, scale=shape_width_prior)
+
+        return nlp
+
+    def maximum_posterior_estimate(self, data, low_censor=None,
+                                   shape_width_prior=None,
+                                   nexplore=5000,
+                                   explore_scale=0.2):
+        # Prepare data
+        dcens, ncens = _prepare_censored_data(data, low_censor)
+
+        # Initial parameter exploration
+        # random perturb guesses parameters in
+        # arcsinh space (log for large values and lin for small values)
+        self.params_guess(data)
+        theta0 = self.params
+        perturb = np.random.normal(loc=0, scale=explore_scale,
+                                   size=(nexplore, 3))
+        explore = np.sinh(np.arcsinh(theta0)[None, :] + perturb)
+        # .. keep guessed parameter last
+        explore[-1] = theta0
+
+        # .. loop throught explored parameter and check loglike
+        nll_min = np.inf
+        for theta in explore:
+            nll = self.neglogpost(theta, dcens, low_censor, ncens,
+                                  shape_width_prior)
+            if nll < nll_min and np.isfinite(nll) and not np.isnan(nll):
+                theta0 = theta
+                nll_min = nll
+
+        # Nelder-Mead fit
+        options = dict(xatol=1e-5, fatol=1e-5,
+                       maxiter=10000, maxfev=50000)
+        opt = minimize(self.neglogpost, theta0,
+                       args=(dcens, low_censor, ncens, shape_width_prior),
+                       method="Nelder-Mead",
+                       options=options)
+        self.params = opt.x
+
+        if not opt.success:
+            warnmess = "Nelder-Mead optimisation did not converge."\
+                       + f"Message: {opt.message}."
+            warnings.warn(warnmess)
+
+        return -opt.fun, opt.x, dcens, ncens
+
 
 class Normal(FloodFreqDistribution):
     def __init__(self):
@@ -298,12 +403,21 @@ class Normal(FloodFreqDistribution):
         return super(Normal, self).__getattribute__(name)
 
     @property
+    def shape1(self):
+        return 0.
+
+    @shape1.setter
+    def shape1(self, value):
+        self._shape1 = 0.
+
+    @property
     def support(self):
         return -np.inf, np.inf
 
     def params_guess(self, data):
         self.locn = np.mean(data)
-        self.logscale = math.log(np.std(data, ddof=1))
+        scale2 = ((data - self.locn)**2).mean()
+        self.logscale = math.log(math.sqrt(scale2))
 
     def fit_lh_moments(self, data, eta=0):
         if eta != 0:
@@ -585,6 +699,14 @@ class Gumbel(FloodFreqDistribution):
         super(Gumbel, self).__init__("Gumbel")
 
     @property
+    def shape1(self):
+        return 0.
+
+    @shape1.setter
+    def shape1(self, value):
+        self._shape1 = 0.
+
+    @property
     def support(self):
         return -np.inf, np.inf
 
@@ -656,6 +778,14 @@ class LogNormal(FloodFreqDistribution):
         super(LogNormal, self).__init__("LogNormal")
 
     @property
+    def shape1(self):
+        return 0.
+
+    @shape1.setter
+    def shape1(self, value):
+        self._shape1 = 0.
+
+    @property
     def support(self):
         return 0, np.inf
 
@@ -678,9 +808,16 @@ class LogNormal(FloodFreqDistribution):
         return super(LogNormal, self).__getattribute__(name)
 
     def params_guess(self, data):
-        logx = np.log(data[data > 0])
+        data_ok = data[~np.isnan(data) & (data > 0)]
+        if len(data_ok) <= 3:
+            errmess = "Expected at least 3 samples valid and  > 0."
+            raise ValueError(errmess)
+
+        # Maximum likelihood
+        logx = np.log(data_ok)
         self.locn = logx.mean()
-        self.logscale = math.log((logx-self.locn).std(ddof=1))
+        scale2 = ((logx-self.locn)**2).mean()
+        self.logscale = math.log(math.sqrt(scale2))
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 198. """
@@ -788,7 +925,8 @@ class GeneralizedLogistic(FloodFreqDistribution):
             def fun(x):
                 z = (x-tau)/alpha
                 if abs(kappa) > kt:
-                    z = -1.0/kappa*np.log(1-kappa*z)
+                    u = 1 - kappa * z
+                    z = np.where(u > 1e-100, -1.0/kappa*np.log(u), np.nan)
 
                 if name == "pdf":
                     return 1./alpha*np.exp(-(1-kappa)*z)/(1+np.exp(-z))**2
@@ -863,6 +1001,14 @@ class Gamma(FloodFreqDistribution):
         super(Gamma, self).__init__("Gamma")
 
     @property
+    def shape1(self):
+        return 0.
+
+    @shape1.setter
+    def shape1(self, value):
+        self._shape1 = 0.
+
+    @property
     def locn(self):
         return self._locn
 
@@ -898,19 +1044,25 @@ class Gamma(FloodFreqDistribution):
         return super(Gamma, self).__getattribute__(name)
 
     def params_guess(self, data):
-        dok = data[~np.isnan(data) & (data > 0)]
-        if len(dok) <= 5:
+        data_ok = data[~np.isnan(data) & (data > 0)]
+        if len(data_ok) <= 5:
             errmess = "Expected at least 5 samples valid and  > 0."
             raise ValueError(errmess)
 
         # See https://en.wikipedia.org/wiki/Gamma_distribution
         #              #Maximum_likelihood_estimation
-        # s = np.log(dok.mean())-np.mean(np.log(dok))
-        # kappa = (3-s+math.sqrt((s-3)**3+24*s))/12/s
-        # theta = dok.mean()/kappa
+        dm = data_ok.mean()
+        dlm = np.log(data_ok).mean()
+        s = math.log(dm) - dlm
+        a = (3 - s + math.sqrt((s - 3)**2 + 24*s)) / 12 / s
+        nit = 0
+        while True and nit < 100:
+            up = (math.log(a) - polygamma(0, a) - s)/(1. / a - polygamma(1, a))
+            anew = a - up
+            if abs(anew - a) < 1e-10:
+                break
+            a = anew
+            nit += 1
 
-        # Method of moments mean=alpha/beta, var=alpha/beta^2
-        # locn=mean and scale=1/beta
-        m, v = dok.mean(), dok.var()
-        self.locn = m**2/v
-        self.logscale = math.log(v/m)
+        self.locn = dm
+        self.logscale = math.log(dm/a)

@@ -80,7 +80,7 @@ venv.bak/
 
 # Others
 *.png
-*.swp
+.*.swp
 tests/sampling/
 tests/images/
 tests/report/

@@ -14,7 +14,7 @@ CMDSTAN_VERSION = "2.30.1"
 
 # default stan sampling setup
 NSAMPLES_DEFAULT = 10000
-NCHAINS_DEFAULT = 5
+NCHAINS_DEFAULT = 10
 NWARM_DEFAULT = 10000
 SEED_DEFAULT = 5446
 
@@ -65,11 +65,12 @@ def load_stan_model(name: str) -> Callable:
             errmess = "Expected data argument"
             raise ValueError(errmess)
 
-        if "inits" not in kwargs and not is_test:
-            errmess = "Expected inits argument"
-            raise ValueError(errmess)
-
         if is_test:
+            if "inits" in kwargs:
+                errmess = "Expected no inits argument."\
+                          + " Supply parameter values through stan_data."
+                raise ValueError(errmess)
+
             # .. specific argument to run a single iteration
             #    of the sampler.
             kwargs["chains"] = 1
@@ -79,6 +80,10 @@ def load_stan_model(name: str) -> Callable:
             kwargs["fixed_param"] = True
             kwargs["show_progress"] = False
         else:
+            if "inits" not in kwargs:
+                errmess = "Expected inits argument"
+                raise ValueError(errmess)
+
             # .. set defaults as per package variables
             kwargs["chains"] = kwargs.get("chains", NCHAINS_DEFAULT)
             kwargs["seed"] = kwargs.get("seed", SEED_DEFAULT)
@@ -86,6 +91,15 @@ def load_stan_model(name: str) -> Callable:
             its = kwargs.get("iter_sampling",
                              NSAMPLES_DEFAULT//NCHAINS_DEFAULT)
             kwargs["iter_sampling"] = its
+
+            # Check inits is of the right size
+            ninits = len(kwargs["inits"])
+            if ninits != 1 and not isinstance(kwargs["inits"], dict):
+                if ninits != kwargs["chains"]:
+                    nchains = kwargs["chains"]
+                    errmess = f"Expected 1 or {nchains} initial "\
+                              + f"parameter sets, got {ninits}."
+                    raise ValueError(errmess)
 
         if "output_dir" in kwargs:
             fout = Path(kwargs["output_dir"])

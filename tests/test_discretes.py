@@ -25,6 +25,8 @@ def sample_from_norm_truncated(mu, sig, x0, x1, size=None):
 
 
 def test_discretedist(allclose):
+    pytest.skip("Skip - to be removed from package")
+
     name = "bidule"
     dist = discretes.DiscreteDistribution(name)
 
@@ -61,6 +63,8 @@ def test_discretedist(allclose):
 
 
 def test_discretes_vs_scipy(allclose):
+    pytest.skip("Skip - to be removed from package")
+
     ntests = 10
     N = 100
 
@@ -118,8 +122,9 @@ def test_discretes_vs_scipy(allclose):
             assert allclose(ams, expected)
 
 
-
 def test_discretes_pot2cdf(allclose):
+    pytest.skip("Skip - to be removed from package")
+
     kv = discretes.factory("Poisson")
     kv.locn = 0.62
     assert np.isnan(kv.ams2pot_cdf(0.51))

@@ -34,8 +34,8 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/csiro-hydroinformatics/floodstan"
-Repository = "https://github.com/csiro-hydroinformatics/floodstan"
+Homepage = "https://github.com/jlerat/floodstan"
+Repository = "https://github.com/jlerat/floodstan"
 
 [tool.setuptools.packages.find]
 where = ["src"]

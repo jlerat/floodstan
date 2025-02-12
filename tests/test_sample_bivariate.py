@@ -40,6 +40,10 @@ STATIONIDS = get_stationids()
 def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose):
     LOGGER = sample.get_logger(stan_logger=False)
 
+    stan_nwarm = 5000
+    stan_nsamples = 1000
+    stan_nchains = 5
+
     y = get_ams(stationid)
     sids = STATIONIDS.copy()
     sids.remove(stationid)
@@ -52,17 +56,15 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
     y, z = df.y, df.z
 
     censor = y.median() if censoring else -10
-    yv = sample.StanSamplingVariable(y, "GEV", censor)
+    yv = sample.StanSamplingVariable(y, "GEV", censor,
+                                     ninits=stan_nchains)
     censor = z.median() if censoring else -10
-    zv = sample.StanSamplingVariable(z, "GEV", censor)
+    zv = sample.StanSamplingVariable(z, "GEV", censor,
+                                     ninits=stan_nchains)
 
     sv = sample.StanSamplingDataset([yv, zv], copula)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
-
-    stan_nwarm = 3000
-    stan_nsamples = 60
-    stan_nchains = 3
 
     fout_stan = FTESTS / "sampling" / "bivariate" / f"{stationid}_{copula}"
     fout_stan.mkdir(exist_ok=True, parents=True)
@@ -78,7 +80,6 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
                                       output_dir=fout_stan,
                                       inits=stan_inits,
                                       show_progress=False)
-
     diag = report.process_stan_diagnostic(smp.diagnose())
     params = smp.draws_pd()
 
@@ -91,50 +92,3 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
         f.unlink()
 
     fout_stan.rmdir()
-
-
-def test_bivariate_sampling(allclose):
-    # Same background than univariate sampling tests
-    return
-    # TODO !
-
-    stationids = get_stationids()
-    nstations = 2
-    LOGGER = sample.get_logger(stan_logger=False)
-
-    copula_names = sample.COPULA_NAMES
-    plots = {i: n for i, n in enumerate(copula_names)}
-
-    # Large number of values to check we can get the "true" parameters
-    # back from sampling
-    nvalues = 100
-    nrepeat = 50
-    nrows, ncols = 2, 2
-    axwidth, axheight = 5, 5
-
-    for isite in range(nstations):
-        # Create stan variables
-        y = get_ams(stationids[isite])
-        z = get_ams(stationids[isite+1])
-        N = len(y)
-
-        z.iloc[-2] = np.nan # to add a missing data in z
-        df = pd.DataFrame({"y": y, "z": z}).sort_index()
-        y, z = df.y, df.z
-
-        yv = sample.StanSamplingVariable(y, "GEV", 100)
-        zv = sample.StanSamplingVariable(z, "GEV", 100)
-
-        # Setup image
-        plt.close("all")
-        mosaic = [[plots.get(ncols*ir+ic, ".") for ic in range(ncols)]\
-                            for ir in range(nrows)]
-
-        w, h = axwidth*ncols, axheight*nrows
-        fig = plt.figure(figsize=(w, h), layout="tight")
-        axs = fig.subplot_mosaic(mosaic)
-
-        for cop in cops:
-            pass
-
-

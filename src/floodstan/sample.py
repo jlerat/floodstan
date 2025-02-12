@@ -7,6 +7,8 @@ import pandas as pd
 
 from floodstan import marginals
 
+from floodstan import NCHAINS_DEFAULT
+
 from floodstan.copulas import COPULA_NAMES
 from floodstan.copulas import factory
 
@@ -31,16 +33,20 @@ DISCRETE_CODES = {code: name for name, code in DISCRETE_NAMES.items()}
 COPULA_NAMES_STAN = ["Gaussian", "Clayton", "Gumbel"]
 
 # Tight prior on shape parameter
-SHAPE1_PRIOR = [0, 1]
+SHAPE1_PRIOR = [0, 0.2]
 
 # Prior on copula parameter
-RHO_PRIOR = [0.7, 1]
+RHO_PRIOR = [0.7, 1.]
 
 # Prior on discrete parameters
 DISCRETE_LOCN_PRIOR = [1, 10]
 DISCRETE_PHI_PRIOR = [1, 10]
 
 CENSOR_DEFAULT = -1e10
+
+STAN_VARIABLE_INITIAL_CDF_MIN = 1e-3
+
+MAX_INIT_PARAM_SEARCH = 10
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
@@ -104,7 +110,8 @@ class StanSamplingVariable():
                  marginal_name=None,
                  censor=CENSOR_DEFAULT,
                  name="y",
-                 tight_shape_prior=True):
+                 ninits=NCHAINS_DEFAULT,
+                 init_perturb_scale=0.1):
         self.name = str(name)
         if len(self.name) != 1:
             errmess = "Expected one character for name."
@@ -116,11 +123,17 @@ class StanSamplingVariable():
         self._marginal_name = None
         self._marginal = None
         self._censor = float(censor)
-        self._initial_parameters = {}
+        self._guess_parameters = []
+        self._initial_parameters = []
         self._is_miss = None
         self._is_obs = None
         self._is_cens = None
-        self.tight_shape_prior = bool(tight_shape_prior)
+
+        # Initial parameters
+        self.ninits = ninits
+        self.init_perturb_scale = init_perturb_scale
+        self._initial_parameters = []
+        self._initial_cdfs = []
 
         data_set = False
         if data is not None and censor is not None:
@@ -133,6 +146,7 @@ class StanSamplingVariable():
             marginal_set = True
 
         if data_set and marginal_set:
+            self.set_guess_parameters()
             self.set_initial_parameters()
             self.set_priors()
 
@@ -141,12 +155,28 @@ class StanSamplingVariable():
         return self._N
 
     @property
+    def guess_parameters(self):
+        if len(self._guess_parameters) == 0:
+            errmess = "Guess parameters have not been set."
+            raise ValueError(errmess)
+
+        return self._guess_parameters
+
+    @property
     def initial_parameters(self):
         if len(self._initial_parameters) == 0:
             errmess = "Initial parameters have not been set."
             raise ValueError(errmess)
 
         return self._initial_parameters
+
+    @property
+    def initial_cdfs(self):
+        if len(self._initial_cdfs) == 0:
+            errmess = "Initial cdfs have not been set."
+            raise ValueError(errmess)
+
+        return self._initial_cdfs
 
     @property
     def marginal(self):
@@ -266,25 +296,82 @@ class StanSamplingVariable():
         censor = max(np.float64(censor), dok.min() - 1e-10)
         self._censor = censor
 
-    def set_initial_parameters(self):
+    def set_guess_parameters(self):
         dok = self.data[~np.isnan(self.data)]
         dist = self.marginal
+
+        # Get guess parameter set
         dist.params_guess(dok)
+        params0 = dist.params
+        self._guess_parameters = {
+                "locn": params0[0],
+                "logscale": params0[1],
+                "shape1": params0[2]
+                }
 
-        # .. verify parameter is compatible
-        lpdf = dist.logpdf(dok)
-        lcdf = dist.logcdf(self.censor)
-        if np.isnan(lpdf).any() or np.isnan(lcdf):
-            errmess = "NaN likelihood: initial parameters incompatible"\
-                     + " with data."
-            raise ValueError(errmess)
+    def set_initial_parameters(self):
+        data = self.data
+        notnan = ~np.isnan(data)
+        data_nonan = data[notnan]
+        data_max = data_nonan.max()
+        data_min = data_nonan.min()
+        censor = self.censor
 
-        self._initial_parameters["locn"] = dist.locn
-        self._initial_parameters["logscale"] = dist.logscale
-        self._initial_parameters["shape1"] = dist.shape1
+        dist = self.marginal
+        gp = self.guess_parameters
+        params0 = np.array([gp["locn"], gp["logscale"],
+                            gp["shape1"]])
+
+        # Create a random sample for each chain
+        ninits = self.ninits
+        niter = 0
+        inits, cdfs = [], []
+        while len(inits) < ninits \
+                and niter < ninits + MAX_INIT_PARAM_SEARCH:
+            # Perturb guess parameters
+            perturb = np.random.normal(loc=0,
+                                       scale=self.init_perturb_scale,
+                                       size=3)
+            params = params0 + perturb
+            params[0] = params0[0]*max(5e-1, 1+perturb[0])
+            dist.params = params
+
+            cdf_data_min = dist.cdf(data_min)
+            cdf_data_max = dist.cdf(data_max)
+            if cdf_data_min > cdf_data_max:
+                cdf_data_min, cdf_data_max = cdf_data_max, \
+                    cdf_data_min
+
+            cdf_censor = dist.cdf(censor)
+            thresh = STAN_VARIABLE_INITIAL_CDF_MIN
+            isok = (cdf_data_min >= thresh) & (cdf_data_max <= 1 - thresh)
+            isok &= (cdf_censor >= thresh) & (cdf_censor <= 1 - thresh)
+            if isok:
+                # Parameter is valid, we can store it
+                inits.append({
+                    "locn": dist.locn,
+                    "logscale": dist.logscale,
+                    "shape1": dist.shape1
+                    })
+                # .. and the data cdf
+                cdfs.append(dist.cdf(data))
+
+        # Fill up inits with params0
+        if len(inits) < ninits:
+            for i in range(ninits - len(inits)):
+                dist.params = params0
+                inits.append({
+                    "locn": dist.locn,
+                    "logscale": dist.logscale,
+                    "shape1": dist.shape1
+                    })
+                cdfs.append(dist.cdf(data))
+
+        self._initial_parameters = inits
+        self._initial_cdfs = cdfs
 
     def set_priors(self):
-        start = self.initial_parameters
+        start = self.guess_parameters
         locn_start = start["locn"]
         self._locn_prior = [locn_start, 10 * abs(locn_start)]
 
@@ -292,14 +379,7 @@ class StanSamplingVariable():
         dscale = (LOGSCALE_UPPER-LOGSCALE_LOWER) / 2
         self._logscale_prior = [logscale_start, dscale]
 
-        # defines prior depending if it's tight or not
-        if self.tight_shape_prior:
-            shape1_prior_loc, shape1_prior_sig = SHAPE1_PRIOR
-        else:
-            shape1_prior_loc = start["shape1"]
-            shape1_prior_sig = marginals.SHAPE1_UPPER-marginals.SHAPE1_LOWER
-
-        self._shape1_prior = [shape1_prior_loc, shape1_prior_sig]
+        self._shape1_prior = SHAPE1_PRIOR
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
@@ -350,6 +430,7 @@ class StanSamplingDataset():
 
         # Set indexes
         self.set_indexes()
+        self.set_initial_parameters()
 
     @property
     def copula_name(self):
@@ -365,15 +446,11 @@ class StanSamplingDataset():
 
     @property
     def initial_parameters(self):
-        inits = {}
-        for vs in self._stan_variables:
-            n = vs.name
-            for pn, value in vs.initial_parameters.items():
-                ppn = f"{n}{pn}"
-                inits[ppn] = value
+        if len(self._initial_parameters) == 0:
+            errmess = "Initial parameters have not been set."
+            raise ValueError(errmess)
 
-        inits["rho"] = RHO_PRIOR[0]
-        return inits
+        return self._initial_parameters
 
     def set_indexes(self):
         yv = self.stan_variables[0]
@@ -412,6 +489,48 @@ class StanSamplingDataset():
             errmess = f"Expected total of Ncases to be {N},"\
                       + f" got {np.sum(self.Ncases)}."
 
+    def set_initial_parameters(self):
+        copula = self._copula
+        rho_min = copula.rho_min + 0.02
+        rho_max = copula.rho_max - 0.02
+        inits = []
+        ninits = min([vs.ninits for vs in self._stan_variables])
+
+        for i in range(ninits):
+            init = {}
+            cdfs = []
+            for ivs, vs in enumerate(self._stan_variables):
+                n = vs.name
+                for pn, value in vs.initial_parameters[i].items():
+                    ppn = f"{n}{pn}"
+                    init[ppn] = value
+
+                cdfs.append(vs.initial_cdfs[ivs])
+
+            cdfs = np.column_stack(cdfs)
+            notnan = ~np.any(np.isnan(cdfs), axis=1)
+            cdfs = cdfs[notnan]
+
+            niter = 0
+            while True and niter < MAX_INIT_PARAM_SEARCH:
+                rho = np.random.normal(loc=RHO_PRIOR[0], scale=0.2)
+                rho = max(min(rho, rho_max), rho_min)
+
+                # Check likelihood and reduce correlation if needed
+                copula.rho = rho
+                niter = 0
+                copula_pdfs = copula.pdf(cdfs)
+                isok = np.all(~np.isnan(copula_pdfs))
+                if isok:
+                    init["rho"] = copula.rho
+                    break
+                else:
+                    niter += 1
+
+            inits.append(init)
+
+        self._initial_parameters = inits
+
     def to_dict(self):
         dd = self.stan_variables[0].to_dict()
         dd.update(self.stan_variables[1].to_dict())
@@ -434,17 +553,23 @@ class StanSamplingDataset():
 
 
 class StanDiscreteVariable():
-    def __init__(self, data, discrete_name):
+    def __init__(self, data, discrete_name,
+                 ninits=NCHAINS_DEFAULT):
         self.name = "k"
         self._N = 0
         self._data = None
         self._discrete_code = None
         self._discrete_name = None
-        self._initial_parameters = {}
+        self._initial_parameters = []
+        self.ninits = ninits
 
         # Set if the 2 inputs are set
         if data is not None and discrete_name is not None:
-            self.set(data, discrete_name)
+            self.set_data(data, discrete_name)
+            data_set = True
+
+        if data_set:
+            self.set_initial_parameters()
 
     @property
     def N(self):
@@ -474,7 +599,7 @@ class StanDiscreteVariable():
             raise ValueError(errmess)
         return self._data
 
-    def set(self, data, discrete_name):
+    def set_data(self, data, discrete_name):
         if discrete_name not in DISCRETE_NAMES:
             errmess = f"Cannot find discrete {discrete_name}."
             raise ValueError(errmess)
@@ -498,9 +623,15 @@ class StanDiscreteVariable():
         self._data = data
         self._N = len(data)
 
-        # Set initial values
-        self._initial_parameters["locn"] = data.mean()
-        self._initial_parameters["phi"] = 1.
+    def set_initial_parameters(self):
+        inits = []
+        for i in range(self.ninits):
+            locn = self.data.mean()*max(0.05, np.random.normal(scale=0.2))
+            inits.append({
+                "locn": locn,
+                "phi": 1
+                })
+        self._initial_parameters = inits
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
@@ -517,8 +648,5 @@ class StanDiscreteVariable():
             f"{vn}locn_prior": [0.5, 3] if isbern else DISCRETE_LOCN_PRIOR,
             f"{vn}phi_prior": DISCRETE_PHI_PRIOR
             }
-
-        for k, v in self.initial_parameters.items():
-            dd[f"{vn}{k}"] = v
 
         return dd

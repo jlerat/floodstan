@@ -1,4 +1,4 @@
-name: Build floodstan
+name: Run cook tests
 
 on: [push]
 
@@ -50,38 +50,22 @@ jobs:
           echo "--- floodstan install : located in $PWD ---"
           pip install -e .
 
-      - name: Lint with flake8
+      - name: Run cook tests
         run: |
           source $CONDA/etc/profile.d/conda.sh
           conda activate env_floodstan
           cd $GITHUB_WORKSPACE
-          flake8 src/floodstan
-
-      - name: Run tests
-        run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_floodstan
-          cd $GITHUB_WORKSPACE
-          echo "--- floodstan test : located in $PWD ---"
-          pytest --ignore=src/hydrodiy --cov=floodstan --cov-report=xml --cov-report=html --cov-report=term-missing tests
+          echo "--- floodstan cook tests : located in $PWD ---"
+          pytest -sv --ignore=src/hydrodiy --cook tests
       
-      - name: Upload coverage report
+      - name: Upload test data
         uses: actions/upload-artifact@v4
         with:
-          name: pytest-coverage
-          path: htmlcov/*.*
+          name: pytest-images
+          path: tests/images/univariate_sampling_*.csv
 
-      - name: Parse coverage report and create badge
-        run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_floodstan
-          python -c "import xml.etree.ElementTree as ET; from anybadge import Badge; cov = float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100; covbadge = Badge('Coverage', value=f'{cov:0.0f}%', thresholds={60:'red', 70:'orange', 80:'lightgreen', 90:'green'}); covbadge.write_badge('coverage_badge.svg', True)"
-
-      - name: Update gist badge
-        run: |
-          sed 's/\"/\\\"/g' coverage_badge.svg > coverage_badge.txt
-          echo "{\"files\": {\"coverage_badge.svg\": {\"content\": \"$(cat coverage_badge.txt)\"}}}" > coverage_badge.json
-          curl -X PATCH -H "Authorization: token ${{ secrets.COVERAGE_GIST_TOKEN }}" \
-                -d @coverage_badge.json \
-                "https://api.github.com/gists/${{ secrets.COVERAGE_GIST_ID }}"
-
+      - name: Upload test images
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-images
+          path: tests/images/univariate_sampling_*.png

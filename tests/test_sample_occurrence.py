@@ -31,6 +31,8 @@ FTESTS = Path(__file__).resolve().parent
 
 
 def test_stan_discrete_variable(allclose):
+    pytest.skip("Skip - to be removed from package")
+
     k = poisson(mu=2.5).rvs(size=100)
     msg = "Cannot find"
     with pytest.raises(ValueError, match=msg):
@@ -72,6 +74,9 @@ def test_occurence_modelling(allclose):
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
     # Journal of Computational and Graphical Statistics, 15:3, 675-692,
     # DOI: 10.1198/106186006X136976
+    pytest.skip("Skip - to be removed from package")
+
+    stan_nchains = 10
 
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
     plots = {i: n for i, n in enumerate(discretes.DISCRETE_NAMES.keys())}
@@ -123,7 +128,8 @@ def test_occurence_modelling(allclose):
 
             # Configure stan data and initialisation
             try:
-                sv = sample.StanDiscreteVariable(ksmp, dname)
+                sv = sample.StanDiscreteVariable(ksmp, dname,
+                                                 ninits=stan_nchains)
             except:
                 # Skip if ksmp contains very high unrealistic values
                 continue
@@ -131,6 +137,7 @@ def test_occurence_modelling(allclose):
             stan_data = sv.to_dict()
             stan_data["klocn_prior"] = klocn_prior
             stan_data["kphi_prior"] = kphi_prior
+            stan_inits = sv.initial_parameters
 
             # Clean output folder
             fout = FTESTS / "sampling" / "occurrence" / dname
@@ -142,12 +149,12 @@ def test_occurence_modelling(allclose):
             try:
                 smp = event_occurrence_sampling(\
                     data=stan_data, \
-                    chains=4, \
+                    chains=stan_nchains, \
                     seed=SEED, \
                     iter_warmup=5000, \
                     iter_sampling=500, \
                     output_dir=fout, \
-                    inits=stan_data)
+                    inits=stan_inits)
             except Exception as err:
                 continue
 

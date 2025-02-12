@@ -14,6 +14,9 @@ STATIONS = ["203010", "203014", "arr61",
             "arr84", "arr88",
             "arr93", "LISAGGFLOW2"]
 
+STATIONS_BESTFIT = ["201001", "201012", "201900",
+                    "202001"]
+
 MODELS = ["bayesian-noprior", "LH0"]
 
 SOURCES = ["flike", "bestfit"]
@@ -124,45 +127,33 @@ def read_flike_outputs(station, distname, model,
     return dataframes, fr
 
 
-def read_bestfit_outputs(station, distname, model, censoring):
+def read_bestfit_mle(station, censoring):
     txt = "" if censoring else "no"
-    fp = FTESTS / "data" / "bestfit_outputs" / \
-                    f"{station}_{distname}_{model}_{txt}censoring_parameters.txt"
-    fq = FTESTS / "data" / "bestfit_outputs" / \
-                    f"{station}_{distname}_{model}_{txt}censoring_quantiles.txt"
-
-    if not fp.exists() or not fq.exists():
-        errmsg = f"Cannot find BESFIT data for {station}/"+\
-                    f"{distname}/{model}/{txt}censoring"
+    lf = (FTESTS / "data" / "bestfit_outputs").glob(\
+                    f"{station}_MLE_{txt}censoring*.csv")
+    lf = list(lf)
+    if len(lf) == 0 or len(lf) > 1:
+        errmsg = f"Cannot find BESFIT MLE data for {station}/"+\
+                    f"/{txt}censoring"
         raise FileNotFoundError(errmsg)
 
     # Format parameters
-    params = pd.read_csv(fp, sep="\t").iloc[:, 1:-1]
+    fp = lf[0]
+    renames = {
+        "Generalized Extreme Value": "GEV",
+        "Generalized Logistic": "GeneralizedLogistic",
+        "Generalized Pareto": "GeneralizedPareto",
+        "Ln-Normal": "LogNormal",
+        "Gumbel (EVI)": "Gumbel",
+        "Log-Pearson Type III": "LogPearson3"
+        }
+    params = pd.read_csv(fp, index_col=0).rename(columns=renames)
 
-    if distname == "GEV":
-        params.columns = ["tau", "alpha", "kappa"]
-    elif distname == "LogNormal":
-        params.columns = ["m", "s"]
-        params *= math.log(10)
-    elif distname == "LogPearson3":
-        params.columns = ["m", "s", "g"]
-        params.loc[:, ["m", "s"]] *= math.log(10)
-    elif distname == "Gumbel":
-        params.columns = ["tau", "alpha"]
+    # Censor
+    elems = fp.stem.split("_")
+    censor = float(elems[-1]) if censoring else 0.
 
-    params = params.describe().loc[["mean", "std"], :].T
-
-    # Format quantiles
-    quantiles = pd.read_csv(fq, sep="\t")
-    quantiles.loc[:, "AEP"] = (1/quantiles.AEP).astype(int)
-    idx = (quantiles.AEP!=3)&(quantiles.AEP>=2)
-    quantiles = quantiles.loc[idx, :].set_index("AEP").iloc[:, :2]
-    quantiles = quantiles.rename(columns={"5.0% CI": "5%", \
-                                "95.0% CI": "95%"})
-    quantiles = quantiles.loc[:, ["5%", "95%"]].round(1)
-
-    testdata = {"params": params, "quantiles": quantiles}
-    return testdata, fp
+    return params, censor
 
 
 

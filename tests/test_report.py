@@ -39,34 +39,39 @@ def test_report(allclose):
     marginal_name = "GEV"
     y = get_ams(stationid)
     N = len(y)
+    stan_nchains = 5
 
     # Configure stan data and initialisation
-    sv = sample.StanSamplingVariable(y, marginal_name)
+    sv = sample.StanSamplingVariable(y, marginal_name,
+                                     ninits=stan_nchains)
     stan_data = sv.to_dict()
+    stan_inits = sv.initial_parameters
 
     # Clean output folder
+    LOGGER = sample.get_logger(stan_logger=False)
     fout = FTESTS / "report" / stationid
     fout.mkdir(parents=True, exist_ok=True)
     for f in fout.glob("*.*"):
         f.unlink()
 
     # Sample
-    smp = univariate_censored_sampling(\
-        data=stan_data, \
-        chains=4, \
-        seed=SEED, \
-        iter_warmup=5000, \
-        iter_sampling=500, \
-        output_dir=fout, \
-        inits=stan_data)
-
+    smp = univariate_censored_sampling(data=stan_data,
+                                       chains=stan_nchains,
+                                       seed=SEED,
+                                       iter_warmup=5000,
+                                       iter_sampling=500,
+                                       output_dir=fout,
+                                       inits=stan_inits)
     # Get sample data
     params = smp.draws_pd()
 
-    rep, _ = report.ams_report(sv.marginal, params)
+    # Run report without obs
+    rep, _ = report.ams_report(sv.marginal, params) #, design_aris=[100])
     assert rep.shape == (12, 12)
 
-    obs = {year: y[year] for year in [1973, 2021]}
+    # Run report with obs
+    years = np.arange(1973, 2022)
+    obs = {year: y[year] for year in years}
     rep, _ = report.ams_report(sv.marginal, params, obs)
-    assert rep.shape == (16, 12)
+    assert rep.shape == (12 + 2 * len(obs), 12)
 

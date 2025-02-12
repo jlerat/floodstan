@@ -1,8 +1,11 @@
 import math
+import re
 import numpy as np
 import pandas as pd
 from pathlib import Path
 import pytest
+
+from scipy.special import polygamma
 
 from nrivfloodfreq import fdist, fsample
 from floodstan import marginals
@@ -59,6 +62,26 @@ def test_floodfreqdist(allclose):
         assert dist[pn] == 2
 
     dist.logshape = -1
+
+    pp = [
+        [10, 1, 0.1],
+        np.array([10, 1, 0.1]),
+        pd.Series([10, 1, 0.1]),
+        ]
+    for p in pp:
+        dist.params = p
+        assert allclose(dist.locn, 10)
+        assert allclose(dist.logscale, 1)
+        assert allclose(dist.shape1, 0.1)
+
+    with pytest.raises(ValueError, match="Expected 3 parameters"):
+        dist.params = [10, 1]
+
+    with pytest.raises(ValueError, match="Expected shape"):
+        dist.params = [10, 1, 1000]
+
+    with pytest.raises(ValueError, match="Invalid"):
+        dist.params = [10, 1, np.nan]
 
 
 @pytest.mark.parametrize("distname",
@@ -300,3 +323,131 @@ def test_fit_lh_moments_flike(distname, station, censoring, allclose):
     elif distname == "LogNormal":
         assert allclose(samples.locn, fit.loc[0, 1], rtol=0, atol=1e-2)
         assert allclose(samples.scale, fit.loc[1, 1], rtol=0, atol=1e-2)
+
+
+@pytest.mark.parametrize("distname",
+                         marginals.MARGINAL_NAMES)
+@pytest.mark.parametrize("stationid", get_stationids()[:3])
+@pytest.mark.parametrize("censoring", [False, True])
+def test_marginals_mle_numerical(distname, stationid, censoring, allclose):
+    streamflow = get_ams(stationid)
+    marginal = marginals.factory(distname)
+    censor = streamflow.quantile(0.33) if censoring else -1e10
+    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow,
+                                                                          censor,
+                                                                          nexplore=10000,
+                                                                          explore_scale=0.5)
+    # Perturb ll param and check ll_mle is always greater
+    trans_mle = np.arcsinh(theta_mle)
+    perturb = np.random.normal(loc=0., scale=0.2,
+                               size=(5000, 3))
+    for pert in perturb:
+        theta = np.sinh(trans_mle + pert)
+        ll = -marginal.neglogpost(theta, dcens, censor, ncens)
+        if np.isfinite(ll) and not np.isnan(ll):
+            mess = f"[{distname}/{stationid}/{censoring}] "\
+                   + f" num: ll={ll:0.1e} theta={theta} "\
+                   + f" mle: ll={ll_mle:0.1e} theta={theta_mle}"
+            assert ll < ll_mle, print(mess)
+
+
+@pytest.mark.parametrize("distname", ["Gamma", "LogNormal", "Normal"])
+@pytest.mark.parametrize("stationid", get_stationids())
+def test_marginals_mle_theoretical(distname, stationid, allclose):
+    streamflow = get_ams(stationid)
+    marginal = marginals.factory(distname)
+    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow)
+
+    # Theoretical value of MLE
+    if distname == "LogNormal":
+        marginal.params_guess(streamflow)
+        locn, logscale = marginal.params[:2]
+
+        # Check lognorm mle
+        locn0 = np.log(streamflow).mean()
+        logscale0 = math.log(math.sqrt(((np.log(streamflow)-locn0)**2).mean()))
+        assert allclose(locn, locn0, atol=1e-8, rtol=0.)
+        assert allclose(logscale, logscale0, atol=1e-8, rtol=0.)
+
+    elif distname == "Normal":
+        marginal.params_guess(streamflow)
+        locn, logscale = marginal.params[:2]
+
+        # Check norm mle
+        locn0 = streamflow.mean()
+        logscale0 = math.log(math.sqrt(((streamflow-locn0)**2).mean()))
+        assert allclose(locn, locn0, atol=1e-8, rtol=0.)
+        assert allclose(logscale, logscale0, atol=1e-8, rtol=0.)
+
+    elif distname == "Gamma":
+        marginal.params_guess(streamflow)
+        locn, logscale = marginal.params[:2]
+
+    assert allclose(theta_mle[0], locn, atol=1e-5, rtol=1e-5)
+    assert allclose(theta_mle[1], logscale, atol=1e-5, rtol=1e-5)
+
+
+@pytest.mark.parametrize("distname",
+                         marginals.MARGINAL_NAMES)
+@pytest.mark.parametrize("stationid",
+                         data_reader.STATIONS_BESTFIT)
+@pytest.mark.parametrize("censoring", [False, True])
+def test_marginals_vs_bestfit(distname, stationid, censoring, allclose):
+    streamflow = get_ams(stationid)
+
+    bestfit, censor = data_reader.read_bestfit_mle(stationid, censoring)
+    bestfit = bestfit.loc[:, distname]
+
+    marginal = marginals.factory(distname)
+    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow, censor)
+
+    theta_bestfit = np.array([float(bestfit["Location"]),
+                              math.log(float(bestfit["Scale"])),
+                              float(bestfit["Shape"])])
+
+    # Take into account bestfit parameterisation
+    if distname in ["LogPearson3"]:
+        theta_bestfit[0] = math.log(10**theta_bestfit[0])
+        theta_bestfit[1] = math.log(math.log(10**float(bestfit["Scale"])))
+
+    elif distname == "LogNormal":
+        mean, std = bestfit.iloc[:2].astype(float)
+        mu = math.log(mean / math.sqrt(1 + std**2 / mean**2))
+        sig = math.log(1 + std**2 / mean**2)
+        theta_bestfit[0] = mu
+        theta_bestfit[1] = math.log(sig)
+
+    elif distname == "Gamma":
+        th, sc = theta_bestfit[:2]
+        sc = math.exp(sc)
+        theta_bestfit[0] = th*sc
+        theta_bestfit[1] = math.log(th)
+
+    # Fix 2 param distributions
+    if re.search("^(LogN|Norm|Gum|Gam)", distname):
+        theta_bestfit[-1] = 0
+
+    # Check quantiles
+    se = bestfit.iloc[16:-3]
+    cdfs = 1. - se.index.astype(float).values
+    aris = 1. / cdfs
+    bf_quantiles = se.values.astype(float)
+    marginals.params = theta_bestfit
+    fs_quantiles = marginal.ppf(cdfs)
+    iok = (bf_quantiles > censor) & (fs_quantiles > censor)
+    quant_err = np.abs(np.log(bf_quantiles[iok])\
+        -np.log(fs_quantiles[iok]))
+
+    # .. fairly high difference with bestfit, especially for LogNormal
+    #    which is not MLE in bestfit
+    if distname != "LogNormal":
+        assert np.all(quant_err < 0.3)
+
+    # Test if we get better MLE than bestfit
+    ll_bestfit = -marginal.neglogpost(theta_bestfit, dcens, censor, ncens)
+    assert ll_bestfit < ll_mle
+
+    # Test if bestfit MLE is not too far behind
+    if distname != "LogNormal":
+        assert abs(ll_bestfit - ll_mle) < 0.5
+
