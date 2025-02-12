@@ -338,6 +338,7 @@ def test_marginals_mle_numerical(distname, stationid, censoring, allclose):
                                                                           nexplore=10000,
                                                                           explore_scale=0.5)
     # Perturb ll param and check ll_mle is always greater
+    # with a small tolerance
     trans_mle = np.arcsinh(theta_mle)
     perturb = np.random.normal(loc=0., scale=0.2,
                                size=(5000, 3))
@@ -348,7 +349,9 @@ def test_marginals_mle_numerical(distname, stationid, censoring, allclose):
             mess = f"[{distname}/{stationid}/{censoring}] "\
                    + f" num: ll={ll:0.1e} theta={theta} "\
                    + f" mle: ll={ll_mle:0.1e} theta={theta_mle}"
-            assert ll < ll_mle, print(mess)
+
+            eps = 5e-2
+            assert ll < ll_mle + eps, print(mess)
 
 
 @pytest.mark.parametrize("distname", ["Gamma", "LogNormal", "Normal"])

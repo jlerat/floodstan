@@ -44,7 +44,7 @@ def test_univariate_sampling(marginal, stationid, allclose):
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
     # Journal of Computational and Graphical Statistics, 15:3, 675-692,
     # DOI: 10.1198/106186006X136976
-    if marginal in ["Normal", "LogNorma"]:
+    if marginal in ["Normal", "LogNormal"]:
         pytest.skip(f"marginal {marginal} is not challenging. Skip.")
 
     # Stan config
