@@ -8,9 +8,9 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
-from scipy.stats import norm, mvn
-from scipy.stats import multivariate_normal
-from scipy.stats import ttest_1samp
+from scipy.stats import norm, mvn, uniform
+from scipy.stats import ks_1samp
+from scipy.stats import percentileofscore
 
 import pytest
 import warnings
@@ -20,8 +20,10 @@ from hydrodiy.plot import putils
 import importlib
 from tqdm import tqdm
 
-from floodstan import marginals, sample, copulas
+from floodstan import marginals
+from floodstan import sample
 from floodstan import univariate_censored_sampling
+from floodstan import report
 
 from test_sample_univariate import get_stationids
 from test_sample_univariate import get_ams
@@ -35,7 +37,7 @@ FTESTS = Path(__file__).resolve().parent
 @pytest.mark.parametrize("marginal",
                          list(sample.MARGINAL_NAMES.keys()))
 @pytest.mark.parametrize("stationid",
-                         get_stationids()[:3])
+                         get_stationids()[:2])
 def test_univariate_sampling(marginal, stationid, allclose):
     # Testing univariate sampling following the process described by
     # Samantha R Cook, Andrew Gelman & Donald B Rubin (2006)
@@ -43,28 +45,24 @@ def test_univariate_sampling(marginal, stationid, allclose):
     # Journal of Computational and Graphical Statistics, 15:3, 675-692,
     # DOI: 10.1198/106186006X136976
 
-    nchains = 5
+    # Stan config
+    stan_nchains = 5
+    stan_nsamples = 5000
+    stan_warmup = 5000
 
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
 
     # Large number of values to check we can get the "true" parameters
     # back from sampling
     nvalues = 50
-    nrepeat = 100
+    nrepeat = 50
 
-
-    nrows, ncols = 3, 3
-    axwidth, axheight = 5, 5
     print("\n")
 
     y = get_ams(stationid)
     N = len(y)
 
-    # Setup image
-    plt.close("all")
-    w, h = axwidth*ncols, axheight*nrows
-    fig, ax = plt.subplots(figsize=(w, h), layout="tight")
-
+    # Setup marginal
     if marginal in ["Gumbel", "LogNormal", "Normal", "Gamma"]:
         parnames = ["locn", "logscale"]
     else:
@@ -83,11 +81,11 @@ def test_univariate_sampling(marginal, stationid, allclose):
     yshape1_prior = [max(0.1, dist.shape1), 0.2]
 
     test_stat = []
-    # .. double the number of tries to get nrepeat samples
-    # .. in case of failure
+    nsuccess = 0
+    # .. 2 x number of tries to get nrepeat samples
+    # .. in case of failure. We stop when we have nrepeat successes
     for repeat in range(2*nrepeat):
-        desc = f"[{stationid}] Testing uniform sampling for "+\
-                    f"marginal {marginal} ({repeat+1}/{nrepeat})"
+        desc = f"[{stationid}, {marginal}] test {nsuccess}/{nrepeat}"
         print(desc)
 
         # Generate parameters from prior
@@ -104,8 +102,9 @@ def test_univariate_sampling(marginal, stationid, allclose):
         # Configure stan data and initialisation
         try:
             sv = sample.StanSamplingVariable(ysmp, marginal,
-                                             ninits=nchains)
+                                             ninits=stan_nchains)
         except:
+            test_stat.append({"sucess": 0})
             continue
 
         sv.locn_prior = ylocn_prior
@@ -125,36 +124,79 @@ def test_univariate_sampling(marginal, stationid, allclose):
         try:
             smp = univariate_censored_sampling(data=stan_data,
                                                inits=stan_inits,
-                                               chains=nchains,
+                                               chains=stan_nchains,
                                                seed=SEED,
-                                               iter_warmup=5000,
-                                               iter_sampling=500,
+                                               iter_warmup=stan_warmup,
+                                               iter_sampling=stan_nsamples//stan_nchains,
                                                output_dir=fout)
         except Exception as err:
+            test_stat.append({"sucess": 1})
             continue
 
         # Get sample data
         df = smp.draws_pd()
+        res = report.process_stan_diagnostic(smp.diagnose())
 
         # Test statistic
         Nsmp = len(df)
-        test_stat.append([(df.loc[:, f"y{cn}"]<dist[cn]).sum()/Nsmp\
-                for cn in parnames])
+        res["success"] = 2
+        for cn in parnames:
+            th = dist[cn]
+            val = df.loc[:, f"y{cn}"]
+            res[f"{cn}_theoretical"] = th
+            res[f"{cn}_values_mean"] = val.mean()
+            res[f"{cn}_values_std"] = val.std()
+            prc = percentileofscore(val, dist[cn]) / 100
+            res[f"{cn}_perc"] = prc
+
+        test_stat.append(res)
 
         # Stop iterating when the number of samples is met
-        if repeat>nrepeat-2:
+        nsuccess += 1
+        if nsuccess == nrepeat:
             break
 
-    test_stat = pd.DataFrame(test_stat, columns=parnames)
+    # Save
+    test_stat = pd.DataFrame(test_stat)
+    fr = FTESTS / "images" / f"univariate_sampling_{stationid}_{marginal}.csv"
+    fr.parent.mkdir(exist_ok=True)
+    test_stat.to_csv(fr)
 
-    putils.ecdfplot(ax, test_stat)
+    # plot
+    plt.close("all")
+    axwidth, axheight = 6, 6
+    fig, ax = plt.subplots(figsize=(axwidth, axheight), layout="tight")
+
+    perc = test_stat.filter(regex="perc", axis=1)
+    putils.ecdfplot(ax, perc)
+    ax.legend(loc=4)
     ax.axline((0, 0), slope=1, linestyle="--", lw=0.9)
 
-    title = f"{marginal} - {len(test_stat)} samples / {nrepeat}"
+    title = f"{stationid}/{marginal} - {len(test_stat)} samples / {nrepeat}"
     ax.set_title(title)
 
-    fig.suptitle(f"Station {stationid}")
-    fp = FTESTS / "images" / f"univariate_sampling_{stationid}_{marginal}.png"
-    fp.parent.mkdir(exist_ok=True)
-    fig.savefig(fp)
+    # Report
+    nsuccess = (test_stat.success == 2).sum()
+    txt = f"{nsuccess} successes / {nrepeat}\n\nStan diagnostics:\n"
+    for cn in ["treedepth", "divergence", "ebfmi", "effsamplesz", "rhat"]:
+        prc = (test_stat.loc[:, cn] == "satisfactory").sum() / nsuccess
+        prc *= 100
+        txt += " "*4 + f"{cn:12s}: {prc:0.0f}% satis.\n"
 
+    txt += "\n\nKS p-values:\n"
+    color = "darkgreen"
+    weight = "normal"
+    for cn in parnames:
+        x = test_stat.loc[:, f"{cn}_perc"]
+        k = ks_1samp(x, uniform.cdf)
+        txt += " "*4 + f"{cn:12s}: {k.pvalue:0.2f}\n"
+        if k.pvalue < 0.05:
+            color = "tab:red"
+            weight = "bold"
+
+    ax.text(0.02, 0.98, txt, va="top", ha="left",
+            fontsize="large", transform=ax.transAxes,
+            color=color, fontweight=weight)
+
+    fp = fr.parent / f"{fr.stem}.png"
+    fig.savefig(fp)

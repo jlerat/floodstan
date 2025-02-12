@@ -56,16 +56,16 @@ jobs:
           conda activate env_floodstan
           cd $GITHUB_WORKSPACE
           echo "--- floodstan cook tests : located in $PWD ---"
-          pytest --ignore=src/hydrodiy --cook tests
+          pytest -sv --ignore=src/hydrodiy --cook tests
       
-      - name: Upload pytest test log files
-        uses: actions/upload-artifact@v4
-        with:
-          name: pytest-logs
-          path: tests/*.log
-
-      - name: Upload pytest test image files
+      - name: Upload test data
         uses: actions/upload-artifact@v4
         with:
           name: pytest-images
-          path: tests/images/*.png
+          path: tests/images/univariate_sampling_*.csv
+
+      - name: Upload test images
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-images
+          path: tests/images/univariate_sampling_*.png
