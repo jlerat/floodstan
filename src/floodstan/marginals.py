@@ -344,15 +344,16 @@ class FloodFreqDistribution():
         dcens, ncens = _prepare_censored_data(data, low_censor)
 
         # Initial parameter exploration
+        # random perturb guesses parameters in
+        # arcsinh space (log for large values and lin for small values)
         self.params_guess(data)
         theta0 = self.params
         perturb = np.random.normal(loc=0, scale=explore_scale,
                                    size=(nexplore, 3))
-        explore = theta0[None, :] + perturb
-        # .. locn multiplicative change
-        explore[:, 0] = theta0[0] * (1 + np.maximum(1e-2, perturb[:, 0]))
+        explore = np.sinh(np.arcsinh(theta0)[None, :] + perturb)
         # .. keep guessed parameter last
         explore[-1] = theta0
+
         # .. loop throught explored parameter and check loglike
         nll_min = np.inf
         for theta in explore:

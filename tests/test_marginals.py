@@ -336,14 +336,13 @@ def test_marginals_mle_numerical(distname, stationid, censoring, allclose):
     ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow,
                                                                           censor,
                                                                           nexplore=10000,
-                                                                          explore_scale=1)
+                                                                          explore_scale=1.)
     # Perturb ll param and check ll_mle is always greater
-    perturb = np.random.normal(loc=0., scale=1.0,
+    trans_mle = np.arcsinh(theta_mle)
+    perturb = np.random.normal(loc=0., scale=0.5,
                                size=(5000, 3))
     for pert in perturb:
-        theta = theta_mle + pert
-        # multiplicative error for loc
-        theta[0] = theta_mle[0] * max(0.05, 1 + pert[0])
+        theta = np.sinh(trans_mle + pert)
         ll = -marginal.neglogpost(theta, dcens, censor, ncens)
         if np.isfinite(ll) and not np.isnan(ll):
             mess = f"[{distname}/{stationid}/{censoring}] "\
