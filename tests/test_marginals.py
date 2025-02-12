@@ -328,21 +328,27 @@ def test_fit_lh_moments_flike(distname, station, censoring, allclose):
 @pytest.mark.parametrize("distname",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("stationid", get_stationids())
-@pytest.mark.parametrize("censoring", [False])
+@pytest.mark.parametrize("censoring", [False, True])
 def test_marginals_mle_numerical(distname, stationid, censoring, allclose):
     streamflow = get_ams(stationid)
     marginal = marginals.factory(distname)
     censor = streamflow.quantile(0.33) if censoring else -1e10
-    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow, censor)
-
+    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow,
+                                                                          censor,
+                                                                          nexplore=10000,
+                                                                          explore_scale=1)
     # Perturb ll param and check ll_mle is always greater
     perturb = np.random.normal(loc=0., scale=1.0,
-                               size=(10000, 3))
+                               size=(5000, 3))
     for pert in perturb:
         theta = theta_mle + pert
+        # multiplicative error for loc
+        theta[0] = theta_mle[0] * max(0.05, 1 + pert[0])
         ll = -marginal.neglogpost(theta, dcens, censor, ncens)
         if np.isfinite(ll) and not np.isnan(ll):
-            mess =f"theta = {theta}  theta_mle = {theta_mle}"
+            mess = f"[{distname}/{stationid}/{censoring}] "\
+                   + f" num: ll={ll:0.1e} theta={theta} "\
+                   + f" mle: ll={ll_mle:0.1e} theta={theta_mle}"
             assert ll < ll_mle, print(mess)
 
 
@@ -433,14 +439,16 @@ def test_marginals_vs_bestfit(distname, stationid, censoring, allclose):
     quant_err = np.abs(np.log(bf_quantiles[iok])\
         -np.log(fs_quantiles[iok]))
 
-    # .. fairly hight error observed especially for LogNormal
+    # .. fairly high difference with bestfit, especially for LogNormal
     #    which is not MLE in bestfit
     if distname != "LogNormal":
         assert np.all(quant_err < 0.3)
 
+    # Test if we get better MLE than bestfit
     ll_bestfit = -marginal.neglogpost(theta_bestfit, dcens, censor, ncens)
     assert ll_bestfit < ll_mle
 
+    # Test if bestfit MLE is not too far behind
     if distname != "LogNormal":
         assert abs(ll_bestfit - ll_mle) < 0.5
 

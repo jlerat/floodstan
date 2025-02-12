@@ -337,14 +337,16 @@ class FloodFreqDistribution():
         return nlp
 
     def maximum_posterior_estimate(self, data, low_censor=None,
-                                   shape_width_prior=None, nexplore=5000):
+                                   shape_width_prior=None,
+                                   nexplore=5000,
+                                   explore_scale=1.):
         # Prepare data
         dcens, ncens = _prepare_censored_data(data, low_censor)
 
         # Initial parameter exploration
         self.params_guess(data)
         theta0 = self.params
-        perturb = np.random.normal(loc=0, scale=1,
+        perturb = np.random.normal(loc=0, scale=explore_scale,
                                    size=(nexplore, 3))
         explore = theta0[None, :] + perturb
         # .. locn multiplicative change
