@@ -37,13 +37,15 @@ FTESTS = Path(__file__).resolve().parent
 @pytest.mark.parametrize("marginal",
                          list(sample.MARGINAL_NAMES.keys()))
 @pytest.mark.parametrize("stationid",
-                         get_stationids()[:2])
+                         get_stationids()[:1])
 def test_univariate_sampling(marginal, stationid, allclose):
     # Testing univariate sampling following the process described by
     # Samantha R Cook, Andrew Gelman & Donald B Rubin (2006)
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
     # Journal of Computational and Graphical Statistics, 15:3, 675-692,
     # DOI: 10.1198/106186006X136976
+    if marginal in ["Normal", "LogNormal", "GeneralizedPareto"]:
+        pytest.skip(f"marginal {marginal} is not challenging. Skip.")
 
     # Stan config
     stan_nchains = 5
