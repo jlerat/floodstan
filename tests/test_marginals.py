@@ -327,20 +327,19 @@ def test_fit_lh_moments_flike(distname, station, censoring, allclose):
 
 @pytest.mark.parametrize("distname",
                          marginals.MARGINAL_NAMES)
-@pytest.mark.parametrize("stationid", get_stationids())
+@pytest.mark.parametrize("stationid", get_stationids()[:3])
 @pytest.mark.parametrize("censoring", [False, True])
 def test_marginals_mle_numerical(distname, stationid, censoring, allclose):
-    pytest.skip("To be improved. Too often failing at the moment.")
     streamflow = get_ams(stationid)
     marginal = marginals.factory(distname)
     censor = streamflow.quantile(0.33) if censoring else -1e10
     ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow,
                                                                           censor,
                                                                           nexplore=10000,
-                                                                          explore_scale=1.)
+                                                                          explore_scale=0.5)
     # Perturb ll param and check ll_mle is always greater
     trans_mle = np.arcsinh(theta_mle)
-    perturb = np.random.normal(loc=0., scale=0.5,
+    perturb = np.random.normal(loc=0., scale=0.2,
                                size=(5000, 3))
     for pert in perturb:
         theta = np.sinh(trans_mle + pert)

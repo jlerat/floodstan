@@ -339,7 +339,7 @@ class FloodFreqDistribution():
     def maximum_posterior_estimate(self, data, low_censor=None,
                                    shape_width_prior=None,
                                    nexplore=5000,
-                                   explore_scale=1.):
+                                   explore_scale=0.2):
         # Prepare data
         dcens, ncens = _prepare_censored_data(data, low_censor)
 
