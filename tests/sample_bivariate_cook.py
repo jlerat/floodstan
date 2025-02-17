@@ -29,12 +29,18 @@ SEED = 5446
 
 FTESTS = Path(__file__).resolve().parent
 
+FLOGS = FTESTS / "logs" / "univariate_cook"
+FLOGS.mkdir(exist_ok=True, parents=True)
+
 STATIONIDS = get_stationids()
 
 
 def bivariate_sampling_cook(marginal, copula, stationid1, stationid2):
     # Same background than univariate sampling tests
 
+    flog = f"bivariate_sampling_cook_{marginal}_{copula}"\
+           + "_{stationid1}_{stationid2}.log"
+    flog = FLOGS / flog
     LOGGER = sample.get_logger(stan_logger=False)
 
     # Stan config
