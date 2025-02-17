@@ -84,3 +84,4 @@ venv.bak/
 tests/sampling/
 tests/images/
 tests/report/
+tests/logs/

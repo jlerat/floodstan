@@ -28,6 +28,9 @@ SEED = 5446
 
 FTESTS = Path(__file__).resolve().parent
 
+FLOGS = FTESTS / "logs" / "univariate_cook"
+FLOGS.mkdir(exist_ok=True, parents=True)
+
 
 def univariate_sampling_cook(marginal, stationid, debug):
     # Testing univariate sampling following the process described by
@@ -35,10 +38,13 @@ def univariate_sampling_cook(marginal, stationid, debug):
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
     # Journal of Computational and Graphical Statistics, 15:3, 675-692,
     # DOI: 10.1198/106186006X136976
-    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    flog = FLOGS / f"univariate_{marginal}_{stationid}.log"
+    LOGGER = sample.get_logger(level="INFO", stan_logger=False,
+                               flog=flog)
 
-    if debug and (stationid != "201001" or marginal != "Normal"):
-        LOGGER.info(f"Debug mode - marginal={marginal} / stationid={stationid}.. skip.")
+    if debug and (stationid != "201001"):
+        LOGGER.info(f"Debug mode - stationid={stationid}.. skip.")
+        return
 
     LOGGER.info(f"Sampling {marginal}/{stationid}")
 
@@ -71,7 +77,7 @@ def univariate_sampling_cook(marginal, stationid, debug):
     # Prior distribution centered around dist params
     ylocn_prior = [dist.locn, abs(dist.locn)*0.5]
     ylogscale_prior = [dist.logscale, abs(dist.logscale)*0.5]
-    yshape1_prior = [max(0.1, dist.shape1), 0.2]
+    yshape1_prior = [min(0.5, max(-0.5, dist.shape1)), 0.2]
 
     test_stat = []
     nsuccess = 0
@@ -108,7 +114,7 @@ def univariate_sampling_cook(marginal, stationid, debug):
         stan_inits = sv.initial_parameters
 
         # Clean output folder
-        fout = FTESTS / "sampling" / "univariate" / stationid / marginal
+        fout = FTESTS / "sampling" / "univariate_cook" / stationid / marginal
         fout.mkdir(parents=True, exist_ok=True)
         for f in fout.glob("*.*"):
             f.unlink()
@@ -119,6 +125,7 @@ def univariate_sampling_cook(marginal, stationid, debug):
                                                inits=stan_inits,
                                                chains=stan_nchains,
                                                seed=SEED,
+                                               parallel_chains=1,
                                                iter_warmup=stan_warmup,
                                                iter_sampling=stan_nsamples//stan_nchains,
                                                output_dir=fout)
@@ -129,6 +136,10 @@ def univariate_sampling_cook(marginal, stationid, debug):
         # Get sample data
         df = smp.draws_pd()
         res = report.process_stan_diagnostic(smp.diagnose())
+
+        # Clean
+        for f in fout.glob("*.*"):
+            f.unlink()
 
         # Test statistic
         Nsmp = len(df)
@@ -152,8 +163,9 @@ def univariate_sampling_cook(marginal, stationid, debug):
     LOGGER.info("Sampling done. Now plotting.")
     # Save
     test_stat = pd.DataFrame(test_stat)
-    fr = FTESTS / "images" / f"univariate_sampling_{stationid}_{marginal}.csv"
-    fr.parent.mkdir(exist_ok=True)
+    fr = FTESTS / "images" / "sampling" / "univariate_cook" /\
+        f"univariate_sampling_{stationid}_{marginal}.csv"
+    fr.parent.mkdir(exist_ok=True, parents=True)
     test_stat.to_csv(fr)
 
     # plot
@@ -166,12 +178,13 @@ def univariate_sampling_cook(marginal, stationid, debug):
     ax.legend(loc=4)
     ax.axline((0, 0), slope=1, linestyle="--", lw=0.9)
 
-    title = f"{stationid}/{marginal} - {len(test_stat)} samples / {nrepeat}"
+    nsuccess = (test_stat.success == 2).sum()
+    ntotal = len(test_stat)
+    title = f"{stationid}/{marginal} - {nsuccess}/{ntotal} samples"
     ax.set_title(title)
 
     # Report
-    nsuccess = (test_stat.success == 2).sum()
-    txt = f"{nsuccess} successes / {nrepeat}\n\nStan diagnostics:\n"
+    txt = f"{nsuccess} successes / {ntotal}\n\nStan diagnostics:\n"
     for cn in ["treedepth", "divergence", "ebfmi", "effsamplesz", "rhat"]:
         prc = (test_stat.loc[:, cn] == "satisfactory").sum() / nsuccess
         prc *= 100
@@ -194,6 +207,8 @@ def univariate_sampling_cook(marginal, stationid, debug):
 
     fp = fr.parent / f"{fr.stem}.png"
     fig.savefig(fp)
+
+    LOGGER.info("Process completed")
 
 
 def main(marginal, debug):
