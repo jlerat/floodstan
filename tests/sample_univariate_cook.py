@@ -1,7 +1,6 @@
 import json, re, math
-import shutil
+import argparse
 from pathlib import Path
-from itertools import product as prod
 
 import numpy as np
 import pandas as pd
@@ -12,13 +11,9 @@ from scipy.stats import norm, mvn, uniform
 from scipy.stats import ks_1samp
 from scipy.stats import percentileofscore
 
-import pytest
 import warnings
 
 from hydrodiy.plot import putils
-
-import importlib
-from tqdm import tqdm
 
 from floodstan import marginals
 from floodstan import sample
@@ -33,33 +28,29 @@ SEED = 5446
 
 FTESTS = Path(__file__).resolve().parent
 
-@pytest.mark.cook
-@pytest.mark.parametrize("marginal",
-                         list(sample.MARGINAL_NAMES.keys()))
-@pytest.mark.parametrize("stationid",
-                         get_stationids()[:1])
-def test_univariate_sampling(marginal, stationid, allclose):
+
+def univariate_sampling_cook(marginal, stationid, debug):
     # Testing univariate sampling following the process described by
     # Samantha R Cook, Andrew Gelman & Donald B Rubin (2006)
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
     # Journal of Computational and Graphical Statistics, 15:3, 675-692,
     # DOI: 10.1198/106186006X136976
-    if marginal in ["Normal", "LogNormal", "GeneralizedPareto"]:
-        pytest.skip(f"marginal {marginal} is not challenging. Skip.")
+    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+
+    if debug and (stationid != "201001" or marginal != "Normal"):
+        LOGGER.info(f"Debug mode - marginal={marginal} / stationid={stationid}.. skip.")
+
+    LOGGER.info(f"Sampling {marginal}/{stationid}")
 
     # Stan config
-    stan_nchains = 5
-    stan_nsamples = 5000
-    stan_warmup = 5000
-
-    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    stan_nchains = 3 if debug else 10
+    stan_nsamples = 1000 if debug else 10000
+    stan_warmup = 1000 if debug else 10000
 
     # Large number of values to check we can get the "true" parameters
     # back from sampling
     nvalues = 50
-    nrepeat = 30
-
-    print("\n")
+    nrepeat = 10 if debug else 100
 
     y = get_ams(stationid)
     N = len(y)
@@ -88,7 +79,7 @@ def test_univariate_sampling(marginal, stationid, allclose):
     # .. in case of failure. We stop when we have nrepeat successes
     for repeat in range(2*nrepeat):
         desc = f"[{stationid}, {marginal}] test {nsuccess}/{nrepeat}"
-        print(desc)
+        LOGGER.info(desc)
 
         # Generate parameters from prior
         try:
@@ -158,6 +149,7 @@ def test_univariate_sampling(marginal, stationid, allclose):
         if nsuccess == nrepeat:
             break
 
+    LOGGER.info("Sampling done. Now plotting.")
     # Save
     test_stat = pd.DataFrame(test_stat)
     fr = FTESTS / "images" / f"univariate_sampling_{stationid}_{marginal}.csv"
@@ -202,3 +194,25 @@ def test_univariate_sampling(marginal, stationid, allclose):
 
     fp = fr.parent / f"{fr.stem}.png"
     fig.savefig(fp)
+
+
+def main(marginal, debug):
+    for stationid in get_stationids()[:3]:
+        univariate_sampling_cook(marginal, stationid, debug)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Run cook tests for univariate sampling",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument("-m", "--marginal", help="Marginal name",
+                        type=str, required=True,
+                        choices=list(marginals.MARGINAL_NAMES.keys()))
+    parser.add_argument("-d", "--debug", help="Debug mode",
+                        action="store_true", default=False)
+    args = parser.parse_args()
+    marginal = args.marginal
+    debug = args.debug
+
+    main(marginal, debug)
