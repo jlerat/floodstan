@@ -17,12 +17,13 @@ mkdir -p $FLOG
 echo
 echo -----------------------
 echo CONDA ENV = $CONDA_ENV
+echo NPARALLEL = $NPARALLEL
 echo PYSCRIPT = $BASE.py
 echo -----------------------
 echo
 
 echo
-echo Python is "$(whereis python)"
+echo "$(whereis python)"
 echo
 
 # List of marginals
@@ -37,7 +38,7 @@ MARGINALS=(
 # Run
 for marginal in "${MARGINALS[@]}"; do
     echo "Running marginal $marginal"
-    nohup python $PYSCRIPT -m $marginal \
+    nohup python $PYSCRIPT -m $marginal -n $NPARALLEL \
         1> $FLOG/univariate_$marginal.log \
         2> $FLOG/univariate_$marginal.err &
 done

@@ -31,8 +31,10 @@ FTESTS = Path(__file__).resolve().parent
 FLOGS = FTESTS / "logs" / "univariate_cook"
 FLOGS.mkdir(exist_ok=True, parents=True)
 
+STATIONIDS = get_stationids()[:4]
 
-def univariate_sampling_cook(marginal, stationid, debug):
+
+def univariate_sampling_cook(marginal, stationid, debug, nparallel):
     # Testing univariate sampling following the process described by
     # Samantha R Cook, Andrew Gelman & Donald B Rubin (2006)
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
@@ -125,7 +127,7 @@ def univariate_sampling_cook(marginal, stationid, debug):
                                                inits=stan_inits,
                                                chains=stan_nchains,
                                                seed=SEED,
-                                               parallel_chains=1,
+                                               parallel_chains=nparallel,
                                                iter_warmup=stan_warmup,
                                                iter_sampling=stan_nsamples//stan_nchains,
                                                output_dir=fout)
@@ -193,8 +195,9 @@ def univariate_sampling_cook(marginal, stationid, debug):
     txt += "\n\nKS p-values:\n"
     color = "darkgreen"
     weight = "normal"
+    isuccess = test_stat.success == 2
     for cn in parnames:
-        x = test_stat.loc[:, f"{cn}_perc"]
+        x = test_stat.loc[isuccess, f"{cn}_perc"]
         k = ks_1samp(x, uniform.cdf)
         txt += " "*4 + f"{cn:12s}: {k.pvalue:0.2f}\n"
         if k.pvalue < 0.05:
@@ -211,9 +214,10 @@ def univariate_sampling_cook(marginal, stationid, debug):
     LOGGER.info("Process completed")
 
 
-def main(marginal, debug):
-    for stationid in get_stationids()[:3]:
-        univariate_sampling_cook(marginal, stationid, debug)
+def main(marginal, debug, nparallel):
+    for stationid in STATIONIDS:
+        univariate_sampling_cook(marginal, stationid, debug,
+                                 nparallel)
 
 
 if __name__ == "__main__":
@@ -224,10 +228,13 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--marginal", help="Marginal name",
                         type=str, required=True,
                         choices=list(marginals.MARGINAL_NAMES.keys()))
+    parser.add_argument("-n", "--nparallel", help="Number of parallel processes",
+                        type=int, default=1, choices=np.arange(1, 5))
     parser.add_argument("-d", "--debug", help="Debug mode",
                         action="store_true", default=False)
     args = parser.parse_args()
     marginal = args.marginal
     debug = args.debug
+    nparallel = args.nparallel
 
-    main(marginal, debug)
+    main(marginal, debug, nparallel)
