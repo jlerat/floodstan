@@ -79,6 +79,7 @@ venv.bak/
 **/stan/*.exe
 
 # Others
+actions-runner/
 *.png
 .*.swp
 tests/sampling/
