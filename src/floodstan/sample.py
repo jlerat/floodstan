@@ -4,6 +4,7 @@ import logging
 
 import numpy as np
 import pandas as pd
+from scipy.stats import norm
 
 from floodstan import marginals
 
@@ -326,15 +327,18 @@ class StanSamplingVariable():
         ninits = self.ninits
         niter = 0
         inits, cdfs = [], []
+        normvar = norm(loc=0, scale=self.init_perturb_scale)
+
         while len(inits) < ninits \
                 and niter < ninits + MAX_INIT_PARAM_SEARCH:
             # Perturb guess parameters
-            perturb = np.random.normal(loc=0,
-                                       scale=self.init_perturb_scale,
-                                       size=3)
-            params = params0 + perturb
-            params[0] = params0[0]*max(5e-1, 1+perturb[0])
-            dist.params = params
+            dist.locn = params0[0]*max(5e-1, 1 + normvar.rvs())
+            dist.logscale = max(LOGSCALE_LOWER,
+                                min(LOGSCALE_UPPER,
+                                    params0[1] + normvar.rvs()))
+            dist.shape1 = max(SHAPE1_LOWER,
+                              min(SHAPE1_UPPER,
+                                  params0[2] + normvar.rvs()))
 
             cdf_data_min = dist.cdf(data_min)
             cdf_data_max = dist.cdf(data_max)
