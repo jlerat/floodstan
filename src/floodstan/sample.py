@@ -331,6 +331,7 @@ class StanSamplingVariable():
 
         while len(inits) < ninits \
                 and niter < ninits + MAX_INIT_PARAM_SEARCH:
+            niter += 1
             # Perturb guess parameters
             dist.locn = params0[0]*max(5e-1, 1 + normvar.rvs())
             dist.logscale = max(LOGSCALE_LOWER,
@@ -360,14 +361,14 @@ class StanSamplingVariable():
                 # .. and the data cdf
                 cdfs.append(dist.cdf(data))
 
-        # Fill up inits with params0
+        # Fill up inits with params0 with small random noise
         if len(inits) < ninits:
             for i in range(ninits - len(inits)):
-                dist.params = params0
+                locn, logscale, shape1 = params0
                 inits.append({
-                    "locn": dist.locn,
-                    "logscale": dist.logscale,
-                    "shape1": dist.shape1
+                    "locn": locn + np.random.uniform(-1, 1) * 1e-5,
+                    "logscale": logscale + np.random.uniform(-1, 1) * 1e-5,
+                    "shape1": shape1 + np.random.uniform(-1, 1) * 1e-5
                     })
                 cdfs.append(dist.cdf(data))
 
