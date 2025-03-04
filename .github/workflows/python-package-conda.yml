@@ -39,7 +39,12 @@ jobs:
           cd src
           git clone https://github.com/csiro-hydroinformatics/hydrodiy.git
           cd hydrodiy
+          
           echo "--- hydrodiy install : located in $PWD ---"
+          # .. create a tmp directory for pip install
+          mkdir -p tmp
+          export TMPDIR=tmp
+
           pip install -e .
 
       - name : Install floodstan package in conda env 
@@ -48,6 +53,10 @@ jobs:
           conda activate env_floodstan
           cd $GITHUB_WORKSPACE
           echo "--- floodstan install : located in $PWD ---"
+          # .. create a tmp directory for pip install
+          mkdir -p tmp
+          export TMPDIR=tmp
+
           pip install -e .
 
       - name: Lint with flake8
