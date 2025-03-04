@@ -48,7 +48,8 @@ jobs:
           mkdir -p tmp
           export TMPDIR=tmp
 
-          pip install -e .
+          python -m pip uninstall -y . || true
+          python -m pip install -e .
 
       - name : Install floodstan package in conda env 
         run: |
@@ -62,8 +63,9 @@ jobs:
           # .. create a tmp directory for pip install
           mkdir -p tmp
           export TMPDIR=tmp
-
-          pip install -e .
+          
+          python -m pip uninstall -y . || true
+          python -m pip install -e .
 
       - name: Lint with flake8
         run: |
