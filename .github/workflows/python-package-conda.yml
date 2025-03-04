@@ -27,8 +27,8 @@ jobs:
       
       - name: Create conda environment if needed
         run: |
-           source $CONDA/etc/profile.d/conda.sh
-           conda env create -f env_floodstan.yml
+           source $CONDA/etc/profile.d/conda.sh || true
+           conda env create -f env_floodstan.yml || true
 
       - name : Install hydrodiy package in conda env 
         run: |
