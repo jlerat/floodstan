@@ -47,7 +47,7 @@ CENSOR_DEFAULT = -1e10
 
 STAN_VARIABLE_INITIAL_CDF_MIN = 1e-3
 
-MAX_INIT_PARAM_SEARCH = 10
+MAX_INIT_PARAM_SEARCH = 50
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
@@ -128,7 +128,6 @@ def are_marginal_params_valid(dist, locn, logscale, shape1, data, censor):
         return dd, cdf
 
     return None, None
-
 
 
 class StanSamplingVariable():
@@ -338,12 +337,7 @@ class StanSamplingVariable():
 
     def set_initial_parameters(self):
         data = self.data
-        notnan = ~np.isnan(data)
-        data_nonan = data[notnan]
-        data_max = data_nonan.max()
-        data_min = data_nonan.min()
         censor = self.censor
-
         dist = self.marginal
         gp = self.guess_parameters
         params0 = np.array([gp["locn"], gp["logscale"],
@@ -356,7 +350,7 @@ class StanSamplingVariable():
         normvar = norm(loc=0, scale=self.init_perturb_scale)
 
         while len(inits) < ninits \
-                and niter < ninits + MAX_INIT_PARAM_SEARCH:
+                and niter < MAX_INIT_PARAM_SEARCH:
             niter += 1
             # Perturb guess parameters
             locn = params0[0]*max(5e-1, 1 + normvar.rvs())
@@ -365,10 +359,10 @@ class StanSamplingVariable():
                                params0[1] + normvar.rvs()))
             shape1 = max(SHAPE1_LOWER,
                          min(SHAPE1_UPPER,
-                         params0[2] + normvar.rvs()))
+                             params0[2] + normvar.rvs()))
 
             pp, cdf = are_marginal_params_valid(dist, locn, logscale,
-                                          shape1, data, censor)
+                                                shape1, data, censor)
             if pp is not None:
                 inits.append(pp)
                 cdfs.append(cdf)
@@ -383,18 +377,24 @@ class StanSamplingVariable():
                 shape1 = shape10 + eps[2]
 
                 pp, cdf = are_marginal_params_valid(dist, locn, logscale,
-                                          shape1, data, censor)
+                                                    shape1, data, censor)
                 if pp is not None:
                     inits.append(pp)
                     cdfs.append(cdf)
 
-        if len(inits) < ninits:
-            errmess = "Cannot find initial parameter."
+        if len(inits) == 0:
+            errmess = "Cannot find initial parameter "\
+                      + f"for variable {self.name}."
             raise ValueError(errmess)
+
+        if len(inits) < ninits:
+            nok = len(inits)
+            for i in range(ninits - nok):
+                k = np.random.choice(np.arange(nok))
+                inits.append(inits[k])
 
         self._initial_parameters = inits
         self._initial_cdfs = cdfs
-
 
     def set_priors(self):
         start = self.guess_parameters
@@ -552,7 +552,8 @@ class StanSamplingDataset():
                     break
 
             if np.isnan(rho):
-                rho = 0.1
+                errmess = "Cannot initialise parameters for dataset."
+                raise ValueError(errmess)
 
             init["rho"] = rho
             inits.append(init)
