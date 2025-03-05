@@ -105,6 +105,32 @@ def format_prior(values):
     return values
 
 
+def are_marginal_params_valid(dist, locn, logscale, shape1, data, censor):
+    dist.locn = locn
+    dist.logscale = logscale
+    dist.shape1 = shape1
+
+    cdf = dist.cdf(data)
+    cdf[data < censor] = np.nan
+    cdf_min = np.nanmin(cdf)
+    cdf_max = np.nanmax(cdf)
+    cdf_censor = dist.cdf(censor)
+
+    cmin = STAN_VARIABLE_INITIAL_CDF_MIN
+    isok = (cdf_min >= cmin) & (cdf_max <= 1 - cmin)
+    isok &= (cdf_censor >= cmin) & (cdf_censor <= 1 - cmin)
+
+    if isok:
+        dd = {"locn": dist.locn,
+              "logscale": dist.logscale,
+              "shape1": dist.shape1
+              }
+        return dd, cdf
+
+    return None, None
+
+
+
 class StanSamplingVariable():
     def __init__(self,
                  data=None,
@@ -333,47 +359,42 @@ class StanSamplingVariable():
                 and niter < ninits + MAX_INIT_PARAM_SEARCH:
             niter += 1
             # Perturb guess parameters
-            dist.locn = params0[0]*max(5e-1, 1 + normvar.rvs())
-            dist.logscale = max(LOGSCALE_LOWER,
-                                min(LOGSCALE_UPPER,
-                                    params0[1] + normvar.rvs()))
-            dist.shape1 = max(SHAPE1_LOWER,
-                              min(SHAPE1_UPPER,
-                                  params0[2] + normvar.rvs()))
+            locn = params0[0]*max(5e-1, 1 + normvar.rvs())
+            logscale = max(LOGSCALE_LOWER,
+                           min(LOGSCALE_UPPER,
+                               params0[1] + normvar.rvs()))
+            shape1 = max(SHAPE1_LOWER,
+                         min(SHAPE1_UPPER,
+                         params0[2] + normvar.rvs()))
 
-            cdf_data_min = dist.cdf(data_min)
-            cdf_data_max = dist.cdf(data_max)
-            if cdf_data_min > cdf_data_max:
-                cdf_data_min, cdf_data_max = cdf_data_max, \
-                    cdf_data_min
-
-            cdf_censor = dist.cdf(censor)
-            thresh = STAN_VARIABLE_INITIAL_CDF_MIN
-            isok = (cdf_data_min >= thresh) & (cdf_data_max <= 1 - thresh)
-            isok &= (cdf_censor >= thresh) & (cdf_censor <= 1 - thresh)
-            if isok:
-                # Parameter is valid, we can store it
-                inits.append({
-                    "locn": dist.locn,
-                    "logscale": dist.logscale,
-                    "shape1": dist.shape1
-                    })
-                # .. and the data cdf
-                cdfs.append(dist.cdf(data))
+            pp, cdf = are_marginal_params_valid(dist, locn, logscale,
+                                          shape1, data, censor)
+            if pp is not None:
+                inits.append(pp)
+                cdfs.append(cdf)
 
         # Fill up inits with params0 with small random noise
         if len(inits) < ninits:
+            locn0, logscale0, shape10 = params0
             for i in range(ninits - len(inits)):
-                locn, logscale, shape1 = params0
-                inits.append({
-                    "locn": locn + np.random.uniform(-1, 1) * 1e-5,
-                    "logscale": logscale + np.random.uniform(-1, 1) * 1e-5,
-                    "shape1": shape1 + np.random.uniform(-1, 1) * 1e-5
-                    })
-                cdfs.append(dist.cdf(data))
+                eps = np.random.uniform(-1, 1, size=3) * 1e-5
+                locn = locn0 + eps[0]
+                logscale = logscale0 + eps[1]
+                shape1 = shape10 + eps[2]
+
+                pp, cdf = are_marginal_params_valid(dist, locn, logscale,
+                                          shape1, data, censor)
+                if pp is not None:
+                    inits.append(pp)
+                    cdfs.append(cdf)
+
+        if len(inits) < ninits:
+            errmess = "Cannot find initial parameter."
+            raise ValueError(errmess)
 
         self._initial_parameters = inits
         self._initial_cdfs = cdfs
+
 
     def set_priors(self):
         start = self.guess_parameters
@@ -517,21 +538,23 @@ class StanSamplingDataset():
             cdfs = cdfs[notnan]
 
             niter = 0
+            rho = np.nan
             while True and niter < MAX_INIT_PARAM_SEARCH:
+                niter += 1
                 rho = np.random.normal(loc=RHO_PRIOR[0], scale=0.2)
                 rho = max(min(rho, rho_max), rho_min)
 
                 # Check likelihood and reduce correlation if needed
                 copula.rho = rho
-                niter = 0
                 copula_pdfs = copula.pdf(cdfs)
                 isok = np.all(~np.isnan(copula_pdfs))
                 if isok:
-                    init["rho"] = copula.rho
                     break
-                else:
-                    niter += 1
 
+            if np.isnan(rho):
+                rho = 0.1
+
+            init["rho"] = rho
             inits.append(init)
 
         self._initial_parameters = inits
