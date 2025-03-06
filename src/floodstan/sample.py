@@ -45,7 +45,7 @@ DISCRETE_PHI_PRIOR = [1, 10]
 
 CENSOR_DEFAULT = -1e10
 
-STAN_VARIABLE_INITIAL_CDF_MIN = 1e-3
+STAN_VARIABLE_INITIAL_CDF_MIN = 1e-8
 
 MAX_INIT_PARAM_SEARCH = 50
 
@@ -353,7 +353,7 @@ class StanSamplingVariable():
                 and niter < MAX_INIT_PARAM_SEARCH:
             niter += 1
             # Perturb guess parameters
-            locn = params0[0]*max(5e-1, 1 + normvar.rvs())
+            locn = params0[0] * max(5e-1, 1 + normvar.rvs())
             logscale = max(LOGSCALE_LOWER,
                            min(LOGSCALE_UPPER,
                                params0[1] + normvar.rvs()))
