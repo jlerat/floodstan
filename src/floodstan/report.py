@@ -1,5 +1,6 @@
 import re
 import numpy as np
+import pandas as pd
 
 QUANTILES = [0.05, 0.25, 0.5, 0.75, 0.95]
 DESIGN_ARIS = [2, 5, 10, 20, 50, 100, 200, 500, 1000]
@@ -58,7 +59,7 @@ def process_stan_diagnostic(diag):
     return stan_status
 
 
-def ams_report(marginal, params, observed=None,
+def ams_report(marginal, params=None, observed=None,
                truncated_probability=0,
                design_aris=DESIGN_ARIS,
                obs_prefix="OBS"):
@@ -92,6 +93,11 @@ def ams_report(marginal, params, observed=None,
     if truncated_probability < 0 or truncated_probability > 0.99:
         errmess = "Expected truncated probability in [0, 0.99]."
         raise ValueError(errmess)
+
+    # Use marginal params if no params provided
+    if params is None:
+        params = pd.DataFrame([marginal.params])
+        params.columns = ["locn", "logscale", "shape1"]
 
     # Prepare aris
     design_aris = np.array(design_aris)
