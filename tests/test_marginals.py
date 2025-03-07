@@ -359,7 +359,8 @@ def test_marginals_mle_numerical(distname, stationid, censoring, allclose):
 def test_marginals_mle_theoretical(distname, stationid, allclose):
     streamflow = get_ams(stationid)
     marginal = marginals.factory(distname)
-    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow)
+    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow,
+                                                                          nexplore=50000)
 
     # Theoretical value of MLE
     if distname == "LogNormal":
@@ -402,7 +403,9 @@ def test_marginals_vs_bestfit(distname, stationid, censoring, allclose):
     bestfit = bestfit.loc[:, distname]
 
     marginal = marginals.factory(distname)
-    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow, censor)
+    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow,
+                                                                          censor,
+                                                                          nexplore=50000)
 
     theta_bestfit = np.array([float(bestfit["Location"]),
                               math.log(float(bestfit["Scale"])),
