@@ -90,7 +90,8 @@ def test_plot_marginal_cdf(ptype):
 
 @pytest.mark.parametrize("ptype",
                          freqplots.PLOT_TYPES)
-def test_plot_marginal_cdf_censored(ptype):
+@pytest.mark.parametrize("overtrunc", [True, False])
+def test_plot_marginal_cdf_censored(ptype, overtrunc):
     streamflow = get_ams("203014")
 
     gev = marginals.GEV()
@@ -99,27 +100,36 @@ def test_plot_marginal_cdf_censored(ptype):
     icens = streamflow>=cens
     truncated_probability = (~icens).sum()/len(streamflow)
 
+    # fitting model on truncated data
     gev.params_guess(streamflow[icens])
 
     plt.close("all")
     fig, ax = plt.subplots()
     freqplots.plot_data(ax, streamflow, ptype)
 
-    with pytest.raises(ValueError, match="Some cdf are negative"):
-        freqplots.plot_marginal_cdf(ax, gev, ptype,
-                                truncated_probability=truncated_probability,
-                                Tmin=1./(1-pcens)-0.1,
-                                Tmax=500)
+    Tmin = 1./(1.1 - truncated_probability) if overtrunc\
+            else 1./(0.9 - truncated_probability)
 
     freqplots.plot_marginal_cdf(ax, gev, ptype,
                                 truncated_probability=truncated_probability,
-                                Tmin=1./(1-pcens),
+                                Tmin=Tmin,
                                 Tmax=500)
+    if overtrunc:
+        msg = "All aris lead to"
+        with pytest.raises(ValueError, match=msg):
+            Tmin = 1./(1.1 - truncated_probability)
+            Tmax = 1./(1.05 - truncated_probability)
+            freqplots.plot_marginal_cdf(ax, gev, ptype,
+                                    truncated_probability=truncated_probability,
+                                    Tmin=Tmin,
+                                    Tmax=Tmax)
+
+
     retp = [5, 10, 100, 500]
     aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
 
     ax.legend()
-    fp = FIMG/ f"freqplots_marginal_censored_{ptype}.png"
+    fp = FIMG/ f"freqplots_marginal_censored_{ptype}_{overtrunc}.png"
     fig.savefig(fp)
 
 
