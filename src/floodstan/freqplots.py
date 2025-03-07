@@ -144,11 +144,17 @@ def aris_to_x(aris, truncated_probability,
     aris = np.array(aris)
     prob = 1 - 1./aris
     probtrunc = (prob - truncated_probability) / (1 - truncated_probability)
-    if np.any(probtrunc < 0):
-        errmess = "Some cdf are negative after truncation."
+
+    # Check aris below truncated probability are excluded
+    x = np.nan * np.zeros_like(probtrunc)
+    iok = probtrunc >= 0
+    if iok.sum() == 0:
+        errmess = "All aris lead to negative probability"
         raise ValueError(errmess)
 
-    x = cdf_to_reduced_variate(prob, plot_type)
+    probtrunc[~iok] = np.nan
+    x[iok] = cdf_to_reduced_variate(prob[iok], plot_type)
+
     return x, probtrunc
 
 
