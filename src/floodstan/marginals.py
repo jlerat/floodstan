@@ -26,12 +26,17 @@ EULER_CONSTANT = 0.577215664901532
 PARAMETERS = ["locn", "logscale", "shape1"]
 
 # Bounds
+LOC_LOWER = -1e10
+LOC_UPPER = 1e10
+
 SHAPE1_LOWER = -2.0
 SHAPE1_UPPER = 2.0
 
 LOGSCALE_LOWER = -10
 LOGSCALE_UPPER = 10
 
+SHAPE1_PRIOR_SCALE_MIN = 1e-10
+SHAPE1_PRIOR_SCALE_DEFAULT = 0.2
 
 def _prepare(data):
     data = np.array(data)
@@ -86,8 +91,8 @@ def _prepare_censored_data(data, low_censor):
     return dcens, len(data)-len(dcens)
 
 
-def _check_param_value(x):
-    errmess = f"Invalid parameter value '{x}."
+def _check_param_value(x, lower=-np.inf, upper=np.inf):
+    errmess = f"Invalid parameter value '{x}'."
     if x is None:
         raise ValueError(errmess)
     try:
@@ -95,7 +100,8 @@ def _check_param_value(x):
     except Exception:
         raise ValueError(errmess)
 
-    if np.isnan(x) or not np.isfinite(x):
+    if np.isnan(x) or not np.isfinite(x) \
+            or x < lower or x > upper:
         raise ValueError(errmess)
 
     return x
@@ -197,7 +203,10 @@ class FloodFreqDistribution():
         self._locn = np.nan
         self._logscale = np.nan
         # Assume 0 shape for distribution that do not have shape
+        self.has_shape = True
         self._shape1 = 0.
+        self._shape1_prior_loc = 0
+        self._shape1_prior_scale = SHAPE1_PRIOR_SCALE_DEFAULT
 
     def __str__(self):
         txt = f"{self.name} flood frequency distribution:\n"
@@ -229,7 +238,9 @@ class FloodFreqDistribution():
 
     @locn.setter
     def locn(self, value):
-        self._locn = _check_param_value(value)
+        self._locn = _check_param_value(value,
+                                        LOC_LOWER,
+                                        LOC_UPPER)
 
     @property
     def logscale(self):
@@ -237,7 +248,9 @@ class FloodFreqDistribution():
 
     @logscale.setter
     def logscale(self, value):
-        self._logscale = _check_param_value(value)
+        self._logscale = _check_param_value(value,
+                                            LOGSCALE_LOWER,
+                                            LOGSCALE_UPPER)
 
     @property
     def scale(self):
@@ -245,17 +258,19 @@ class FloodFreqDistribution():
 
     @property
     def shape1(self):
-        return self._shape1
+        if self.has_shape:
+            return self._shape1
+        else:
+            return 0.
 
     @shape1.setter
     def shape1(self, value):
-        self._shape1 = _check_param_value(value)
-
-        # Check shape bounds
-        sh1 = self._shape1
-        if sh1 < SHAPE1_LOWER or sh1 > SHAPE1_UPPER:
-            errmess = f"Expected shape in ]{SHAPE1_LOWER}, "\
-                      + f"{SHAPE1_UPPER}[, got {sh1}."
+        if self.has_shape:
+            self._shape1 = _check_param_value(value,
+                                          SHAPE1_LOWER,
+                                          SHAPE1_UPPER)
+        else:
+            errmess = f"Try to set shape for distribution {self.name}."
             raise ValueError(errmess)
 
     @property
@@ -272,12 +287,33 @@ class FloodFreqDistribution():
         locn, logscale, shape1 = value
         self.locn = locn
         self.logscale = logscale
-        self.shape1 = shape1
+        if self.has_shape:
+            self.shape1 = shape1
 
     @property
     def support(self):
         errmsg = f"Property support not implemented for class {self.name}."
         raise NotImplementedError(errmsg)
+
+    @property
+    def shape1_prior_loc(self):
+        return self._shape1_prior_loc
+
+    @shape1_prior_loc.setter
+    def shape1_prior_loc(self, value):
+        self._shape1_prior_loc = float(value)
+
+    @property
+    def shape1_prior_scale(self):
+        return self._shape1_prior_scale
+
+    @shape1_prior_scale.setter
+    def shape1_prior_scale(self, value):
+        value = float(value)
+        if value < SHAPE1_PRIOR_SCALE_MIN:
+            errmess = f"Expected prior scale > {SHAPE1_PRIOR_SCALE_MIN:0.1e}."
+            raise ValueError(errmess)
+        self._shape1_prior_scale = value
 
     def in_support(self, x):
         x0, x1 = self.support
@@ -317,8 +353,7 @@ class FloodFreqDistribution():
         errmsg = f"Method rvs not implemented for class {self.name}."
         raise NotImplementedError(errmsg)
 
-    def neglogpost(self, theta, data_censored, low_censor,
-                   ncens, shape_width_prior=None):
+    def neglogpost(self, theta, data_censored, low_censor, ncens):
         try:
             self.params = theta
         except ValueError:
@@ -331,13 +366,12 @@ class FloodFreqDistribution():
         if not np.isfinite(nlp) or np.isnan(nlp):
             return np.inf
 
-        if shape_width_prior is not None:
-            nlp += norm.logpdf(theta[-1], loc=0, scale=shape_width_prior)
-
+        nlp += norm.logpdf(theta[-1],
+                           loc=self.shape1_prior_loc,
+                           scale=self.shape1_prior_scale)
         return nlp
 
     def maximum_posterior_estimate(self, data, low_censor=None,
-                                   shape_width_prior=None,
                                    nexplore=5000,
                                    explore_scale=0.2):
         # Prepare data
@@ -355,19 +389,18 @@ class FloodFreqDistribution():
         explore[-1] = theta0
 
         # .. loop throught explored parameter and check loglike
-        nll_min = np.inf
+        nlp_min = np.inf
         for theta in explore:
-            nll = self.neglogpost(theta, dcens, low_censor, ncens,
-                                  shape_width_prior)
-            if nll < nll_min and np.isfinite(nll) and not np.isnan(nll):
+            nlp = self.neglogpost(theta, dcens, low_censor, ncens)
+            if nlp < nlp_min and np.isfinite(nlp) and not np.isnan(nlp):
                 theta0 = theta
-                nll_min = nll
+                nlp_min = nlp
 
         # Nelder-Mead fit
         options = dict(xatol=1e-5, fatol=1e-5,
                        maxiter=10000, maxfev=50000)
         opt = minimize(self.neglogpost, theta0,
-                       args=(dcens, low_censor, ncens, shape_width_prior),
+                       args=(dcens, low_censor, ncens),
                        method="Nelder-Mead",
                        options=options)
         self.params = opt.x
@@ -383,6 +416,7 @@ class FloodFreqDistribution():
 class Normal(FloodFreqDistribution):
     def __init__(self):
         super(Normal, self).__init__("Normal")
+        self.has_shape = 0
 
     def get_scipy_params(self):
         return {"loc": self.locn, "scale": self.scale}
@@ -401,14 +435,6 @@ class Normal(FloodFreqDistribution):
             return fun
 
         return super(Normal, self).__getattribute__(name)
-
-    @property
-    def shape1(self):
-        return 0.
-
-    @shape1.setter
-    def shape1(self, value):
-        self._shape1 = 0.
 
     @property
     def support(self):
@@ -564,6 +590,16 @@ class LogPearson3(FloodFreqDistribution):
     def __init__(self):
         super(LogPearson3, self).__init__("LogPearson3")
 
+    @property
+    def locn(self):
+        return self._locn
+
+    @locn.setter
+    def locn(self, value):
+        self._locn = _check_param_value(value,
+                                        1e-10,
+                                        1e10)
+
     def get_scipy_params(self):
         return {"skew": self.shape1, "loc": self.locn, "scale": self.scale}
 
@@ -697,14 +733,7 @@ class Gumbel(FloodFreqDistribution):
 
     def __init__(self):
         super(Gumbel, self).__init__("Gumbel")
-
-    @property
-    def shape1(self):
-        return 0.
-
-    @shape1.setter
-    def shape1(self, value):
-        self._shape1 = 0.
+        self.has_shape = False
 
     @property
     def support(self):
@@ -776,14 +805,16 @@ class LogNormal(FloodFreqDistribution):
 
     def __init__(self):
         super(LogNormal, self).__init__("LogNormal")
+        self.has_shape = False
 
     @property
-    def shape1(self):
-        return 0.
+    def locn(self):
+        return self._locn
 
-    @shape1.setter
-    def shape1(self, value):
-        self._shape1 = 0.
+    @locn.setter
+    def locn(self, value):
+        # location param is in logspace, so need tighter bounds
+        self._locn = _check_param_value(value, -1e2, 1e2)
 
     @property
     def support(self):
@@ -999,14 +1030,7 @@ class Gamma(FloodFreqDistribution):
 
     def __init__(self):
         super(Gamma, self).__init__("Gamma")
-
-    @property
-    def shape1(self):
-        return 0.
-
-    @shape1.setter
-    def shape1(self, value):
-        self._shape1 = 0.
+        self.has_shape = False
 
     @property
     def locn(self):

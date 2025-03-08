@@ -47,6 +47,8 @@ def test_floodfreqdist(allclose):
     assert hasattr(dist, "locn")
     assert hasattr(dist, "logscale")
     assert hasattr(dist, "shape1")
+    assert hasattr(dist, "shape1_prior_loc")
+    assert hasattr(dist, "shape1_prior_scale")
 
     s = str(dist)
     assert isinstance(s, str)
@@ -77,11 +79,14 @@ def test_floodfreqdist(allclose):
     with pytest.raises(ValueError, match="Expected 3 parameters"):
         dist.params = [10, 1]
 
-    with pytest.raises(ValueError, match="Expected shape"):
+    with pytest.raises(ValueError, match="Invalid"):
         dist.params = [10, 1, 1000]
 
     with pytest.raises(ValueError, match="Invalid"):
         dist.params = [10, 1, np.nan]
+
+    with pytest.raises(ValueError, match="Expected prior scale"):
+        dist.shape1_prior_scale = 0
 
 
 @pytest.mark.parametrize("distname",
@@ -329,29 +334,27 @@ def test_fit_lh_moments_flike(distname, station, censoring, allclose):
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("stationid", get_stationids()[:3])
 @pytest.mark.parametrize("censoring", [False, True])
-def test_marginals_mle_numerical(distname, stationid, censoring, allclose):
+def test_marginals_maxpost_numerical(distname, stationid, censoring, allclose):
     streamflow = get_ams(stationid)
     marginal = marginals.factory(distname)
     censor = streamflow.quantile(0.33) if censoring else -1e10
-    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow,
-                                                                          censor,
-                                                                          nexplore=10000,
-                                                                          explore_scale=0.5)
+    lmp, theta_lmp, dcens, ncens = \
+        marginal.maximum_posterior_estimate(streamflow,
+        censor, nexplore=10000, explore_scale=0.5)
     # Perturb ll param and check ll_mle is always greater
     # with a small tolerance
-    trans_mle = np.arcsinh(theta_mle)
+    trans_lmp = np.arcsinh(theta_lmp)
     perturb = np.random.normal(loc=0., scale=0.2,
                                size=(5000, 3))
     for pert in perturb:
-        theta = np.sinh(trans_mle + pert)
-        ll = -marginal.neglogpost(theta, dcens, censor, ncens)
-        if np.isfinite(ll) and not np.isnan(ll):
+        theta = np.sinh(trans_lmp + pert)
+        lp = -marginal.neglogpost(theta, dcens, censor, ncens)
+        if np.isfinite(lp) and not np.isnan(lp):
             mess = f"[{distname}/{stationid}/{censoring}] "\
-                   + f" num: ll={ll:0.1e} theta={theta} "\
-                   + f" mle: ll={ll_mle:0.1e} theta={theta_mle}"
-
+                   + f" num: lp={lp:0.1e} theta={theta} "\
+                   + f" lmp: lp={lmp:0.1e} theta={theta_lmp}"
             eps = 5e-2
-            assert ll < ll_mle + eps, print(mess)
+            assert lp < lmp + eps, print(mess)
 
 
 @pytest.mark.parametrize("distname", ["Gamma", "LogNormal", "Normal"])
@@ -359,9 +362,9 @@ def test_marginals_mle_numerical(distname, stationid, censoring, allclose):
 def test_marginals_mle_theoretical(distname, stationid, allclose):
     streamflow = get_ams(stationid)
     marginal = marginals.factory(distname)
-    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow,
-                                                                          nexplore=50000)
-
+    ll_mle, theta_mle, dcens, ncens = \
+        marginal.maximum_posterior_estimate(streamflow,
+                                            nexplore=50000)
     # Theoretical value of MLE
     if distname == "LogNormal":
         marginal.params_guess(streamflow)
