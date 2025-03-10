@@ -89,7 +89,7 @@ def test_floodfreqdist(allclose):
     with pytest.raises(ValueError, match="Invalid"):
         dist.params = [10, 1, np.nan]
 
-    with pytest.raises(ValueError, match="Invalid parameter"):
+    with pytest.raises(ValueError, match="Invalid value for"):
         dist.shape1_prior_scale = 0
 
 
@@ -345,7 +345,7 @@ def test_marginals_maxpost_numerical(distname, stationid, censoring, allclose):
     lmp, theta_lmp, dcens, ncens = \
         marginal.maximum_posterior_estimate(streamflow,
         censor, nexplore=10000, explore_scale=0.3)
-    # Perturb ll param and check ll_mle is always greater
+    # Perturb lmp param and check lp_mlp is always greater
     # with a small tolerance
     trans_lmp = np.arcsinh(theta_lmp)
     perturb = np.random.normal(loc=0., scale=0.2,
@@ -366,7 +366,12 @@ def test_marginals_maxpost_numerical(distname, stationid, censoring, allclose):
 def test_marginals_mle_theoretical(distname, stationid, allclose):
     streamflow = get_ams(stationid)
     marginal = marginals.factory(distname)
-    ll_mle, theta_mle, dcens, ncens = \
+
+    # Set very wide prior scale to get max likelihood
+    marginals.SHAPE1_PRIOR_SCALE_MAX = 1e100
+    marginal.shape1_prior_scale = 1e100
+
+    mlp_mle, theta_mle, dcens, ncens = \
         marginal.maximum_posterior_estimate(streamflow,
                                             nexplore=50000)
     # Theoretical value of MLE
@@ -410,10 +415,15 @@ def test_marginals_vs_bestfit(distname, stationid, censoring, allclose):
     bestfit = bestfit.loc[:, distname]
 
     marginal = marginals.factory(distname)
+
+    # Set very wide prior scale to get max likelihood
+    marginals.SHAPE1_PRIOR_SCALE_MAX = 1e100
+    marginal.shape1_prior_scale = 1e100
+
+    marginal.shape1_prior_scale = 1e5
     ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow,
                                                                           censor,
                                                                           nexplore=50000)
-
     theta_bestfit = np.array([float(bestfit["Location"]),
                               math.log(float(bestfit["Scale"])),
                               float(bestfit["Shape"])])
