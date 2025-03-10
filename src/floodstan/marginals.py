@@ -40,6 +40,7 @@ SHAPE1_PRIOR_SCALE_MIN = 1e-10
 SHAPE1_PRIOR_SCALE_MAX = 1.
 SHAPE1_PRIOR_SCALE_DEFAULT = 0.2
 
+
 def _prepare(data):
     data = np.array(data)
     if data.ndim != 1:
@@ -273,8 +274,8 @@ class FloodFreqDistribution():
     def shape1(self, value):
         if self.has_shape:
             self._shape1 = _check_param_value(value,
-                                          SHAPE1_LOWER,
-                                          SHAPE1_UPPER)
+                                              SHAPE1_LOWER,
+                                              SHAPE1_UPPER)
         else:
             errmess = f"Try to set shape for distribution {self.name}."
             raise ValueError(errmess)
@@ -308,8 +309,8 @@ class FloodFreqDistribution():
     @shape1_prior_loc.setter
     def shape1_prior_loc(self, value):
         self._shape1_prior_loc = _check_param_value(value,
-                                          SHAPE1_LOWER,
-                                          SHAPE1_UPPER)
+                                                    SHAPE1_LOWER,
+                                                    SHAPE1_UPPER)
 
     @property
     def shape1_prior_scale(self):
@@ -384,8 +385,8 @@ class FloodFreqDistribution():
         # Prior on shape param
         if self.has_shape:
             nlp -= norm.logpdf(theta[-1],
-                           loc=self.shape1_prior_loc,
-                           scale=self.shape1_prior_scale)
+                               loc=self.shape1_prior_loc,
+                               scale=self.shape1_prior_scale)
         return nlp
 
     def maximum_posterior_estimate(self, data, low_censor=None,
