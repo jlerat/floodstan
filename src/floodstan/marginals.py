@@ -35,7 +35,9 @@ SHAPE1_UPPER = 2.0
 LOGSCALE_LOWER = -10
 LOGSCALE_UPPER = 10
 
+SHAPE1_PRIOR_LOC_DEFAULT = 0.
 SHAPE1_PRIOR_SCALE_MIN = 1e-10
+SHAPE1_PRIOR_SCALE_MAX = 1.
 SHAPE1_PRIOR_SCALE_DEFAULT = 0.2
 
 def _prepare(data):
@@ -95,13 +97,17 @@ def _check_param_value(x, lower=-np.inf, upper=np.inf):
     errmess = f"Invalid parameter value '{x}'."
     if x is None:
         raise ValueError(errmess)
+
     try:
         x = float(x)
     except Exception:
         raise ValueError(errmess)
 
-    if np.isnan(x) or not np.isfinite(x) \
-            or x < lower or x > upper:
+    if np.isnan(x) or not np.isfinite(x):
+        raise ValueError(errmess)
+
+    if x < lower or x > upper:
+        errmess += f" Expected value in [{lower}, {upper}]."
         raise ValueError(errmess)
 
     return x
@@ -204,8 +210,8 @@ class FloodFreqDistribution():
         self._logscale = np.nan
         # Assume 0 shape for distribution that do not have shape
         self.has_shape = True
-        self._shape1 = 0.
-        self._shape1_prior_loc = 0
+        self._shape1 = SHAPE1_PRIOR_LOC_DEFAULT
+        self._shape1_prior_loc = SHAPE1_PRIOR_LOC_DEFAULT
         self._shape1_prior_scale = SHAPE1_PRIOR_SCALE_DEFAULT
 
     def __str__(self):
@@ -301,7 +307,9 @@ class FloodFreqDistribution():
 
     @shape1_prior_loc.setter
     def shape1_prior_loc(self, value):
-        self._shape1_prior_loc = float(value)
+        self._shape1_prior_loc = _check_param_value(value,
+                                          SHAPE1_LOWER,
+                                          SHAPE1_UPPER)
 
     @property
     def shape1_prior_scale(self):
@@ -309,16 +317,20 @@ class FloodFreqDistribution():
 
     @shape1_prior_scale.setter
     def shape1_prior_scale(self, value):
-        value = float(value)
-        if value < SHAPE1_PRIOR_SCALE_MIN:
-            errmess = f"Expected prior scale > {SHAPE1_PRIOR_SCALE_MIN:0.1e}."
-            raise ValueError(errmess)
-        self._shape1_prior_scale = value
+        smin = SHAPE1_PRIOR_SCALE_MIN
+        smax = SHAPE1_PRIOR_SCALE_MAX
+        self._shape1_prior_scale = _check_param_value(value,
+                                                      smin, smax)
 
     def in_support(self, x):
         x0, x1 = self.support
         ok = np.ones_like(x).astype(bool)
         return np.where((x >= x0) & (x <= x1), ok, ~ok)
+
+    def params_guess(self, data):
+        errmsg = "Method params_guess not implemented"\
+                 + f" for class {self.name}."
+        raise NotImplementedError(errmsg)
 
     def get_scipy_params(self):
         errmsg = "Method get_scipy_params not implemented"\
@@ -355,7 +367,10 @@ class FloodFreqDistribution():
 
     def neglogpost(self, theta, data_censored, low_censor, ncens):
         try:
-            self.params = theta
+            self.locn = theta[0]
+            self.logscale = theta[1]
+            if self.has_shape:
+                self.shape1 = theta[2]
         except ValueError:
             return np.inf
 
@@ -366,7 +381,9 @@ class FloodFreqDistribution():
         if not np.isfinite(nlp) or np.isnan(nlp):
             return np.inf
 
-        nlp += norm.logpdf(theta[-1],
+        # Prior on shape param
+        if self.has_shape:
+            nlp -= norm.logpdf(theta[-1],
                            loc=self.shape1_prior_loc,
                            scale=self.shape1_prior_scale)
         return nlp
@@ -383,7 +400,7 @@ class FloodFreqDistribution():
         self.params_guess(data)
         theta0 = self.params
         perturb = np.random.normal(loc=0, scale=explore_scale,
-                                   size=(nexplore, 3))
+                                   size=(nexplore, len(theta0)))
         explore = np.sinh(np.arcsinh(theta0)[None, :] + perturb)
         # .. keep guessed parameter last
         explore[-1] = theta0
@@ -399,18 +416,22 @@ class FloodFreqDistribution():
         # Nelder-Mead fit
         options = dict(xatol=1e-5, fatol=1e-5,
                        maxiter=10000, maxfev=50000)
+        theta0 = theta0[:2] if not self.has_shape else theta0
         opt = minimize(self.neglogpost, theta0,
                        args=(dcens, low_censor, ncens),
                        method="Nelder-Mead",
                        options=options)
-        self.params = opt.x
+        self.locn = opt.x[0]
+        self.logscale = opt.x[1]
+        if self.has_shape:
+            self.shape1 = opt.x[2]
 
         if not opt.success:
             warnmess = "Nelder-Mead optimisation did not converge."\
                        + f"Message: {opt.message}."
             warnings.warn(warnmess)
 
-        return -opt.fun, opt.x, dcens, ncens
+        return -opt.fun, self.params, dcens, ncens
 
 
 class Normal(FloodFreqDistribution):
@@ -654,6 +675,9 @@ class LogPearson3(FloodFreqDistribution):
             logx = np.log(data[data > 0])
             self.locn = logx.mean()
             self.logscale = math.log((logx-self.locn).std(ddof=1))
+
+        # Use guess param value as prior loc for shape
+        self.shape1_prior_loc = self.shape1
 
     def rvs(self, size):
         kw = self.get_scipy_params()

@@ -106,7 +106,13 @@ def test_stan_sampling_variable(distname, allclose):
     for key in keys:
         assert key in dd
 
-    assert allclose(dd["yshape1_prior"], sample.SHAPE1_PRIOR)
+    if distname != "LogPearson3":
+        prior = [marginals.SHAPE1_PRIOR_LOC_DEFAULT,
+                 marginals.SHAPE1_PRIOR_SCALE_DEFAULT]
+        assert allclose(dd["yshape1_prior"], prior)
+    else:
+        assert allclose(dd["yshape1_prior"][1],
+                        marginals.SHAPE1_PRIOR_SCALE_DEFAULT)
 
     # Rapid setting
     sv = sample.StanSamplingVariable(y)

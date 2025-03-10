@@ -76,6 +76,10 @@ def test_floodfreqdist(allclose):
         assert allclose(dist.logscale, 1)
         assert allclose(dist.shape1, 0.1)
 
+    with pytest.raises(NotImplementedError,
+                       match="Method params_guess"):
+        dist.params_guess(np.random.uniform(-1, 1, 10))
+
     with pytest.raises(ValueError, match="Expected 3 parameters"):
         dist.params = [10, 1]
 
@@ -85,7 +89,7 @@ def test_floodfreqdist(allclose):
     with pytest.raises(ValueError, match="Invalid"):
         dist.params = [10, 1, np.nan]
 
-    with pytest.raises(ValueError, match="Expected prior scale"):
+    with pytest.raises(ValueError, match="Invalid parameter"):
         dist.shape1_prior_scale = 0
 
 
@@ -340,7 +344,7 @@ def test_marginals_maxpost_numerical(distname, stationid, censoring, allclose):
     censor = streamflow.quantile(0.33) if censoring else -1e10
     lmp, theta_lmp, dcens, ncens = \
         marginal.maximum_posterior_estimate(streamflow,
-        censor, nexplore=10000, explore_scale=0.5)
+        censor, nexplore=10000, explore_scale=0.3)
     # Perturb ll param and check ll_mle is always greater
     # with a small tolerance
     trans_lmp = np.arcsinh(theta_lmp)

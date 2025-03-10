@@ -33,9 +33,6 @@ DISCRETE_CODES = {code: name for name, code in DISCRETE_NAMES.items()}
 # Subset of copula currently supported in the stan model
 COPULA_NAMES_STAN = ["Gaussian", "Clayton", "Gumbel"]
 
-# Tight prior on shape parameter
-SHAPE1_PRIOR = [0, 0.2]
-
 # Prior on copula parameter
 RHO_PRIOR = [0.7, 1.]
 
@@ -108,7 +105,8 @@ def format_prior(values):
 def are_marginal_params_valid(dist, locn, logscale, shape1, data, censor):
     dist.locn = locn
     dist.logscale = logscale
-    dist.shape1 = shape1
+    if dist.has_shape:
+        dist.shape1 = shape1
 
     cdf = dist.cdf(data)
     cdf[data < censor] = np.nan
@@ -313,7 +311,8 @@ class StanSamplingVariable():
         self._is_cens = data < self.censor
         self.i11 = np.where(self.is_obs)[0] + 1
         self.i21 = np.where(self.is_cens)[0] + 1
-        # .. 3x3 due to stan code requirement. Only first 2 top left cells used
+        # .. 3x3 due to stan code requirement.
+        #    Only first 2 top left cells used
         self.Ncases = np.zeros((3, 3), dtype=int)
         self.Ncases[:2, 0] = [len(self.i11), len(self.i21)]
 
@@ -325,14 +324,11 @@ class StanSamplingVariable():
     def set_guess_parameters(self):
         dok = self.data[~np.isnan(self.data)]
         dist = self.marginal
-
-        # Get guess parameter set
         dist.params_guess(dok)
-        params0 = dist.params
         self._guess_parameters = {
-                "locn": params0[0],
-                "logscale": params0[1],
-                "shape1": params0[2]
+                "locn": dist.locn,
+                "logscale": dist.logscale,
+                "shape1": dist.shape1
                 }
 
     def set_initial_parameters(self):
@@ -405,7 +401,11 @@ class StanSamplingVariable():
         dscale = (LOGSCALE_UPPER-LOGSCALE_LOWER) / 2
         self._logscale_prior = [logscale_start, dscale]
 
-        self._shape1_prior = SHAPE1_PRIOR
+        # Use logic from marginal to set shape1 prior
+        # (generally [0, 0.2] , but LogPearson3 is different)
+        dist = self.marginal
+        self._shape1_prior = [dist.shape1_prior_loc,
+                              dist.shape1_prior_scale]
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
