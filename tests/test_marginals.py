@@ -445,7 +445,7 @@ def test_marginals_vs_bestfit(distname, stationid, censoring, allclose):
     cdfs = 1. - se.index.astype(float).values
     aris = 1. / cdfs
     bf_quantiles = se.values.astype(float)
-    marginals.params = theta_bestfit
+    marginal.params = theta_bestfit
     fs_quantiles = marginal.ppf(cdfs)
     iok = (bf_quantiles > censor) & (fs_quantiles > censor)
     quant_err = np.abs(np.log(bf_quantiles[iok])\

@@ -77,7 +77,7 @@ def test_plot_marginal_cdf(ptype):
     gev = marginals.GEV()
     for eta in range(4):
         gev.fit_lh_moments(streamflow, eta)
-        lab = f"GEV $\eta$={eta}"
+        lab = f"GEV $\\eta$={eta}"
         freqplots.plot_marginal_cdf(ax, gev, ptype, label=lab, Tmax=500)
 
     retp = [5, 10, 100, 500]

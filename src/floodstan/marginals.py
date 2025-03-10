@@ -94,8 +94,9 @@ def _prepare_censored_data(data, low_censor):
     return dcens, len(data)-len(dcens)
 
 
-def _check_param_value(x, lower=-np.inf, upper=np.inf):
-    errmess = f"Invalid parameter value '{x}'."
+def _check_param_value(x, lower=-np.inf, upper=np.inf, name=None):
+    name = "" if name is None else f"{name} "
+    errmess = f"Invalid value for parameter {name}'{x}'."
     if x is None:
         raise ValueError(errmess)
 
@@ -247,7 +248,8 @@ class FloodFreqDistribution():
     def locn(self, value):
         self._locn = _check_param_value(value,
                                         LOC_LOWER,
-                                        LOC_UPPER)
+                                        LOC_UPPER,
+                                        "locn")
 
     @property
     def logscale(self):
@@ -257,7 +259,8 @@ class FloodFreqDistribution():
     def logscale(self, value):
         self._logscale = _check_param_value(value,
                                             LOGSCALE_LOWER,
-                                            LOGSCALE_UPPER)
+                                            LOGSCALE_UPPER,
+                                            "logscale")
 
     @property
     def scale(self):
@@ -275,7 +278,8 @@ class FloodFreqDistribution():
         if self.has_shape:
             self._shape1 = _check_param_value(value,
                                               SHAPE1_LOWER,
-                                              SHAPE1_UPPER)
+                                              SHAPE1_UPPER,
+                                              "shape1")
         else:
             errmess = f"Try to set shape for distribution {self.name}."
             raise ValueError(errmess)
@@ -310,7 +314,8 @@ class FloodFreqDistribution():
     def shape1_prior_loc(self, value):
         self._shape1_prior_loc = _check_param_value(value,
                                                     SHAPE1_LOWER,
-                                                    SHAPE1_UPPER)
+                                                    SHAPE1_UPPER,
+                                                    "shape1_prior_loc")
 
     @property
     def shape1_prior_scale(self):
@@ -321,7 +326,8 @@ class FloodFreqDistribution():
         smin = SHAPE1_PRIOR_SCALE_MIN
         smax = SHAPE1_PRIOR_SCALE_MAX
         self._shape1_prior_scale = _check_param_value(value,
-                                                      smin, smax)
+                                                      smin, smax,
+                                                      "shape1_prior_scale")
 
     def in_support(self, x):
         x0, x1 = self.support
@@ -618,9 +624,7 @@ class LogPearson3(FloodFreqDistribution):
 
     @locn.setter
     def locn(self, value):
-        self._locn = _check_param_value(value,
-                                        1e-10,
-                                        1e10)
+        self._locn = _check_param_value(value)
 
     def get_scipy_params(self):
         return {"skew": self.shape1, "loc": self.locn, "scale": self.scale}
