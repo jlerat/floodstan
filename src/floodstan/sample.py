@@ -128,6 +128,29 @@ def are_marginal_params_valid(dist, locn, logscale, shape1, data, censor):
     return None, None
 
 
+def bootstrap(marginal, data, fit_method="fit_lh_moments",
+              nboot=10000, eta=0):
+    expected = ["fit_lh_moments", "params_guess"]
+    if fit_method not in expected:
+        errmess = f"Expected fit_method in [{'/'.join(expected)}]."
+        raise ValueError(errmess)
+
+    boots = pd.DataFrame(np.nan, index=np.arange(nboot),
+                         columns=["locn", "logscale", "shape1"])
+    fun = getattr(marginal, fit_method)
+    kw = {"eta": eta} if fit_method == "fit_lh_moments" else {}
+
+    for i in boots.index:
+        resampled = np.random.choice(data, len(data), replace=True)
+        try:
+            fun(resampled, **kw)
+        except Exception:
+            continue
+
+        boots.loc[i, :] = marginal.params
+    return boots
+
+
 class StanSamplingVariable():
     def __init__(self,
                  data=None,
