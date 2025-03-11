@@ -38,7 +38,7 @@ STATIONIDS = get_stationids()
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("stationid", STATIONIDS)
 @pytest.mark.parametrize("fit_method", ["params_guess", "fit_lh_moments"])
-def test_bootstrap(distname, stationid, fit_method, allclose):
+def test_bootstrap(distname, stationid, fit_method):
     y = get_ams(stationid)
     marginal = marginals.factory(distname)
     if distname == "Gamma" and fit_method == "fit_lh_moments":
@@ -53,3 +53,6 @@ def test_bootstrap(distname, stationid, fit_method, allclose):
     std = boot.std()
     assert std.locn > 0
     assert std.logscale > 0
+    if marginal.has_shape:
+        assert std.shape1 > 0
+

@@ -94,7 +94,7 @@ def get_logger(level="INFO", flog=None, stan_logger=True):
     return LOGGER
 
 
-def format_prior(values):
+def _check_prior(values):
     values = np.array(values).astype(float)
     if values.shape != (2, ):
         errmess = f"Expected an array of shape (2, ), got {values.shape}."
@@ -136,19 +136,27 @@ def bootstrap(marginal, data, fit_method="params_guess",
         errmess = f"Expected fit_method in [{'/'.join(expected)}]."
         raise ValueError(errmess)
 
-    boots = pd.DataFrame(np.nan, index=np.arange(nboot),
-                         columns=["locn", "logscale", "shape1"])
+    data = np.array(data)
+    nval = len(data)
+
+    # Parameter estimation method
     fun = getattr(marginal, fit_method)
     kw = {"eta": eta} if fit_method == "fit_lh_moments" else {}
 
-    for i in boots.index:
-        resampled = np.random.choice(data, len(data), replace=True)
+    # Prepare data
+    boots = pd.DataFrame(np.nan, index=np.arange(nboot),
+                         columns=["locn", "logscale", "shape1"])
+
+    # Run bootstrap
+    for i in range(nboot):
+        resampled = np.random.choice(data, nval, replace=True)
         try:
             fun(resampled, **kw)
         except Exception:
             continue
 
         boots.loc[i, :] = marginal.params
+
     return boots
 
 
@@ -273,7 +281,7 @@ class StanSamplingVariable():
 
     @locn_prior.setter
     def locn_prior(self, values):
-        values = format_prior(values)
+        values = _check_prior(values)
         self._locn_prior = values
 
     @property
@@ -285,7 +293,7 @@ class StanSamplingVariable():
 
     @logscale_prior.setter
     def logscale_prior(self, values):
-        values = format_prior(values)
+        values = _check_prior(values)
         self._logscale_prior = values
 
     @property
@@ -297,7 +305,7 @@ class StanSamplingVariable():
 
     @shape1_prior.setter
     def shape1_prior(self, values):
-        values = format_prior(values)
+        values = _check_prior(values)
         self._shape1_prior = values
 
     def set_marginal(self, marginal_name):
