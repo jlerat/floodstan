@@ -14,17 +14,11 @@ from floodstan.copulas import COPULA_NAMES
 from floodstan.copulas import factory
 
 from floodstan.marginals import MARGINAL_NAMES
-from floodstan.marginals import LOCN_LOWER
-from floodstan.marginals import LOCN_UPPER
-from floodstan.marginals import LOGSCALE_LOWER
-from floodstan.marginals import LOGSCALE_UPPER
-from floodstan.marginals import SHAPE1_LOWER
-from floodstan.marginals import SHAPE1_UPPER
 
 from floodstan.discretes import DISCRETE_NAMES
 from floodstan.discretes import PHI_LOWER
 from floodstan.discretes import PHI_UPPER
-from floodstan.discretes import LOCN_UPPER
+from floodstan.discretes import LOCN_UPPER as LOCN_UPPER_DIST
 from floodstan.discretes import NEVENT_UPPER
 
 
@@ -385,11 +379,11 @@ class StanSamplingVariable():
             niter += 1
             # Perturb guess parameters
             locn = params0[0] * max(5e-1, 1 + normvar.rvs())
-            logscale = max(LOGSCALE_LOWER,
-                           min(LOGSCALE_UPPER,
+            logscale = max(dist.logscale_lower,
+                           min(dist.logscale_upper,
                                params0[1] + normvar.rvs()))
-            shape1 = max(SHAPE1_LOWER,
-                         min(SHAPE1_UPPER,
+            shape1 = max(dist.shape1_lower,
+                         min(dist.shape1_upper,
                              params0[2] + normvar.rvs()))
 
             pp, cdf = are_marginal_params_valid(dist, locn, logscale,
@@ -433,7 +427,8 @@ class StanSamplingVariable():
         self._locn_prior = [locn_start, 10 * abs(locn_start)]
 
         logscale_start = start["logscale"]
-        dscale = (LOGSCALE_UPPER-LOGSCALE_LOWER) / 2
+        dist = self.marginal
+        dscale = (dist.logscale_upper - dist.logscale_lower) / 2
         self._logscale_prior = [logscale_start, dscale]
 
         # Use logic from marginal to set shape1 prior
@@ -708,7 +703,7 @@ class StanDiscreteVariable():
             f"{vn}disc": self.discrete_code,
             "N": self.N,
             vn: self.data,
-            "locn_upper": 1 if isbern else LOCN_UPPER,
+            "locn_upper": 1 if isbern else LOCN_UPPER_DIST,
             "phi_lower": PHI_LOWER,
             "phi_upper": PHI_UPPER,
             "nevent_upper": 1 if isbern else NEVENT_UPPER,
