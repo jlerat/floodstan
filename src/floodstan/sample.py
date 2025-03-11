@@ -14,6 +14,8 @@ from floodstan.copulas import COPULA_NAMES
 from floodstan.copulas import factory
 
 from floodstan.marginals import MARGINAL_NAMES
+from floodstan.marginals import LOCN_LOWER
+from floodstan.marginals import LOCN_UPPER
 from floodstan.marginals import LOGSCALE_LOWER
 from floodstan.marginals import LOGSCALE_UPPER
 from floodstan.marginals import SHAPE1_LOWER
@@ -305,8 +307,9 @@ class StanSamplingVariable():
 
     @shape1_prior.setter
     def shape1_prior(self, values):
-        values = _check_prior(values)
-        self._shape1_prior = values
+        if self.marginal.has_shape:
+            values = _check_prior(values)
+            self._shape1_prior = values
 
     def set_marginal(self, marginal_name):
         if marginal_name not in MARGINAL_NAMES:
@@ -442,6 +445,7 @@ class StanSamplingVariable():
     def to_dict(self):
         """ Export stan data to be used by stan program """
         vn = self.name
+        dist = self.marginal
         dd = {
             f"{vn}marginal": self.marginal_code,
             "N": self.N,
@@ -450,10 +454,12 @@ class StanSamplingVariable():
             f"{vn}locn_prior": self.locn_prior,
             f"{vn}logscale_prior": self.logscale_prior,
             f"{vn}shape1_prior": self.shape1_prior,
-            "logscale_lower": LOGSCALE_LOWER,
-            "logscale_upper": LOGSCALE_UPPER,
-            "shape1_lower": SHAPE1_LOWER,
-            "shape1_upper": SHAPE1_UPPER,
+            "locn_lower": dist.locn_lower,
+            "locn_upper": dist.locn_upper,
+            "logscale_lower": dist.logscale_lower,
+            "logscale_upper": dist.logscale_upper,
+            "shape1_lower": dist.shape1_lower,
+            "shape1_upper": dist.shape1_upper,
             "i11": self.i11,
             "i21": self.i21,
             "Ncases": self.Ncases

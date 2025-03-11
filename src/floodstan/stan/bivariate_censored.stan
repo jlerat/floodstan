@@ -68,6 +68,8 @@ data {
   array[Ncases[2,3]] int<lower=1, upper=N> i23;
 
   // Prior parameters
+  real<lower=-1e10> locn_lower;
+  real<lower=locn_lower, upper=1e10> locn_upper;
   vector[2] ylocn_prior;
   
   real<lower=-20> logscale_lower;
@@ -94,12 +96,12 @@ data {
 
 parameters {
   // Parameter for observed streamflow
-  real ylocn; 
+  real<lower=locn_lower, upper=locn_upper> ylocn; 
   real<lower=logscale_lower, upper=logscale_upper> ylogscale;
   real<lower=shape1_lower, upper=shape1_upper> yshape1;
 
   // Parameter for covariate
-  real zlocn; 
+  real<lower=locn_lower, upper=locn_upper> zlocn; 
   real<lower=logscale_lower, upper=logscale_upper> zlogscale;
   real<lower=shape1_lower, upper=shape1_upper> zshape1;
 
@@ -145,11 +147,11 @@ transformed parameters {
 
 model {
   // --- Priors --
-  ylocn ~ normal(ylocn_prior[1], ylocn_prior[2]);
+  ylocn ~ normal(ylocn_prior[1], ylocn_prior[2]) T[locn_lower, locn_upper];
   ylogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]) T[logscale_lower, logscale_upper];
   yshape1 ~ normal(yshape1_prior[1], yshape1_prior[2]) T[shape1_lower, shape1_upper];
 
-  zlocn ~ normal(ylocn_prior[1], ylocn_prior[2]);
+  zlocn ~ normal(ylocn_prior[1], ylocn_prior[2]) T[locn_lower, locn_upper];
   zlogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]) T[logscale_lower, logscale_upper];
   zshape1 ~ normal(zshape1_prior[1], zshape1_prior[2]) T[shape1_lower, shape1_upper];
 

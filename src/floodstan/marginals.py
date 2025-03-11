@@ -26,19 +26,20 @@ EULER_CONSTANT = 0.577215664901532
 PARAMETERS = ["locn", "logscale", "shape1"]
 
 # Bounds
-LOC_LOWER = -1e10
-LOC_UPPER = 1e10
-
-SHAPE1_LOWER = -2.0
-SHAPE1_UPPER = 2.0
+LOCN_LOWER = -1e10
+LOCN_UPPER = 1e10
 
 LOGSCALE_LOWER = -20
 LOGSCALE_UPPER = 20
 
+SHAPE1_LOWER = -2.0
+SHAPE1_UPPER = 2.0
+
 SHAPE1_PRIOR_LOC_DEFAULT = 0.
+
+SHAPE1_PRIOR_SCALE_DEFAULT = 0.2
 SHAPE1_PRIOR_SCALE_MIN = 1e-10
 SHAPE1_PRIOR_SCALE_MAX = 1.
-SHAPE1_PRIOR_SCALE_DEFAULT = 0.2
 
 
 def _prepare(data):
@@ -208,10 +209,22 @@ class FloodFreqDistribution():
 
     def __init__(self, name):
         self.name = name
+
+        # bounds
+        self.locn_lower = LOCN_LOWER
+        self.locn_upper = LOCN_UPPER
+        self.logscale_lower = LOGSCALE_LOWER
+        self.logscale_upper = LOGSCALE_UPPER
+        self.shape1_lower = SHAPE1_LOWER
+        self.shape1_upper = SHAPE1_UPPER
+
+        # Default values
         self._locn = np.nan
         self._logscale = np.nan
-        # Assume 0 shape for distribution that do not have shape
+
         self.has_shape = True
+
+        # Priors
         self._shape1 = SHAPE1_PRIOR_LOC_DEFAULT
         self._shape1_prior_loc = SHAPE1_PRIOR_LOC_DEFAULT
         self._shape1_prior_scale = SHAPE1_PRIOR_SCALE_DEFAULT
@@ -247,8 +260,8 @@ class FloodFreqDistribution():
     @locn.setter
     def locn(self, value):
         self._locn = _check_param_value(value,
-                                        LOC_LOWER,
-                                        LOC_UPPER,
+                                        self.locn_lower,
+                                        self.locn_upper,
                                         "locn")
 
     @property
@@ -258,8 +271,8 @@ class FloodFreqDistribution():
     @logscale.setter
     def logscale(self, value):
         self._logscale = _check_param_value(value,
-                                            LOGSCALE_LOWER,
-                                            LOGSCALE_UPPER,
+                                            self.logscale_lower,
+                                            self.logscale_upper,
                                             "logscale")
 
     @property
@@ -277,8 +290,8 @@ class FloodFreqDistribution():
     def shape1(self, value):
         if self.has_shape:
             self._shape1 = _check_param_value(value,
-                                              SHAPE1_LOWER,
-                                              SHAPE1_UPPER,
+                                              self.shape1_lower,
+                                              self.shape1_upper,
                                               "shape1")
         else:
             errmess = f"Try to set shape for distribution {self.name}."
@@ -618,14 +631,6 @@ class LogPearson3(FloodFreqDistribution):
     def __init__(self):
         super(LogPearson3, self).__init__("LogPearson3")
 
-    @property
-    def locn(self):
-        return self._locn
-
-    @locn.setter
-    def locn(self, value):
-        self._locn = _check_param_value(value)
-
     def get_scipy_params(self):
         return {"skew": self.shape1, "loc": self.locn, "scale": self.scale}
 
@@ -835,15 +840,9 @@ class LogNormal(FloodFreqDistribution):
     def __init__(self):
         super(LogNormal, self).__init__("LogNormal")
         self.has_shape = False
-
-    @property
-    def locn(self):
-        return self._locn
-
-    @locn.setter
-    def locn(self, value):
-        # location param is in logspace, so need tighter bounds
-        self._locn = _check_param_value(value, -1e2, 1e2)
+        # locn in log space
+        self.locn_lower = -1e2
+        self.locn_upper = 1e2
 
     @property
     def support(self):
@@ -1060,18 +1059,7 @@ class Gamma(FloodFreqDistribution):
     def __init__(self):
         super(Gamma, self).__init__("Gamma")
         self.has_shape = False
-
-    @property
-    def locn(self):
-        return self._locn
-
-    @locn.setter
-    def locn(self, value):
-        value = float(value)
-        if value <= 0:
-            errmess = f"Expected locn > 0, got {value}."
-            raise ValueError(errmess)
-        self._locn = value
+        self.locn_lower = 1e-10
 
     @property
     def support(self):
