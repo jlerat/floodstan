@@ -617,8 +617,6 @@ class LogPearson3(FloodFreqDistribution):
 
     def __init__(self):
         super(LogPearson3, self).__init__("LogPearson3")
-        # Very wide prior scale for shape 1 compared to other distributions
-        self._shape1_prior_scale = 0.1
 
     @property
     def locn(self):
