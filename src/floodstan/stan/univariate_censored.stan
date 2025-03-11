@@ -48,7 +48,7 @@ data {
   // Prior parameters
   vector[2] ylocn_prior;
   
-  real<lower=-10> logscale_lower;
+  real<lower=-20> logscale_lower;
   real<lower=logscale_lower, upper=20> logscale_upper;
   vector[2] ylogscale_prior;
   
