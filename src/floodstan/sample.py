@@ -128,8 +128,9 @@ def are_marginal_params_valid(dist, locn, logscale, shape1, data, censor):
     return None, None
 
 
-def bootstrap(marginal, data, fit_method="fit_lh_moments",
+def bootstrap(marginal, data, fit_method="params_guess",
               nboot=10000, eta=0):
+
     expected = ["fit_lh_moments", "params_guess"]
     if fit_method not in expected:
         errmess = f"Expected fit_method in [{'/'.join(expected)}]."
