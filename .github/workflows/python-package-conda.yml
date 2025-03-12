@@ -111,3 +111,21 @@ jobs:
                 -d @coverage_badge.json \
                 "https://api.github.com/gists/${{ secrets.COVERAGE_GIST_ID }}"
 
+      - name: Run sampling tests
+        run: |
+          source $CONDA/etc/profile.d/conda.sh
+          conda activate env_floodstan
+          echo "Conda env: "
+          conda info --envs | grep '*' | sed 's/.*\* //g'
+
+          cd $GITHUB_WORKSPACE
+          echo "--- floodstan sampling test : located in $PWD ---"
+          ./tests/sample_univariate_cook.sh 
+ 
+      - name: Upload sampling test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-univariate-cook
+          path: tests/images/sampling/univariate_cook/*.*
+
+

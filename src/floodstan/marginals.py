@@ -207,7 +207,7 @@ def factory(distname):
 class FloodFreqDistribution():
     """ Base class for flood frequency distribution """
 
-    def __init__(self, name):
+    def __init__(self, name, has_shape=True):
         self.name = name
 
         # bounds
@@ -215,14 +215,18 @@ class FloodFreqDistribution():
         self.locn_upper = LOCN_UPPER
         self.logscale_lower = LOGSCALE_LOWER
         self.logscale_upper = LOGSCALE_UPPER
-        self.shape1_lower = SHAPE1_LOWER
-        self.shape1_upper = SHAPE1_UPPER
+        if has_shape:
+            self.shape1_lower = SHAPE1_LOWER
+            self.shape1_upper = SHAPE1_UPPER
+        else:
+            self.shape1_lower = -1e-5
+            self.shape1_upper = 1e-5
 
         # Default values
         self._locn = np.nan
         self._logscale = np.nan
 
-        self.has_shape = True
+        self.has_shape = has_shape
 
         # Priors
         self._shape1 = SHAPE1_PRIOR_LOC_DEFAULT
@@ -456,8 +460,7 @@ class FloodFreqDistribution():
 
 class Normal(FloodFreqDistribution):
     def __init__(self):
-        super(Normal, self).__init__("Normal")
-        self.has_shape = 0
+        super(Normal, self).__init__("Normal", False)
 
     def get_scipy_params(self):
         return {"loc": self.locn, "scale": self.scale}
@@ -766,8 +769,7 @@ class Gumbel(FloodFreqDistribution):
     """ GEV distribution class"""
 
     def __init__(self):
-        super(Gumbel, self).__init__("Gumbel")
-        self.has_shape = False
+        super(Gumbel, self).__init__("Gumbel", False)
 
     @property
     def support(self):
@@ -838,8 +840,8 @@ class LogNormal(FloodFreqDistribution):
     """ LogNormal distribution class"""
 
     def __init__(self):
-        super(LogNormal, self).__init__("LogNormal")
-        self.has_shape = False
+        super(LogNormal, self).__init__("LogNormal", False)
+
         # locn in log space
         self.locn_lower = -1e2
         self.locn_upper = 1e2
@@ -1057,8 +1059,9 @@ class Gamma(FloodFreqDistribution):
     """ Gamma distribution class"""
 
     def __init__(self):
-        super(Gamma, self).__init__("Gamma")
-        self.has_shape = False
+        super(Gamma, self).__init__("Gamma", False)
+
+        # Only positive locn param allowed
         self.locn_lower = 1e-10
 
     @property

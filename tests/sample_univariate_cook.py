@@ -40,7 +40,22 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
     # Journal of Computational and Graphical Statistics, 15:3, 675-692,
     # DOI: 10.1198/106186006X136976
+    #
+    # Note that the bash script runs this script in parallel
+    # for each distribution. As a result, stan cannot use
+    # all cpus of the machine.
+
     flog = FLOGS / f"univariate_{marginal}_{stationid}.log"
+
+    # clean
+    fr = FTESTS / "images" / "sampling" / "univariate_cook" /\
+        f"univariate_sampling_{stationid}_{marginal}.csv"
+    fp = fr.parent / f"{fr.stem}.png"
+    for f in [flog, fr, fp]:
+        if f.exists():
+            f.unlink()
+
+    # Setup log
     LOGGER = sample.get_logger(level="INFO", stan_logger=False,
                                flog=flog)
 
@@ -51,9 +66,10 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
     LOGGER.info(f"Sampling {marginal}/{stationid}")
 
     # Stan config
-    stan_nchains = 3 if debug else 10
-    stan_nsamples = 1000 if debug else 10000
-    stan_warmup = 1000 if debug else 10000
+    stan_nchains = 3 if debug else 5
+    stan_nsamples = 1000 if debug else 5000
+    stan_warmup = 100 if debug else 2000
+    stan_parallel = nparallel
 
     # Large number of values to check we can get the "true" parameters
     # back from sampling
@@ -64,22 +80,21 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
     N = len(y)
 
     # Setup marginal
-    if marginal in ["Gumbel", "LogNormal", "Normal", "Gamma"]:
-        parnames = ["locn", "logscale"]
-    else:
-        parnames = ["locn", "logscale", "shape1"]
-
     dist = marginals.factory(marginal)
+    if dist.has_shape:
+        parnames = ["locn", "logscale", "shape1"]
+    else:
+        parnames = ["locn", "logscale"]
+
     dist.params_guess(y)
 
-    if dist.shape1<marginals.SHAPE1_LOWER \
-            or dist.shape1>marginals.SHAPE1_UPPER:
-        pytest.skip("Shape parameter outside of accepted bounds.")
-
     # Prior distribution centered around dist params
-    ylocn_prior = [dist.locn, abs(dist.locn)*0.5]
-    ylogscale_prior = [dist.logscale, abs(dist.logscale)*0.5]
-    yshape1_prior = [min(0.5, max(-0.5, dist.shape1)), 0.2]
+    ylocn_prior = [dist.locn, abs(dist.locn)*0.2]
+    ylogscale_prior = [dist.logscale, abs(dist.logscale)*0.2]
+    if dist.has_shape:
+        yshape1_prior = [min(0.5, max(-0.5, dist.shape1)), 0.2]
+    else:
+        yshape1_prior = [0, 1e-5]
 
     test_stat = []
     nsuccess = 0
@@ -93,8 +108,11 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
         try:
             dist.locn = norm.rvs(*ylocn_prior)
             dist.logscale = norm.rvs(*ylogscale_prior)
-            dist.shape1 = norm.rvs(*yshape1_prior)
-        except:
+            if dist.has_shape:
+                dist.shape1 = norm.rvs(*yshape1_prior)
+        except Exception as err:
+            if debug:
+                raise err
             continue
 
         # Generate data from prior params
@@ -104,8 +122,10 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
         try:
             sv = sample.StanSamplingVariable(ysmp, marginal,
                                              ninits=stan_nchains)
-        except:
+        except Exception as err:
             test_stat.append({"sucess": 0})
+            if debug:
+                raise err
             continue
 
         sv.locn_prior = ylocn_prior
@@ -127,12 +147,14 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
                                                inits=stan_inits,
                                                chains=stan_nchains,
                                                seed=SEED,
-                                               parallel_chains=nparallel,
+                                               parallel_chains=stan_parallel,
                                                iter_warmup=stan_warmup,
                                                iter_sampling=stan_nsamples//stan_nchains,
                                                output_dir=fout)
         except Exception as err:
-            test_stat.append({"sucess": 1})
+            test_stat.append({"sucess": 0})
+            if debug:
+                raise err
             continue
 
         # Get sample data
