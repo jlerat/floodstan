@@ -369,7 +369,8 @@ def test_marginals_mle_theoretical(distname, stationid, allclose):
 
     # Set very wide prior scale to get max likelihood
     marginals.SHAPE1_PRIOR_SCALE_MAX = 1e100
-    marginal.shape1_prior_scale = 1e100
+    if marginal.has_shape:
+        marginal.shape1_prior_scale = 1e100
 
     mlp_mle, theta_mle, dcens, ncens = \
         marginal.maximum_posterior_estimate(streamflow,
