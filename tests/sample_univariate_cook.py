@@ -34,7 +34,8 @@ FLOGS.mkdir(exist_ok=True, parents=True)
 STATIONIDS = get_stationids()[:4]
 
 
-def univariate_sampling_cook(marginal, stationid, debug, nparallel):
+def univariate_sampling_cook(marginal_name, stationid, debug,
+                             nparallel):
     # Testing univariate sampling following the process described by
     # Samantha R Cook, Andrew Gelman & Donald B Rubin (2006)
     # Validation of Software for Bayesian Models Using Posterior Quantiles,
@@ -45,11 +46,11 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
     # for each distribution. As a result, stan cannot use
     # all cpus of the machine.
 
-    flog = FLOGS / f"univariate_{marginal}_{stationid}.log"
+    flog = FLOGS / f"univariate_{marginal_name}_{stationid}.log"
 
     # clean
     fr = FTESTS / "images" / "sampling" / "univariate_cook" /\
-        f"univariate_sampling_{stationid}_{marginal}.csv"
+        f"univariate_sampling_{stationid}_{marginal_name}.csv"
     fp = fr.parent / f"{fr.stem}.png"
     for f in [flog, fr, fp]:
         if f.exists():
@@ -63,7 +64,7 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
         LOGGER.info(f"Debug mode - stationid={stationid}.. skip.")
         return
 
-    LOGGER.info(f"Sampling {marginal}/{stationid}")
+    LOGGER.info(f"Sampling {marginal_name}/{stationid}")
 
     # Stan config
     stan_nchains = 3 if debug else 5
@@ -80,18 +81,18 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
     N = len(y)
 
     # Setup marginal
-    dist = marginals.factory(marginal)
-    if dist.has_shape:
+    marginal = marginals.factory(marginal_name)
+    if marginal.has_shape:
         parnames = ["locn", "logscale", "shape1"]
     else:
         parnames = ["locn", "logscale"]
 
-    dist.params_guess(y)
+    marginal.params_guess(y)
 
     # Prior distribution centered around dist params
-    ylocn_prior = [dist.locn, abs(dist.locn)*0.2]
-    ylogscale_prior = [dist.logscale, abs(dist.logscale)*0.2]
-    if dist.has_shape:
+    ylocn_prior = [marginal.locn, abs(marginal.locn)*0.2]
+    ylogscale_prior = [marginal.logscale, abs(marginal.logscale)*0.2]
+    if marginal.has_shape:
         yshape1_prior = [min(0.5, max(-0.5, dist.shape1)), 0.2]
     else:
         yshape1_prior = [0, 1e-5]
@@ -106,21 +107,21 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
 
         # Generate parameters from prior
         try:
-            dist.locn = norm.rvs(*ylocn_prior)
-            dist.logscale = norm.rvs(*ylogscale_prior)
-            if dist.has_shape:
-                dist.shape1 = norm.rvs(*yshape1_prior)
+            marginal.locn = norm.rvs(*ylocn_prior)
+            marginal.logscale = norm.rvs(*ylogscale_prior)
+            if marginal.has_shape:
+                marginal.shape1 = norm.rvs(*yshape1_prior)
         except Exception as err:
             if debug:
                 raise err
             continue
 
         # Generate data from prior params
-        ysmp = dist.rvs(N)
+        ysmp = marginal.rvs(N)
 
         # Configure stan data and initialisation
         try:
-            sv = sample.StanSamplingVariable(ysmp, marginal,
+            sv = sample.StanSamplingVariable(ysmp, marginal_name,
                                              ninits=stan_nchains)
         except Exception as err:
             test_stat.append({"sucess": 0})
@@ -136,7 +137,8 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
         stan_inits = sv.initial_parameters
 
         # Clean output folder
-        fout = FTESTS / "sampling" / "univariate_cook" / stationid / marginal
+        fout = FTESTS / "sampling" / "univariate_cook" / \
+                stationid / marginal_name
         fout.mkdir(parents=True, exist_ok=True)
         for f in fout.glob("*.*"):
             f.unlink()
@@ -160,6 +162,8 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
         # Get sample data
         df = smp.draws_pd()
         res = report.process_stan_diagnostic(smp.diagnose())
+        import pdb; pdb.set_trace()
+
 
         # Clean
         for f in fout.glob("*.*"):
@@ -188,7 +192,7 @@ def univariate_sampling_cook(marginal, stationid, debug, nparallel):
     # Save
     test_stat = pd.DataFrame(test_stat)
     fr = FTESTS / "images" / "sampling" / "univariate_cook" /\
-        f"univariate_sampling_{stationid}_{marginal}.csv"
+        f"univariate_sampling_{stationid}_{marginal_name}.csv"
     fr.parent.mkdir(exist_ok=True, parents=True)
     test_stat.to_csv(fr)
 

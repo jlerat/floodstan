@@ -65,9 +65,12 @@ data {
 
 parameters {
   // Parameter for observed streamflow
-  real<lower=locn_lower, upper=locn_upper> ylocn; 
-  real<lower=logscale_lower, upper=logscale_upper> ylogscale;
-  real<lower=shape1_lower, upper=shape1_upper> yshape1;
+  //real<lower=locn_lower, upper=locn_upper> ylocn; 
+  //real<lower=logscale_lower, upper=logscale_upper> ylogscale;
+  //real<lower=shape1_lower, upper=shape1_upper> yshape1;
+  real ylocn; 
+  real ylogscale;
+  real yshape1;
 }  
 
 
@@ -78,7 +81,7 @@ transformed parameters {
 
 model {
   // --- Priors --
-  ylocn ~ normal(ylocn_prior[1], ylocn_prior[2])T[locn_lower, locn_upper];
+  ylocn ~ normal(ylocn_prior[1], ylocn_prior[2]) T[locn_lower, locn_upper];
   ylogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]) T[logscale_lower, logscale_upper];
   yshape1 ~ normal(yshape1_prior[1], yshape1_prior[2]) T[shape1_lower, shape1_upper];
 

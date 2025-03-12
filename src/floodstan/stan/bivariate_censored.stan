@@ -95,18 +95,31 @@ data {
 }
 
 parameters {
+  //// Parameter for observed streamflow
+  //real<lower=locn_lower, upper=locn_upper> ylocn; 
+  //real<lower=logscale_lower, upper=logscale_upper> ylogscale;
+  //real<lower=shape1_lower, upper=shape1_upper> yshape1;
+
+  //// Parameter for covariate
+  //real<lower=locn_lower, upper=locn_upper> zlocn; 
+  //real<lower=logscale_lower, upper=logscale_upper> zlogscale;
+  //real<lower=shape1_lower, upper=shape1_upper> zshape1;
+
+  //// Parameter for copula correlation
+  //real<lower=rho_lower, upper=rho_upper> rho;
+
   // Parameter for observed streamflow
-  real<lower=locn_lower, upper=locn_upper> ylocn; 
-  real<lower=logscale_lower, upper=logscale_upper> ylogscale;
-  real<lower=shape1_lower, upper=shape1_upper> yshape1;
+  real ylocn; 
+  real ylogscale;
+  real yshape1;
 
   // Parameter for covariate
-  real<lower=locn_lower, upper=locn_upper> zlocn; 
-  real<lower=logscale_lower, upper=logscale_upper> zlogscale;
-  real<lower=shape1_lower, upper=shape1_upper> zshape1;
+  real zlocn; 
+  real zlogscale;
+  real zshape1;
 
   // Parameter for copula correlation
-  real<lower=rho_lower, upper=rho_upper> rho;
+  real rho;
 }  
 
 

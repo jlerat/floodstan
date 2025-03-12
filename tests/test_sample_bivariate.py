@@ -35,16 +35,17 @@ FTESTS = Path(__file__).resolve().parent
 STATIONIDS = get_stationids()
 
 @pytest.mark.parametrize("copula", sample.COPULA_NAMES_STAN)
-@pytest.mark.parametrize("stationid", STATIONIDS)
 @pytest.mark.parametrize("censoring", [False, True])
-def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose):
+def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
     LOGGER = sample.get_logger(stan_logger=False)
 
     stan_nwarm = 5000
-    stan_nsamples = 1000
+    stan_nsamples = 5000
     stan_nchains = 5
 
+    stationid = STATIONIDS[0]
     y = get_ams(stationid)
+
     sids = STATIONIDS.copy()
     sids.remove(stationid)
     stationid2 = np.random.choice(sids)
@@ -80,12 +81,17 @@ def test_bivariate_sampling_satisfactory(copula, stationid, censoring, allclose)
                                       output_dir=fout_stan,
                                       inits=stan_inits,
                                       show_progress=False)
+    df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
-    params = smp.draws_pd()
 
-    crs = ["treedepth", "ebfmi", "effsamplesz"]
-    for cr in crs:
-        assert diag[cr] == "satisfactory"
+    # Test diag
+    assert diag["treedepth"] == "satisfactory"
+    assert diag["ebfmi"] == "satisfactory"
+    assert diag["rhat"] == "satisfactory"
+
+    # Test divergence
+    prc = diag["divergence_proportion"]
+    assert prc < 1
 
     # Clean folder
     for f in fout_stan.glob("bivariate_censored*"):

@@ -17,10 +17,10 @@ from wheel.bdist_wheel import bdist_wheel
 
 MODEL_DIR = "src/floodstan/stan"
 
-MODELS = ["univariate_censored", "bivariate_censored", \
-            "gls_spatial", "gls_spatial_generate", \
-            "event_occurrence", "test_discrete", \
-            "test_marginal", "test_copula", "test_glsfun"]
+MODELS = ["univariate_censored", "bivariate_censored",
+          "gls_spatial", "gls_spatial_generate",
+          "event_occurrence", "test_discrete",
+          "test_marginal", "test_copula", "test_glsfun"]
 
 CMDSTAN_VERSION = "2.34.1"
 BINARIES_DIR = "bin"

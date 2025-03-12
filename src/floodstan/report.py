@@ -46,9 +46,12 @@ def process_stan_diagnostic(diag):
         line = line[0]
         if re.search("satisfactory|No divergent", line):
             stan_status[nelem] = "satisfactory"
+            if delem == "divergence":
+                stan_status[f"{nelem}_proportion"] = 0.
         else:
             if delem == "divergence":
                 prop_div = float(re.sub(".*\\(|%\\).*", "", line))
+                stan_status[f"{nelem}_proportion"] = prop_div
                 if prop_div < 5:
                     stan_status[nelem] = "satisfactory"
                 else:

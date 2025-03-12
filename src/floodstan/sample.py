@@ -431,14 +431,9 @@ class StanSamplingVariable():
         dscale = (dist.logscale_upper - dist.logscale_lower) / 2
         self._logscale_prior = [logscale_start, dscale]
 
-        # Use logic from marginal to set shape1 prior
-        # (generally [0, 0.2] , but LogPearson3 is different)
         dist = self.marginal
-        if dist.has_shape:
-            self._shape1_prior = [dist.shape1_prior_loc,
+        self._shape1_prior = [dist.shape1_prior_loc,
                               dist.shape1_prior_scale]
-        else:
-            self._shape1_prior = [0., 1e-5]
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
