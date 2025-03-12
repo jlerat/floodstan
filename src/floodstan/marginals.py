@@ -41,6 +41,7 @@ SHAPE1_PRIOR_SCALE_DEFAULT = 0.2
 SHAPE1_PRIOR_SCALE_MIN = 1e-10
 SHAPE1_PRIOR_SCALE_MAX = 1.
 
+
 def _prepare(data):
     data = np.array(data)
     if data.ndim != 1:
@@ -324,7 +325,8 @@ class FloodFreqDistribution():
     @shape1_prior_loc.setter
     def shape1_prior_loc(self, value):
         if not self.has_shape:
-            errmess = f"Try to set shape prior loc for distribution {self.name}."
+            errmess = "Try to set shape prior loc for"\
+                      + f"distribution {self.name}."
             raise ValueError(errmess)
 
         self._shape1_prior_loc = _check_param_value(value,
@@ -339,7 +341,8 @@ class FloodFreqDistribution():
     @shape1_prior_scale.setter
     def shape1_prior_scale(self, value):
         if not self.has_shape:
-            errmess = f"Try to set shape prior loc for distribution {self.name}."
+            errmess = "Try to set shape prior loc for"\
+                      + f"distribution {self.name}."
             raise ValueError(errmess)
 
         smin = SHAPE1_PRIOR_SCALE_MIN

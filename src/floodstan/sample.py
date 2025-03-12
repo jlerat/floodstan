@@ -4,7 +4,7 @@ import logging
 
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
+from scipy.stats import norm, kendalltau
 
 from floodstan import marginals
 
@@ -548,9 +548,16 @@ class StanSamplingDataset():
 
     def set_initial_parameters(self):
         copula = self._copula
-        rho_min = copula.rho_min + 0.02
-        rho_max = copula.rho_max - 0.02
+
+        # min/max for rho slightly larger than allowed
+        # to avoid problems with stan during initialisation
+        rho_min = copula.rho_min + 0.01
+        rho_max = copula.rho_max - 0.01
+
         inits = []
+
+        # Finds number of initial parameters
+        # (minimum of number of initial params for each variable)
         ninits = min([vs.ninits for vs in self._stan_variables])
 
         for i in range(ninits):
@@ -572,8 +579,8 @@ class StanSamplingDataset():
             rho = np.nan
             while True and niter < MAX_INIT_PARAM_SEARCH:
                 niter += 1
-                rho = np.random.normal(loc=RHO_PRIOR[0], scale=0.2)
-                rho = max(min(rho, rho_max), rho_min)
+                rho = kendalltau(cdfs[:, 0], cdfs[:, 1]).statistic
+                rho = max(rho_min, min(rho_max, rho))
 
                 # Check likelihood and reduce correlation if needed
                 copula.rho = rho
