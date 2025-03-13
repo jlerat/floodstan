@@ -67,7 +67,7 @@ jobs:
           python -m pip uninstall -y floodstan || true
           python -m pip install -e .
 
-      - name: Lint with flake8
+      - name: Run sampling tests
         run: |
           source $CONDA/etc/profile.d/conda.sh
           conda activate env_floodstan
@@ -75,38 +75,13 @@ jobs:
           conda info --envs | grep '*' | sed 's/.*\* //g'
 
           cd $GITHUB_WORKSPACE
-          flake8 src/floodstan
-
-      - name: Run tests
-        run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_floodstan
-          echo "Conda env: "
-          conda info --envs | grep '*' | sed 's/.*\* //g'
-
-          cd $GITHUB_WORKSPACE
-          echo "--- floodstan test : located in $PWD ---"
-          pytest --durations=10 --ignore=src/hydrodiy --cov=floodstan --cov-report=xml --cov-report=html --cov-report=term-missing tests
-      
-      - name: Upload coverage report
+          echo "--- floodstan sampling test : located in $PWD ---"
+          ./tests/sample_univariate_cook.sh 
+ 
+      - name: Upload sampling test results
         uses: actions/upload-artifact@v4
         with:
-          name: pytest-coverage
-          path: htmlcov/*.*
+          name: sample-univariate-cook
+          path: tests/images/sampling/univariate_cook/*.*
 
-      - name: Parse coverage report and create badge
-        run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_floodstan
-          echo "Conda env: "
-          conda info --envs | grep '*' | sed 's/.*\* //g'
 
-          python -c "import xml.etree.ElementTree as ET; from anybadge import Badge; cov = float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100; covbadge = Badge('Coverage', value=f'{cov:0.0f}%', thresholds={60:'red', 70:'orange', 80:'lightgreen', 90:'green'}); covbadge.write_badge('coverage_badge.svg', True)"
-
-      - name: Update gist badge
-        run: |
-          sed 's/\"/\\\"/g' coverage_badge.svg > coverage_badge.txt
-          echo "{\"files\": {\"coverage_badge.svg\": {\"content\": \"$(cat coverage_badge.txt)\"}}}" > coverage_badge.json
-          curl -X PATCH -H "Authorization: token ${{ secrets.COVERAGE_GIST_TOKEN }}" \
-                -d @coverage_badge.json \
-                "https://api.github.com/gists/${{ secrets.COVERAGE_GIST_ID }}"
