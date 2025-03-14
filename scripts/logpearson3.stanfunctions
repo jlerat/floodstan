@@ -1,0 +1,86 @@
+real sign(real x) {
+    return x < 0 ? -1. : x > 0 ? 1. : 0;
+}
+
+real logpearson3_lpdf(vector y, real m, real s, real g) {
+    int N = rows(y);
+
+    // Using transition from Pearson3 to Normal as done in scipy:
+    // https://github.com/scipy/scipy/blob/2e5883ef7af4f5ed4a5b80a1759a45e43163bf3f/scipy/stats/_continuous_distns.py#L6810
+    // however, used a higher threshold to minimize numerical difficulties
+    // We use 0.0001, whereas scipy threshold is 0.000016
+    real norm2pearson_transition = 0.0001; 
+
+    real linear_transition = 1e-4;
+
+    real abs_g = abs(g);
+    real sign_g = sign(g);
+   
+    if(abs_g < norm2pearson_transition) {
+        return normal_lpdf(log(y) | m, s);
+
+    } else {
+        // Original LogPearson3 parameterisation
+        real alpha = 4 / g / g;
+        real beta = 2 / g / s;
+        real abs_beta = abs(beta);
+        real tau = m - alpha / beta;
+
+        real u;
+        real lpdf_sum = 0;
+
+        real f0 = gamma_lpdf(linear_transition | alpha, abs_beta);
+        real df0 = (alpha - 1.) / linear_transition - abs_beta;
+
+        for(i in 1:N) {
+            u = sign_g * (log(y[i]) - tau);
+            if(u > linear_transition) {
+                lpdf_sum += gamma_lpdf(u | alpha, abs_beta);
+            } else {
+                lpdf_sum += f0 + df0 * (u - linear_transition);
+            }
+        }
+        return lpdf_sum;
+    }
+}
+
+real logpearson3_lcdf(real y, real m, real s, real g){
+    real norm2pearson_transition = 0.0001; 
+    real linear_transition = 1e-1;
+   
+    real abs_g = abs(g);
+    real sign_g = sign(g);
+
+    if (abs_g < norm2pearson_transition) {
+      return normal_cdf(log(y) | m, s);
+
+    } else {
+      // Original LogPearson3 parameterisation
+      real alpha = 4 / g / g;
+      real beta = 2 / g / s;
+      real abs_beta = abs(beta);
+      real tau = m - alpha / beta;
+
+      real u = sign_g * (log(y)  - tau);
+      real f0 = gamma_lcdf(linear_transition | alpha, abs_beta);
+      real df0 = exp(gamma_lpdf(linear_transition | alpha, abs_beta)) / f0;
+      real lcdf;
+
+      if(u > linear_transition) {
+        lcdf = gamma_lcdf(u | alpha, abs_beta);
+      } else {
+        lcdf = f0 ; //+ df0 * (u - linear_transition);
+      }
+
+      if(beta < 0)
+          lcdf = log1m_exp(lcdf);
+      
+      return lcdf;
+    }
+}
+
+// Log Pearson 3 
+real logpearson3_cdf(real y, real m, real s, real g) {
+    return exp(logpearson3_lcdf(y | m, s, g));
+}
+

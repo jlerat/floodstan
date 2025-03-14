@@ -177,17 +177,19 @@ def test_stan_sampling_dataset(distname, allclose):
 
 @pytest.mark.parametrize("distname",
                          marginals.MARGINAL_NAMES)
-def test_univariate_censored_sampling(distname, allclose):
+@pytest.mark.parametrize("censoring", [False, True])
+def test_univariate_censored_sampling(distname, censoring, allclose):
     stationids = get_stationids()
     stationid = stationids[0]
     y = get_ams(stationid)
+    censor = y.median() if censoring else np.nanmin(y) - 1.
 
     # Set STAN
-    stan_nwarm = 5000
+    stan_nwarm = 10000
     stan_nsamples = 5000
     stan_nchains = 5
 
-    sv = sample.StanSamplingVariable(y, distname,
+    sv = sample.StanSamplingVariable(y, distname, censor,
                                      ninits=stan_nchains)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
@@ -217,6 +219,9 @@ def test_univariate_censored_sampling(distname, allclose):
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
 
+    import pdb; pdb.set_trace()
+
+
     # Test diag
     assert diag["treedepth"] == "satisfactory"
     assert diag["ebfmi"] == "satisfactory"
@@ -224,13 +229,18 @@ def test_univariate_censored_sampling(distname, allclose):
 
     # Test divergence
     prc = diag["divergence_proportion"]
+
     easy = ["GEV", "Normal", "Gamma", "LogNormal",
-           "Gumbel"]
+            "Gumbel"]
     moderate = ["GeneralizedLogistic"]
     hard = ["LogPearson3", "GeneralizedPareto"]
+
     if distname in easy:
-        assert prc < 1
+        thresh = 5 if censoring else 1
     elif distname in moderate:
-        assert prc < 8
+        thresh = 20 if censoring else 8
     else:
-        assert prc < 50
+        # Stupid !!!
+        thresh = 80 if censoring else 50
+
+    assert prc < thresh

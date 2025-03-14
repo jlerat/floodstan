@@ -37,29 +37,29 @@ STATIONIDS = get_stationids()
 @pytest.mark.parametrize("copula", sample.COPULA_NAMES_STAN)
 @pytest.mark.parametrize("censoring", [False, True])
 def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
-    LOGGER = sample.get_logger(stan_logger=False)
+    LOGGER = sample.get_logger(stan_logger=True)
 
-    stan_nwarm = 5000
+    stan_nwarm = 10000
     stan_nsamples = 5000
     stan_nchains = 5
 
     stationid = STATIONIDS[0]
     y = get_ams(stationid)
 
-    sids = STATIONIDS.copy()
-    sids.remove(stationid)
-    stationid2 = np.random.choice(sids)
-    z = get_ams(stationid2)
+    # Generate random covariate
+    scale = np.nanstd(y) / 5
+    z = y + np.random.normal(0, scale, size=len(y))
+
     N = len(y)
 
     z.iloc[-2] = np.nan # to add a missing data in z
     df = pd.DataFrame({"y": y, "z": z}).sort_index()
     y, z = df.y, df.z
 
-    censor = y.median() if censoring else -10
+    censor = y.median() if censoring else np.nanmin(y) - 1.
     yv = sample.StanSamplingVariable(y, "GEV", censor,
                                      ninits=stan_nchains)
-    censor = z.median() if censoring else -10
+    censor = z.median() if censoring else np.nanmin(z) - 1.
     zv = sample.StanSamplingVariable(z, "GEV", censor,
                                      ninits=stan_nchains)
 
@@ -91,10 +91,13 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
 
     # Test divergence
     prc = diag["divergence_proportion"]
-    assert prc < 10 if censoring else 1
+    if censoring:
+        assert prc < 10
+    else:
+        assert prc < 1
 
     # Clean folder
-    for f in fout_stan.glob("bivariate_censored*"):
+    for f in fout_stan.glob("*.*"):
         f.unlink()
 
     fout_stan.rmdir()

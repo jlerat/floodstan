@@ -1,6 +1,10 @@
+ real sign(real x) {
+    return x > 0 ? 1 : (x < 0 ? -1 : 0);
+ }
+
 // -------------- GEV distribution ------------------------------
-// tau Bounds when kappa>0 : [ymax-alpha/kapp, +infty[
-// tau Bounds when kappa<0 : ]-infty, ycensor-alpha/kapp]
+// tau Bounds when kappa > 0 : [ymax-alpha/kapp, +infty[
+// tau Bounds when kappa < 0 : ]-infty, ycensor-alpha/kapp]
 
 real gev_lpdf(vector y, real tau, real alpha, real kappa){
     int N = rows(y);
@@ -8,41 +12,44 @@ real gev_lpdf(vector y, real tau, real alpha, real kappa){
     vector[N] u = (y-tau)/alpha;
     vector[N] v;
 
+    // Threshold to transition from GEV to Gumbel
+    real GEV2Gumbel_transition = 1e-10;
+
     real y0 = tau+alpha/kappa;
-    if(kappa<0) {
+    if(kappa < 0) {
         real ymin = min(y);
-        if(ymin<y0)
+        if(ymin < y0)
             reject("min(y) (", ymin, ") is lower than y0 (", y0, ").");
     }
     else {
         real ymax = max(y);
-        if(ymax>y0)
+        if(ymax > y0)
             reject("max(y) (", ymax, ") is greater than y0 (", y0, ").");
     }
     
-    // Computation of log pdf depending on skew
-    if(abs(kappa)>1e-15) {
+    if(abs(kappa) > GEV2Gumbel_transition) {
         // This is GEV log pdf
-        v = -pow(1-kappa*u, 1/kappa);
-        return -N*logalpha+sum(v+(1/kappa-1)*log(1-kappa*u));
+        v = -pow(1 - kappa * u, 1 / kappa);
+        return -N * logalpha + sum(v + (1 / kappa - 1) * log(1 - kappa * u));
 
     } else {
-        // Skew is small, so this is Gumbel log pdf
-        return -N*logalpha-sum(u+exp(-u));
+        // This Gumbel log pdf
+        return -N * logalpha - sum(u + exp(-u));
     }
 }
 
 real gev_lcdf(real y, real tau, real alpha, real kappa){
-    real u = (y-tau)/alpha;
+    real u = (y - tau) / alpha;
     real v;
+   
+    // Threshold to transition from GEV to Gumbel
+    real GEV2Gumbel_transition = 1e-10;
 
-    // Computation of log cdf depending on skew
-    if(abs(kappa)>1e-15) {
+    if(abs(kappa) > GEV2Gumbel_transition) {
         // No parameter constraint here, already taken care of in lpdf
-        return -pow(1-kappa*u, 1/kappa);
+        return -pow(1. - kappa * u, 1. / kappa);
 
     } else {
-        // Skew is small, so this is Gumbel log cdf
         return -exp(-u);
     }
 }
@@ -50,165 +57,104 @@ real gev_lcdf(real y, real tau, real alpha, real kappa){
 // -------------- Pearson3 and LogPearson3 distributions -------------
 // Pearson3 log pdf and cdf - equivalent to a shifted Gamma distribution
 real pearson3_lpdf(vector u, real m, real s, real g) {
+    int N = rows(u);
 
     // Using transition from Pearson3 to Normal as done in scipy:
     // https://github.com/scipy/scipy/blob/2e5883ef7af4f5ed4a5b80a1759a45e43163bf3f/scipy/stats/_continuous_distns.py#L6810
     // however, used a higher threshold to minimize numerical difficulties
-    // We use 0.001, whereas scipy threshold is 0.000016
-    real norm2pearson_transition = 0.001; 
+    // We use 0.0001, whereas scipy threshold is 0.000016
+    real norm2pearson_transition = 0.0001; 
 
-    // Original LogPearson3 parameterisation
-    real alpha = 4/g/g;
-    real beta = 2/g/s;
-    real tau = m-alpha/beta;
+    real abs_g = abs(g);
+    real sign_g = sign(g);
+   
+    if(abs_g > norm2pearson_transition) {
+        // Original LogPearson3 parameterisation
+        real alpha = 4 / g / g;
+        real beta = 2 / g / s;
+        real abs_beta = abs(beta);
+        real tau = m - alpha / beta;
 
-    // Check inputs
-    real sng = g<0 ? -1 : 1;
-    vector[rows(u)] usng = sng*(u-tau);
-
-    // Compute logpdf depending on skew
-    if(abs(g)>norm2pearson_transition){
+        // Check inputs
+        vector[N] usng = sign(g) * (u - tau);
 
         // Constraints related to distribution support
         real umin = min(usng);
-        if(umin<0) 
+        if(umin < 0) 
             reject("umin(", umin, ")<0 with m=", m, " s=", s, " g=", g);
 
         return gamma_lpdf(usng | alpha, abs(beta));
+        
+        // if(alpha > 1) {
+        //     // Algorithm to extend gamma distribution and allow values of u < tau
+        //     // with a very low pdf. Only applied if alpha > 1, otherwise
+        //     // Gamma pdf at 0 is not 0, hence it cannot be extended in this way.
+        //     // Alpha > 1 is not possible because of the bounds [-2, 2] set
+        //     // on the shape factor in the python code.
+        //     real neg_transition = 1e-10; 
+        //     
+        //     // .. value of gamma pdf at this point
+        //     real gamma_thresh = gamma_lpdf(neg_transition | alpha, abs_beta);
+        //     real lgamma_thresh = log(gamma_thresh);
+
+        //     // .. value of the derivative of the gamma pdf at this point
+        //     real dgamma_thresh = (alpha - 1. - neg_transition / abs_beta) 
+        //                             * abs_beta / neg_transition * gamma_thresh;
+
+        //     // Replace gamma pdf with an exponential and a fifth order
+        //     // polynomial to avoid numerical problems
+        //     real lpdf_sum = 0.;
+        //     for(i in 1:N) {
+        //         real value = sign_g * (u[i] - tau);
+        //         if(value < neg_transition) {
+        //             real x = dgamma_thresh / gamma_thresh * (value - neg_transition);
+        //             real x5 = x * x;
+        //             x5 *= x5;
+        //             x5 *= x;
+        //             lpdf_sum += lgamma_thresh + x + x5;
+        //         } else {
+        //             lpdf_sum += gamma_lpdf(value | alpha, abs_beta);
+        //         }
+        //     }
+        //     return lpdf_sum;
+
+        // } else {
+        //     return gamma_lpdf(sign_g * (u - tau) | alpha, abs_beta);
+        // }
 
     } else {
         return normal_lpdf(u | m, s);
-
     }
 }
-
-
-// -- Functions needed for the approximation of incomplete gamma function
-//    when alpha is large (say>100) and computation of gamma(alpha) is 
-//    leading to overflow
-// 
-//    Temme, N. M. (1987). On the computation of the incomplete gamma 
-//    functions for large values of the parameters. 
-//    In Algorithms for approximation (pp. 479-489).
-// 
-//    Temme, N. M. (1994). A set of algorithms for the incomplete gamma 
-//    functions. Probability in the Engineering and Informational 
-//    Sciences, 8(2), 291-307.
-
-// Approx of the function gamma star defined as
-// Gs(x) = sqrt(a/2pi).exp(a).a^(-a).Gamma(a)
-//
-real gammastar(real alpha) {
-    real num = 0;
-    real den = 0;
-
-    array[4] real ak, bk;
-
-    // Coefficients from Temme (1987)
-    ak[1] = 5.115471897484e-2;
-    bk[1] = 1.544892866413e-2;
-    ak[2] = 4.990196893575e-1;
-    bk[2] = 4.241288251916e-1;
-    ak[3] = 9.404953102900e-1;
-    bk[3] = 8.571609363101e-1;
-    ak[4] = 9.999999625957e-1;
-    bk[4] = 1.000000000000e+0;
-    
-    for(i in 1:4){
-        num = num*alpha+ak[5-i];
-        den = den*alpha+bk[5-i];
-    }
-
-    return num/den;
-}
-
-
 
 real pearson3_cdf(real u, real m, real s, real g){
-    real cdf;
     
-    // Threshold to transition from pearson to approx
-    // for cdf computation. This a high threshold
-    // due problems with computation of gamma function 
-    // for high x in Stan. 
-    real approx2pearson_transition = 0.5; 
-    
-    // Original LogPearson3 parameterisation
-    real alpha = 4/g/g;
-    real beta = 2/g/s;
-    real tau = m-alpha/beta;
-
-    // .. no parameter constraints because they are covered in lpdf
-    // .. function above
-
-    // Variables needed for incomplete gamma approx.
-    // See refs above.
-    array[15] real fm = {-3.33333333e-01,  8.33333333e-02, -1.48148148e-02,
-        1.15740741e-03,  3.52733686e-04, -1.78755144e-04,  3.91926318e-05,
-       -2.18544851e-06, -1.85406221e-06,  8.29671134e-07, -1.76659527e-07,
-        6.70785354e-09,  1.02618098e-08, -4.38203602e-09,  9.14769958e-10 };
-    
-    int Napprox = 14;
-    array[Napprox+1] real bm;
-
-    // Compute log cdf depending on skew
-    real sng = g<0 ? -1 : 1;
-    real x = sng*(u-tau);
-    if(abs(g)>approx2pearson_transition) {
-        cdf = gamma_cdf(x | alpha, abs(beta));
+    real norm2pearson_transition = 0.0001; 
+   
+    if (abs(g) < norm2pearson_transition) {
+      return normal_cdf(u | m, s);
 
     } else {
-        // First term of the approximation
-        real lam = abs(beta)*x/alpha;
-        real eta = sqrt(2*(lam-1-log(lam)));
-        eta = lam<1 ? -eta : eta;
-        real cdf0 = erfc(-eta*sqrt(alpha/2))/2;
+      // Original LogPearson3 parameterisation
+      real alpha = 4 / g / g;
+      real beta = 2 / g / s;
+      real tau = m - alpha / beta;
 
-        // Approximation coefficients to compute the residual
-        bm[Napprox+1] = fm[Napprox+1];
-        bm[Napprox] = fm[Napprox];
-        real f;
-        for(i in 1:Napprox-1){
-            int mb = Napprox-i;
-            f = mb>0 ? fm[mb] : 1.0; 
-            bm[mb] = f+(mb+1)/alpha*bm[mb+2];
-        }
+      real x = sign(g) * (u  - tau) * abs(beta);
+      real cdf = gamma_p(alpha, x);
+
+      if(beta < 0)
+          cdf = 1 - cdf;
       
-        // Compute residual
-        real S = 0;
-        for(ms in 1:Napprox)
-            S += bm[ms]*pow(eta, ms-1);
-
-        real A = exp(-alpha*eta*eta/2)/sqrt(2*pi()*alpha);
-        real GS = gammastar(alpha);
-        real R = A*S/GS;
-        
-        //print("-----------------------------------");
-        //print("[DEBUG]");
-        //print("m=", m, " s=", s, " g=", g, " alpha=", alpha, " beta=", beta, " tau=", tau);
-        //print("u=", u, " x=", x," lam=", lam, " eta=", eta);
-        //for(i in 1:Napprox+1)
-        //    print("bm[", i, "]=", bm[i]);
-        //print("A=", A, " S=", S, " GS=", GS, " R=", R);
-        //print("cdf0=", cdf0, " cdf=", cdf0-R);
-        //print("-----------------------------------");
-
-        // Put it together
-        cdf = cdf0-R;
+      return cdf;
     }
-
-    // In this case, cdf = 1-cdf, or 
-    if(beta<0)
-        cdf = 1-cdf;
-    
-    return cdf;
 }
 
 
 // Log Pearson 3 
 real logpearson3_lpdf(vector y, real m, real s, real g) {
     // Could drop the sum of log(y) as it is not affected by parameterisation
-    return pearson3_lpdf(log(y) | m, s, g)-sum(log(y));
+    return pearson3_lpdf(log(y) | m, s, g) - sum(log(y));
 }
 
 
@@ -217,47 +163,47 @@ real genpareto_lpdf(vector y, real tau, real alpha, real kappa) {
     int N = rows(y);
     real kappa_transition = 1e-6; 
 
-    vector[N] z=(y-tau)/alpha;
-    if(abs(kappa)>kappa_transition){
-        z = -1.0/kappa*log(1-kappa*z);
+    vector[N] z = (y - tau) / alpha;
+    if(abs(kappa) > kappa_transition){
+        z = -1. / kappa * log(1 - kappa * z);
     }
 
-    return -(1.0-kappa)*sum(z)-N*log(alpha);
+    return -(1. - kappa) * sum(z) - N * log(alpha);
 }
 
 real genpareto_cdf(real y, real tau, real alpha, real kappa) {
     real kappa_transition = 1e-6; 
 
-    real z=(y-tau)/alpha;
-    if(abs(kappa)>kappa_transition){
-        z = -1.0/kappa*log(1-kappa*z);
+    real z = (y - tau) / alpha;
+    if(abs(kappa) > kappa_transition){
+        z = -1. / kappa * log(1 - kappa * z);
     }
 
-    return 1.0-exp(-z);    
+    return 1. - exp(-z);    
 }
 
 // Generalized logistic
 real genlogistic_lpdf(vector y, real tau, real alpha, real kappa) {
-     int N = rows(y);
+    int N = rows(y);
     real kappa_transition = 1e-6; 
 
-    vector[N] z=(y-tau)/alpha;
-    if(abs(kappa)>kappa_transition){
-        z = -1/kappa*log(1-kappa*z);
+    vector[N] z = (y - tau) / alpha;
+    if(abs(kappa) > kappa_transition){
+        z = -1. / kappa * log(1. - kappa * z);
     }
 
-    return -(1-kappa)*sum(z)-2*sum(log(1+exp(-z)))-N*log(alpha);
+    return -(1. - kappa) * sum(z) - 2. * sum(log(1 + exp(-z))) - N * log(alpha);
 }
 
 real genlogistic_cdf(real y, real tau, real alpha, real kappa) {
     real kappa_transition = 1e-6; 
 
-    real z=(y-tau)/alpha;
-    if(abs(kappa)>kappa_transition){
-        z = -1.0/kappa*log(1-kappa*z);
+    real z = (y - tau) / alpha;
+    if(abs(kappa) > kappa_transition){
+        z = -1. / kappa * log(1. - kappa * z);
     }
 
-    return 1.0/(1.0+exp(-z));    
+    return 1. / (1. + exp(-z));    
 }
 
 // ------- Marginal functions -----------------------------
@@ -293,7 +239,7 @@ real marginal_lpdf(vector x, int marginal, real locn, real scale, real shape1)
         // assume loc = mean and beta = 1/scale
         // hence alpha=mean/scale
         // See https://en.wikipedia.org/wiki/Gamma_distribution
-        return gamma_lpdf(x | locn/scale, 1.0/scale);
+        return gamma_lpdf(x | locn / scale, 1./scale);
     }
 
     return not_a_number();

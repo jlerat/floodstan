@@ -75,7 +75,6 @@ class SMCopula(copulas.Copula):
 
 
 def get_uv():
-    eps = 1e-4
     x = np.exp(np.linspace(-7, 7, 10))
     y = x/(1+x)
     u, v = np.meshgrid(y, y)

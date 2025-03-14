@@ -10,8 +10,10 @@
 *   - 2=LogNormal
 *   - 3=GEV
 *   - 4=LogPearson3
-*   - 5=LogPearson3
+*   - 5=Normal
 *   - 6=Generalized Pareto
+*   - 7=Generalized Logistic
+*   - 8=Gamma
 *
 *  Copula codes:
 *   - 1=Gumbel
@@ -36,8 +38,6 @@ functions {
 
 data {
   // Defines marginal distributions
-  // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal, 6=Gen Pareto
-  // 7=Gen Logistic, 8=Gamma
   int<lower=1, upper=8> ymarginal; 
   int<lower=1, upper=8> zmarginal; 
 
@@ -136,20 +136,20 @@ transformed parameters {
   // Reduced variable for y and z
   matrix[N, 2] uv;
   
-  // .. cases with y observed
-  for(i in 1:Ncases[1, 1])
+  // .. cases with y and z observed
+  for(i in 1:Ncases[1, 1]) {
     uv[i11[i], 1] = marginal_cdf(y[i11[i]] | ymarginal, ylocn, yscale, yshape1);
+    uv[i11[i], 2] = marginal_cdf(z[i11[i]] | zmarginal, zlocn, zscale, zshape1);
+  }
 
+  // .. cases with y observed only
   for(i in 1:Ncases[1, 2])
     uv[i12[i], 1] = marginal_cdf(y[i12[i]] | ymarginal, ylocn, yscale, yshape1);
   
   for(i in 1:Ncases[1, 3])
     uv[i13[i], 1] = marginal_cdf(y[i13[i]] | ymarginal, ylocn, yscale, yshape1);
 
-  // .. cases with z observed
-  for(i in 1:Ncases[1, 1])
-    uv[i11[i], 2] = marginal_cdf(z[i11[i]] | zmarginal, zlocn, zscale, zshape1);
-
+  // .. cases with z observed only
   for(i in 1:Ncases[2, 1])
     uv[i21[i], 2] = marginal_cdf(z[i21[i]] | zmarginal, zlocn, zscale, zshape1);
 

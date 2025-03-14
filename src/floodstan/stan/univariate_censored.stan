@@ -12,6 +12,8 @@
 *   - 4=LogPearson3
 *   - 5=Normal
 *   - 6=Generalized Pareto
+*   - 7=Generalized Logistic
+*   - 8=Gamma
 *
 *  The 2 different cases depending on data availability are coded as follows:
 *  11: y observed         

@@ -548,12 +548,6 @@ class StanSamplingDataset():
 
     def set_initial_parameters(self):
         copula = self._copula
-
-        # min/max for rho slightly larger than allowed
-        # to avoid problems with stan during initialisation
-        rho_min = copula.rho_min + 0.01
-        rho_max = copula.rho_max - 0.01
-
         inits = []
 
         # Finds number of initial parameters
@@ -576,13 +570,17 @@ class StanSamplingDataset():
             cdfs = cdfs[notnan]
 
             niter = 0
+            rho0 = kendalltau(cdfs[:, 0], cdfs[:, 1]).statistic
+
             rho = np.nan
+            rho_max = min(copula.rho_max - 2e-2, rho0 + 2e-2)
+            rho_min = min(rho_max - 1e-1,
+                          max(copula.rho_min + 2e-2, rho0 - 2e-2))
+
             while True and niter < MAX_INIT_PARAM_SEARCH:
                 niter += 1
-                rho = kendalltau(cdfs[:, 0], cdfs[:, 1]).statistic
-                rho = max(rho_min, min(rho_max, rho))
-
-                # Check likelihood and reduce correlation if needed
+                rho = np.random.uniform(rho_min, rho_max)
+                # Check likelihood
                 copula.rho = rho
                 copula_pdfs = copula.pdf(cdfs)
                 isok = np.all(~np.isnan(copula_pdfs))
