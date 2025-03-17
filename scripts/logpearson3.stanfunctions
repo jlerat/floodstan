@@ -2,21 +2,58 @@ real sign(real x) {
     return x < 0 ? -1. : x > 0 ? 1. : 0;
 }
 
+// Using transition from Pearson3 to Normal
+real logpearson3_norm2pearson_transition() {
+    return 1e-3;
+}
+
+real logpearson3_lpdf_linear_transition() {
+    return 1e-3;
+}
+
+// Compute x such that gamminc(alpha, x) ~ minimum valid value
+// This is used to extend logpearson 3 distribution
+// close to support boundaries
+// 
+real logpearson3_lcdf_linear_transition(real abs_g) {
+    row_vector[20] g_threshs = [0.01000000,0.01116400,0.01267839,0.01464867,0.01721206,0.02054712,0.02488614,0.03053135,0.03787594,0.04743149,0.05986356,0.07603809,0.09708167,0.12446005,0.16008020,0.20642316,0.26671684,0.34516085,0.44721903,0.58000000];
+
+    row_vector[20] logx0_threshs = [10.42277267,10.18166550,9.89980090,9.57489926,9.20489616,8.78783241,8.32092631,7.79981755,7.21675258,6.55848000,5.80219286,4.90894126,3.80980447,2.38064814,0.39416955,-2.55535641,-7.15588464,-14.55145809,-26.66622972,-39.14394658];
+
+    if(abs_g < 0)
+        return not_a_number();
+
+    if(abs_g < g_threshs[1])
+        return exp(logx0_threshs[1]);
+
+    real g0;
+    real g1;
+    real lx0;
+    real lx1;
+
+    for(i in 1:19) {
+        g0 = g_threshs[i];
+        g1 = g_threshs[i+1];
+        lx0 = logx0_threshs[i];
+        lx1 = logx0_threshs[i+1];
+
+        if((abs_g >= g0) && (abs_g <= g1))
+            return exp(lx0 + (lx1 - lx0) * (abs_g - g0) / (g1 - g0));    
+    }
+    return exp(lx1);
+}
+
+
 real logpearson3_lpdf(vector y, real m, real s, real g) {
     int N = rows(y);
 
-    // Using transition from Pearson3 to Normal as done in scipy:
-    // https://github.com/scipy/scipy/blob/2e5883ef7af4f5ed4a5b80a1759a45e43163bf3f/scipy/stats/_continuous_distns.py#L6810
-    // however, used a higher threshold to minimize numerical difficulties
-    // We use 0.0001, whereas scipy threshold is 0.000016
-    real norm2pearson_transition = 0.0001; 
-
-    real linear_transition = 1e-4;
+    real n2p_trans = logpearson3_norm2pearson_transition(); 
+    real lin_trans = logpearson3_lpdf_linear_transition();
 
     real abs_g = abs(g);
     real sign_g = sign(g);
    
-    if(abs_g < norm2pearson_transition) {
+    if(abs_g < n2p_trans) {
         return normal_lpdf(log(y) | m, s);
 
     } else {
@@ -24,35 +61,41 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
         real alpha = 4 / g / g;
         real beta = 2 / g / s;
         real abs_beta = abs(beta);
+        real log_s = log(s);
+        real log_beta = log(2) - log(abs_g) - log_s;
         real tau = m - alpha / beta;
 
         real u;
+        real ly;
         real lpdf_sum = 0;
 
-        real f0 = gamma_lpdf(linear_transition | alpha, abs_beta);
-        real df0 = (alpha - 1.) / linear_transition - abs_beta;
+        real f0 = gamma_lpdf(lin_trans | alpha, 1.);
+        real df0 = (alpha - 1.) / lin_trans - 1.;
 
         for(i in 1:N) {
-            u = sign_g * (log(y[i]) - tau);
-            if(u > linear_transition) {
-                lpdf_sum += gamma_lpdf(u | alpha, abs_beta);
+            ly = log(y[i]);
+            u = sign_g * (ly - tau) * abs_beta;
+            if(u > lin_trans) {
+                lpdf_sum += gamma_lpdf(u | alpha, 1.);
             } else {
-                lpdf_sum += f0 + df0 * (u - linear_transition);
+                lpdf_sum += f0 + df0 * (u - lin_trans);
             }
+            lpdf_sum += log_beta - ly;
         }
         return lpdf_sum;
     }
 }
 
 real logpearson3_lcdf(real y, real m, real s, real g){
-    real norm2pearson_transition = 0.0001; 
-    real linear_transition = 1e-1;
    
     real abs_g = abs(g);
     real sign_g = sign(g);
+    
+    real n2p_trans = logpearson3_norm2pearson_transition(); 
+    real lin_trans = logpearson3_lcdf_linear_transition(abs_g);
 
-    if (abs_g < norm2pearson_transition) {
-      return normal_cdf(log(y) | m, s);
+    if (abs_g < n2p_trans) {
+      return normal_lcdf(log(y) | m, s);
 
     } else {
       // Original LogPearson3 parameterisation
@@ -60,16 +103,18 @@ real logpearson3_lcdf(real y, real m, real s, real g){
       real beta = 2 / g / s;
       real abs_beta = abs(beta);
       real tau = m - alpha / beta;
+      
+      real f0 = gamma_lcdf(lin_trans | alpha, 1.);
+      real ldf0 = gamma_lpdf(lin_trans | alpha, 1.) - f0;
+      real df0 = exp(ldf0);
 
-      real u = sign_g * (log(y)  - tau);
-      real f0 = gamma_lcdf(linear_transition | alpha, abs_beta);
-      real df0 = exp(gamma_lpdf(linear_transition | alpha, abs_beta)) / f0;
       real lcdf;
+      real u = sign_g * (log(y) - tau) * abs_beta;
 
-      if(u > linear_transition) {
-        lcdf = gamma_lcdf(u | alpha, abs_beta);
+      if(u > lin_trans) {
+        lcdf = gamma_lcdf(u | alpha, 1.);
       } else {
-        lcdf = f0 ; //+ df0 * (u - linear_transition);
+        lcdf = f0 + df0 * (u - lin_trans);
       }
 
       if(beta < 0)

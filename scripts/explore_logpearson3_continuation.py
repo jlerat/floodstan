@@ -79,8 +79,8 @@ stan_inits = sv.initial_parameters
 # ----------------------------------------------------------------------
 
 marginal = marginals.factory(distname)
-y0 = y.min()
-y1 = y.max()
+y0 = 2860 #y.min()
+y1 = 2950 #y.max()
 
 marginal.params_guess(y)
 locn, logscale, shape1 = marginal.params

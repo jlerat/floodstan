@@ -644,15 +644,15 @@ class LogPearson3(FloodFreqDistribution):
 
     @property
     def alpha(self):
-        return 4 / self.shape1**2
+        return 4. / self.shape1**2
 
     @property
     def beta(self):
-        return np.sign(self.shape1) * math.sqrt(self.alpha) / self.scale
+        return 2. / self.shape1 / self.scale
 
     @property
     def tau(self):
-        return self.locn - self.alpha / self.beta
+        return self.locn - self.scale * 2. / self.shape1
 
     @property
     def support(self):
