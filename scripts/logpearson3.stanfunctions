@@ -2,53 +2,11 @@ real sign(real x) {
     return x < 0 ? -1. : x > 0 ? 1. : 0;
 }
 
-// Using transition from Pearson3 to Normal
-real logpearson3_norm2pearson_transition() {
-    return 1e-3;
-}
-
-real logpearson3_lpdf_linear_transition() {
-    return 1e-3;
-}
-
-// Compute x such that gamminc(alpha, x) ~ minimum valid value
-// This is used to extend logpearson 3 distribution
-// close to support boundaries
-// 
-real logpearson3_lcdf_linear_transition(real abs_g) {
-    row_vector[20] g_threshs = [0.01000000,0.01116400,0.01267839,0.01464867,0.01721206,0.02054712,0.02488614,0.03053135,0.03787594,0.04743149,0.05986356,0.07603809,0.09708167,0.12446005,0.16008020,0.20642316,0.26671684,0.34516085,0.44721903,0.58000000];
-
-    row_vector[20] logx0_threshs = [10.42277267,10.18166550,9.89980090,9.57489926,9.20489616,8.78783241,8.32092631,7.79981755,7.21675258,6.55848000,5.80219286,4.90894126,3.80980447,2.38064814,0.39416955,-2.55535641,-7.15588464,-14.55145809,-26.66622972,-39.14394658];
-
-    if(abs_g < 0)
-        return not_a_number();
-
-    if(abs_g < g_threshs[1])
-        return exp(logx0_threshs[1]);
-
-    real g0;
-    real g1;
-    real lx0;
-    real lx1;
-
-    for(i in 1:19) {
-        g0 = g_threshs[i];
-        g1 = g_threshs[i+1];
-        lx0 = logx0_threshs[i];
-        lx1 = logx0_threshs[i+1];
-
-        if((abs_g >= g0) && (abs_g <= g1))
-            return exp(lx0 + (lx1 - lx0) * (abs_g - g0) / (g1 - g0));    
-    }
-    return exp(lx1);
-}
-
-
 real logpearson3_lpdf(vector y, real m, real s, real g) {
     int N = rows(y);
 
-    real n2p_trans = logpearson3_norm2pearson_transition(); 
-    real lin_trans = logpearson3_lpdf_linear_transition();
+    // Using transition from Pearson3 to Normal
+    real n2p_trans = 1e-6;
 
     real abs_g = abs(g);
     real sign_g = sign(g);
@@ -69,63 +27,134 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
         real ly;
         real lpdf_sum = 0;
 
-        real f0 = gamma_lpdf(lin_trans | alpha, 1.);
-        real df0 = (alpha - 1.) / lin_trans - 1.;
-
         for(i in 1:N) {
             ly = log(y[i]);
-            u = sign_g * (ly - tau) * abs_beta;
-            if(u > lin_trans) {
-                lpdf_sum += gamma_lpdf(u | alpha, 1.);
-            } else {
-                lpdf_sum += f0 + df0 * (u - lin_trans);
-            }
+            u = beta * (ly - tau);
+            if(u < 0) 
+                reject("u[", i, "] (", u, ") < 0 with m=", m, " s=", s, " g=", g);
+
+            lpdf_sum += gamma_lpdf(u | alpha, 1.);
             lpdf_sum += log_beta - ly;
         }
         return lpdf_sum;
     }
 }
 
-real logpearson3_lcdf(real y, real m, real s, real g){
-   
-    real abs_g = abs(g);
-    real sign_g = sign(g);
-    
-    real n2p_trans = logpearson3_norm2pearson_transition(); 
-    real lin_trans = logpearson3_lcdf_linear_transition(abs_g);
+// -- Functions needed for the approximation of incomplete gamma function
+//    when alpha is large (say>100) and computation of gamma(alpha) is 
+//    leading to overflow
+// 
+//    Temme, N. M. (1987). On the computation of the incomplete gamma 
+//    functions for large values of the parameters. 
+//    In Algorithms for approximation (pp. 479-489).
+// 
+//    Temme, N. M. (1994). A set of algorithms for the incomplete gamma 
+//    functions. Probability in the Engineering and Informational 
+//    Sciences, 8(2), 291-307.
 
-    if (abs_g < n2p_trans) {
-      return normal_lcdf(log(y) | m, s);
+// Approx of the function gamma star defined as
+// Gs(x) = sqrt(a/2pi).exp(a).a^(-a).Gamma(a)
+//
+real gammastar(real alpha) {
+    real num = 0;
+    real den = 0;
+
+    array[4] real ak, bk;
+
+    // Coefficients from Temme (1987)
+    ak[1] = 5.115471897484e-2;
+    bk[1] = 1.544892866413e-2;
+    ak[2] = 4.990196893575e-1;
+    bk[2] = 4.241288251916e-1;
+    ak[3] = 9.404953102900e-1;
+    bk[3] = 8.571609363101e-1;
+    ak[4] = 9.999999625957e-1;
+    bk[4] = 1.000000000000e+0;
+    
+    for(i in 1:4){
+        num = num*alpha+ak[5-i];
+        den = den*alpha+bk[5-i];
+    }
+
+    return num/den;
+}
+
+real logpearson3_cdf(real y, real m, real s, real g){
+    real cdf;
+    
+    // Threshold to transition from pearson to approx
+    // for cdf computation. This a high threshold
+    // due problems with computation of gamma function 
+    // for high x in Stan. 
+    real approx2pearson_transition = 0.5; 
+    
+    // Original LogPearson3 parameterisation
+    real alpha = 4. / g / g;
+    real beta = 2. / g / s;
+    real abs_beta = abs(beta);
+    real tau = m - alpha / beta;
+    
+    real abs_g = abs(g);
+    real sng = g < 0 ? -1 : 1;
+
+    // .. no parameter constraints because they are covered in lpdf
+    // .. function above
+
+    // Variables needed for incomplete gamma approx.
+    // See refs above.
+    array[15] real fm = {-3.33333333e-01,  8.33333333e-02, -1.48148148e-02,
+        1.15740741e-03,  3.52733686e-04, -1.78755144e-04,  3.91926318e-05,
+       -2.18544851e-06, -1.85406221e-06,  8.29671134e-07, -1.76659527e-07,
+        6.70785354e-09,  1.02618098e-08, -4.38203602e-09,  9.14769958e-10 };
+    
+    int Napprox = 14;
+    array[Napprox+1] real bm;
+
+    // Compute log cdf depending on skew
+    real x = sng * (log(y) - tau);
+
+    if(abs_g > approx2pearson_transition) {
+        cdf = gamma_cdf(x | alpha, abs_beta);
 
     } else {
-      // Original LogPearson3 parameterisation
-      real alpha = 4 / g / g;
-      real beta = 2 / g / s;
-      real abs_beta = abs(beta);
-      real tau = m - alpha / beta;
+        // First term of the approximation
+        real lam = abs_beta * x / alpha;
+        real eta = sqrt(2 * (lam - 1. -log(lam)));
+        eta = lam < 1 ? -eta : eta;
+        real cdf0 = erfc(-eta * sqrt(alpha / 2.)) / 2.;
+
+        // Approximation coefficients to compute the residual
+        bm[Napprox+1] = fm[Napprox+1];
+        bm[Napprox] = fm[Napprox];
+        real f;
+        for(i in 1:Napprox-1){
+            int mb = Napprox-i;
+            f = mb>0 ? fm[mb] : 1.0; 
+            bm[mb] = f + (mb + 1.) / alpha * bm[mb+2];
+        }
       
-      real f0 = gamma_lcdf(lin_trans | alpha, 1.);
-      real ldf0 = gamma_lpdf(lin_trans | alpha, 1.) - f0;
-      real df0 = exp(ldf0);
+        // Compute residual
+        real S = 0;
+        for(ms in 1:Napprox)
+            S += bm[ms] * pow(eta, ms - 1.);
 
-      real lcdf;
-      real u = sign_g * (log(y) - tau) * abs_beta;
-
-      if(u > lin_trans) {
-        lcdf = gamma_lcdf(u | alpha, 1.);
-      } else {
-        lcdf = f0 + df0 * (u - lin_trans);
-      }
-
-      if(beta < 0)
-          lcdf = log1m_exp(lcdf);
-      
-      return lcdf;
+        real A = exp(-alpha * eta * eta / 2.) / sqrt(2. * pi() * alpha);
+        real GS = gammastar(alpha);
+        real R = A * S / GS;
+        
+        // Put it together
+        cdf = cdf0-R;
     }
+
+    // In this case, cdf = 1-cdf, or 
+    if(beta<0)
+        cdf = 1-cdf;
+    
+    return cdf;
 }
 
 // Log Pearson 3 
-real logpearson3_cdf(real y, real m, real s, real g) {
-    return exp(logpearson3_lcdf(y | m, s, g));
+real logpearson3_lcdf(real y, real m, real s, real g) {
+    return log(logpearson3_cdf(y | m, s, g));
 }
 

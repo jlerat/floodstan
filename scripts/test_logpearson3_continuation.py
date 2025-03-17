@@ -70,18 +70,20 @@ stan_nchains = 5
 
 marginal = marginals.factory(distname)
 
-logscale = 0.5
+logscale = 1.0
 scale = math.exp(logscale)
-shape1 = 0.2
+shape1 = -0.5
 locn = math.log(10.) + 2 * scale / shape1
 marginal.params = [locn, logscale, shape1]
 
 LOGGER.info(str(marginal))
 
+y0, y1 = marginal.support
+
 stan_data = {
-    "N": 500,
-    "ylower": 9.95,
-    "yupper": 60000.,
+    "N": 1000,
+    "ylower": y0 + 0.01 if shape1 > 0 else max(0, y1 - 5),
+    "yupper": y0 + 5 if shape1 > 0 else y1 - 0.01,
     "ylocn": locn,
     "ylogscale": logscale,
     "yshape1": shape1
@@ -89,9 +91,7 @@ stan_data = {
 
 LOGGER.info("Run stan")
 stan_file = froot / "scripts" / "logpearson3_test.stan"
-fgamma_q_inv = stan_file.parent / "gamma_q_inv.hpp"
-model = CmdStanModel(stan_file=stan_file,
-                     user_header=fgamma_q_inv)
+model = CmdStanModel(stan_file=stan_file)
 
 kwargs = {}
 kwargs["chains"] = 1
@@ -103,20 +103,23 @@ kwargs["show_progress"] = False
 kwargs["output_dir"] = fout
 fit = model.sample(data=stan_data, **kwargs)
 smp = fit.draws_pd().squeeze()
+patterns = ["ydata", "^lpdf", "^lcdf"]
+#patterns += ["trans_pdf", "trans_cdf", "^u\\["]
 df = pd.DataFrame({re.sub("\^|.\\[", "", pat): smp.filter(regex=pat).values
-                   for pat in ["ydata", "^lpdf", "^lcdf", "trans_pdf",
-                               "trans_cdf", "^u\\["]})
+                   for pat in patterns})
 
+LOGGER.info(f"y0={stan_data['ylower']:0.3f}   y1={stan_data['yupper']:0.3f}")
 LOGGER.info(f"smp alpha = {smp.alpha_copy} / {marginal.alpha:0.2f}")
 LOGGER.info(f"smp beta = {smp.beta_copy} / {marginal.beta:0.2f}")
 LOGGER.info(f"smp tau = {smp.tau_copy} / {marginal.tau:0.2f}")
-abs_beta = abs(marginal.beta)
-xth = math.exp(smp.lin_lpdf_trans / abs_beta + marginal.tau)
-LOGGER.info(f"smp lin_lpdf_trans = {smp.lin_lpdf_trans} -> x = {xth:0.2f}")
-xth = math.exp(smp.lin_lcdf_trans / abs_beta + marginal.tau)
-LOGGER.info(f"smp lin_lcdf_trans = {smp.lin_lcdf_trans} -> x = {xth:0.2f}")
-LOGGER.info(f"smp f0 = {smp.f0}")
-LOGGER.info(f"smp ldf0 = {smp.ldf0}")
+beta = marginal.beta
+abs_beta = abs(beta)
+#xth = math.exp(smp.lin_lpdf_trans / beta + marginal.tau)
+#LOGGER.info(f"smp lin_lpdf_trans = {smp.lin_lpdf_trans} -> x = {xth:0.2f}")
+#xth = math.exp(smp.lin_lcdf_trans / beta + marginal.tau)
+#LOGGER.info(f"smp lin_lcdf_trans = {smp.lin_lcdf_trans} -> x = {xth:0.2f}")
+#LOGGER.info(f"smp f0 = {smp.f0}")
+#LOGGER.info(f"smp ldf0 = {smp.ldf0}")
 
 plt.close("all")
 mosaic = [[cn for cn in df.columns if not re.search("ydata|^u|^trans", cn)]]
@@ -126,32 +129,37 @@ axs = fig.subplot_mosaic(mosaic, sharex=True)
 y = df.ydata
 for varname, ax in axs.items():
     se = df.loc[:, varname]
-    ax.plot(y, se, label=f"{varname} stan", lw=2)
-    itrans = df.loc[:, f"trans_{varname[-3:]}"] == 1
-    ax.plot(y[itrans], se[itrans], "+", color="0.3",
-            alpha=0.5, zorder=0, label="Above tresh")
+    ax.plot(y, se, label=f"{varname} stan", lw=5)
+    #itrans = df.loc[:, f"trans_{varname[-3:]}"] == 1
+    #ax.plot(y[itrans], se[itrans], "+", color="0.3",
+    #        alpha=0.5, zorder=0, label="Above tresh")
 
     fun = getattr(marginal, re.sub("l", "log", varname))
     se2 = fun(y)
-    ax.plot(y, se2, label=f"{varname} scipy")
+    ax.plot(y, se2, lw=3, label=f"{varname} scipy")
 
     tau = marginal.tau
     alpha = marginal.alpha
     abs_beta = abs(marginal.beta)
-    sign_g = 1 if marginal.shape1 > 0 else -1
     ly = np.log(y)
-    u = sign_g * (ly - tau) * abs_beta
+    u = (ly - tau) * beta
     if varname == "lpdf":
         se3 = gamma.logpdf(u, a=alpha) + math.log(abs_beta) - ly
     elif varname == "lcdf":
-        se3 = np.log(gammainc(alpha, u))
-        LOGGER.info(f"min x valid = {y[np.isfinite(se3)].min():0.2f}")
+        cdf = gammainc(alpha, u)
+        if beta < 0:
+            cdf = 1 - cdf
+        se3 = np.log(cdf)
+        if beta >= 0:
+            LOGGER.info(f"min x valid = {y[np.isfinite(se3)].min():0.2f}")
+        else:
+            LOGGER.info(f"max x valid = {y[np.isfinite(se3)].max():0.2f}")
 
     ax.plot(y, se3, label=f"{varname} scipy check")
 
     tax = ax.twinx()
     kw = dict(color="0.6", lw=0.8)
-    #tax.plot(y, se.diff(), **kw)
+    tax.plot(y, se.diff(), **kw)
 
     ax.set(ylabel=varname)
     tax.set(ylabel=f"Diff({varname})")
