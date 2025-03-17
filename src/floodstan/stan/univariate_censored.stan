@@ -95,7 +95,8 @@ model {
   target += marginal_lpdf(y[i11] | ymarginal, ylocn, yscale, yshape1);
 
   // Case 21 : y censored 
-  target += Ncases[2,1]*marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
+  if(Ncases[2, 1] > 0)
+     target += Ncases[2, 1] * marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
 }
 
 

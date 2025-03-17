@@ -27,14 +27,12 @@
 *
 **/
 
-
 functions {
 
     #include marginal.stanfunctions
     #include copula.stanfunctions
 
 }
-
 
 data {
   // Defines marginal distributions
@@ -198,12 +196,14 @@ model {
 
   // Case 22 : both y and z censored. Copulas cdf times 
   // the number of occurences for 22
-  target += Ncases[2,2]*copula_lcdf(uvcensors | copula, rho);
+  if(Ncases[2, 2] > 0)
+     target += Ncases[2, 2]*copula_lcdf(uvcensors | copula, rho);
 
   // Case 32 : y is missing and z is censored 
   // this a marginal cdf for z reduced variable times
   // the number of occurences for 32
-  target += Ncases[3,2]*marginal_lcdf(zcensor | zmarginal, zlocn, zscale, zshape1);
+  if(Ncases[3, 2] > 0)
+     target += Ncases[3, 2] * marginal_lcdf(zcensor | zmarginal, zlocn, zscale, zshape1);
   
   // Case 13 : y is obs, z is missing
   // this is marginal pdf for y (analogous to case 31)
@@ -211,7 +211,8 @@ model {
 
   // Case 23 : y is cens, z is missing
   // this is marginal cdf for y (analogous to case 32)
-  target += Ncases[2,3]*marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
+  if(Ncases[2, 3] > 0)
+     target += Ncases[2, 3] * marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
 }
 
 
