@@ -1,4 +1,4 @@
-name: Build floodstan
+name: Cook tests
 
 on: [push]
 
