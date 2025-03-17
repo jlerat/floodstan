@@ -55,19 +55,19 @@ real gev_lcdf(real y, real tau, real alpha, real kappa){
 }
 
 // -------------- Pearson3 and LogPearson3 distributions -------------
-// Pearson3 log pdf and cdf - equivalent to a shifted Gamma distribution
+// equivalent to a shifted Gamma distribution in log space
 
 real logpearson3_lpdf(vector y, real m, real s, real g) {
     int N = rows(y);
 
-    // Using transition from Pearson3 to Normal
+    // transition from Pearson3 to Normal
     real n2p_trans = 1e-6;
 
     real abs_g = abs(g);
     real sign_g = sign(g);
    
     if(abs_g < n2p_trans) {
-        return normal_lpdf(log(y) | m, s);
+        return lognormal_lpdf(y | m, s);
 
     } else {
         // Original LogPearson3 parameterisation
@@ -137,6 +137,9 @@ real gammastar(real alpha) {
 real logpearson3_cdf(real y, real m, real s, real g){
     real cdf;
     
+    // transition from Pearson3 to Normal
+    real n2p_trans = 1e-6;
+
     // Threshold to transition from pearson to approx
     // for cdf computation. This a high threshold
     // due problems with computation of gamma function 
@@ -150,7 +153,6 @@ real logpearson3_cdf(real y, real m, real s, real g){
     real tau = m - alpha / beta;
     
     real abs_g = abs(g);
-    real sng = g < 0 ? -1 : 1;
 
     // .. no parameter constraints because they are covered in lpdf
     // .. function above
@@ -166,14 +168,17 @@ real logpearson3_cdf(real y, real m, real s, real g){
     array[Napprox+1] real bm;
 
     // Compute log cdf depending on skew
-    real x = sng * (log(y) - tau);
+    real x = beta * (log(y) - tau);
 
-    if(abs_g > approx2pearson_transition) {
-        cdf = gamma_cdf(x | alpha, abs_beta);
+    if(abs_g < n2p_trans) {
+        return lognormal_cdf(y | m, s);
+    }
+    else if(abs_g > approx2pearson_transition) {
+        cdf = gamma_cdf(x | alpha, 1.);
 
     } else {
         // First term of the approximation
-        real lam = abs_beta * x / alpha;
+        real lam = x / alpha;
         real eta = sqrt(2 * (lam - 1. -log(lam)));
         eta = lam < 1 ? -eta : eta;
         real cdf0 = erfc(-eta * sqrt(alpha / 2.)) / 2.;
@@ -198,7 +203,7 @@ real logpearson3_cdf(real y, real m, real s, real g){
         real R = A * S / GS;
         
         // Put it together
-        cdf = cdf0-R;
+        cdf = cdf0 - R;
     }
 
     // In this case, cdf = 1-cdf, or 
@@ -212,7 +217,10 @@ real logpearson3_lcdf(real y, real m, real s, real g) {
     return log(logpearson3_cdf(y | m, s, g));
 }
 
-// Generalized Pareto
+
+
+
+// -------------- Generalized Pareto -------------
 real genpareto_lpdf(vector y, real tau, real alpha, real kappa) {
     int N = rows(y);
     real kappa_transition = 1e-6; 
@@ -232,11 +240,10 @@ real genpareto_cdf(real y, real tau, real alpha, real kappa) {
     if(abs(kappa) > kappa_transition){
         z = -1. / kappa * log(1 - kappa * z);
     }
-
     return 1. - exp(-z);    
 }
 
-// Generalized logistic
+// -------------- Generalized Logistic -------------
 real genlogistic_lpdf(vector y, real tau, real alpha, real kappa) {
     int N = rows(y);
     real kappa_transition = 1e-6; 
@@ -245,7 +252,6 @@ real genlogistic_lpdf(vector y, real tau, real alpha, real kappa) {
     if(abs(kappa) > kappa_transition){
         z = -1. / kappa * log(1. - kappa * z);
     }
-
     return -(1. - kappa) * sum(z) - 2. * sum(log(1 + exp(-z))) - N * log(alpha);
 }
 
@@ -256,7 +262,6 @@ real genlogistic_cdf(real y, real tau, real alpha, real kappa) {
     if(abs(kappa) > kappa_transition){
         z = -1. / kappa * log(1. - kappa * z);
     }
-
     return 1. / (1. + exp(-z));    
 }
 

@@ -53,10 +53,13 @@ def load_stan_model(name: str) -> Callable:
         stan_file = STAN_FILES_FOLDER / f"{stan_name}.stan"
         model = cmdstanpy.CmdStanModel(stan_file=stan_file,
                                        stanc_options={"O1": True})
-        shutil.copy(
-            model.exe_file,  # type: ignore
-            STAN_FILES_FOLDER / f"{stan_name}{suffix}",
-        )
+        try:
+            shutil.copy(
+                model.exe_file,  # type: ignore
+                STAN_FILES_FOLDER / f"{stan_name}{suffix}",
+            )
+        except shutil.SameFileError:
+            pass
 
     def fun(*args, **kwargs):
         kwargs["show_progress"] = kwargs.get("show_progress", False)
