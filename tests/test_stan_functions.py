@@ -21,8 +21,7 @@ import importlib
 from tqdm import tqdm
 
 from floodstan import marginals, sample, copulas
-from floodstan import stan_test_marginal, stan_test_copula, \
-                            stan_test_discrete
+from floodstan import stan_test_marginal, stan_test_copula
 
 from test_sample_univariate import get_stationids, get_ams
 from test_copulas import get_uv
@@ -131,56 +130,3 @@ def test_copulas_vs_stan(copula, allclose):
         lcond = smp.filter(regex="lcond")
         expected = np.log(cop.conditional_density(uv[:, 0], uv[:, 1]))
         assert allclose(lcond, expected, atol=1e-7)
-
-
-@pytest.mark.parametrize("dname",
-                         list(sample.DISCRETE_NAMES.keys()))
-def test_discrete_vs_stan(dname, allclose):
-    ntests = 10
-    N = 100
-    dcode = sample.DISCRETE_NAMES[dname]
-
-    for i in range(ntests):
-        locn_mu = 0.5 if dname == "Bernoulli" else 3
-        locn_max = 1 if dname == "Bernoulli" else 20
-        locn_sig = 0.1 if dname == "Bernoulli" else 1
-
-        phi_mu, phi_sig = 1, 1
-
-        p0, p1 = norm.cdf([0, locn_max], loc=locn_mu, scale=locn_sig)
-        u = np.random.uniform()
-        p = p0+(p1-p0)*u
-        klocn = norm.ppf(p)*locn_sig+locn_mu
-
-        p0, p1 = norm.cdf([1e-3, 3], loc=phi_mu, scale=phi_sig)
-        u = np.random.uniform()
-        p = p0+(p1-p0)*u
-        kphi = norm.ppf(p, loc=phi_mu, scale=phi_sig)
-
-        if dname == "Poisson":
-            rcv = poisson(mu=klocn)
-        elif dname == "Bernoulli":
-            rcv = bernoulli(p=klocn)
-        else:
-            # reparameterize as per
-            # https://mc-stan.org/docs/functions-reference/nbalt.html
-            v = klocn+klocn**2/kphi
-            n = klocn**2/(v-klocn)
-            p = klocn/v
-            rcv = nbinom(n=n, p=p)
-
-        k = rcv.rvs(size=N).clip(0, sample.NEVENT_UPPER)
-        kv = sample.StanDiscreteVariable(k, dname)
-        stan_data = kv.to_dict()
-        stan_data["klocn"] = klocn
-        stan_data["kphi"] = kphi
-
-        # Run stan
-        smp = stan_test_discrete(data=stan_data)
-
-        # Test
-        lpmf = smp.filter(regex="lpmf").values
-        expected = rcv.logpmf(k)
-        assert allclose(lpmf, expected, atol=1e-5)
-
-

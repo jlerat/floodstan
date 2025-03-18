@@ -128,10 +128,8 @@ bivariate_censored_sampling = load_stan_model("bivariate_censored_sampling")
 gls_spatial_sampling = load_stan_model("gls_spatial_sampling")
 gls_spatial_generate_sampling = \
     load_stan_model("gls_spatial_generate_sampling")
-event_occurrence_sampling = load_stan_model("event_occurrence_sampling")
 
 # Stan test functions
 stan_test_marginal = load_stan_model("stan_test_marginal")
 stan_test_copula = load_stan_model("stan_test_copula")
 stan_test_glsfun = load_stan_model("stan_test_glsfun")
-stan_test_discrete = load_stan_model("stan_test_discrete")
