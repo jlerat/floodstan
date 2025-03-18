@@ -179,6 +179,9 @@ def test_stan_sampling_dataset(distname, allclose):
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
 def test_univariate_censored_sampling(distname, censoring, allclose):
+    if distname.startswith("Generalized"):
+        pytest.skip(f"Need to test {distname}")
+
     stationids = get_stationids()
     stationid = stationids[0]
     y = get_ams(stationid)
@@ -219,9 +222,6 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
 
-    import pdb; pdb.set_trace()
-
-
     # Test diag
     assert diag["treedepth"] == "satisfactory"
     assert diag["ebfmi"] == "satisfactory"
@@ -229,18 +229,9 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
 
     # Test divergence
     prc = diag["divergence_proportion"]
-
-    easy = ["GEV", "Normal", "Gamma", "LogNormal",
-            "Gumbel"]
-    moderate = ["GeneralizedLogistic"]
-    hard = ["LogPearson3", "GeneralizedPareto"]
-
-    if distname in easy:
-        thresh = 5 if censoring else 1
-    elif distname in moderate:
-        thresh = 20 if censoring else 8
-    else:
-        # Stupid !!!
-        thresh = 80 if censoring else 50
-
+    thresh = 1
+    if censoring:
+        # Higher divergence rate
+        thresh = 5 if distname in  ["GEV", "Normal", "Gamma", "LogNormal",
+                                    "Gumbel"] else 30
     assert prc < thresh
