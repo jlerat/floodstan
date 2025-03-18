@@ -223,6 +223,7 @@ class FloodFreqDistribution():
         # Default values
         self._locn = np.nan
         self._logscale = np.nan
+        self._shape1 = np.nan
 
         # Priors
         self._shape1_prior_loc = SHAPE1_PRIOR_LOC_DEFAULT

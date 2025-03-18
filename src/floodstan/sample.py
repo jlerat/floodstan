@@ -15,16 +15,8 @@ from floodstan.copulas import factory
 
 from floodstan.marginals import MARGINAL_NAMES
 
-from floodstan.discretes import DISCRETE_NAMES
-from floodstan.discretes import PHI_LOWER
-from floodstan.discretes import PHI_UPPER
-from floodstan.discretes import LOCN_UPPER as LOCN_UPPER_DIST
-from floodstan.discretes import NEVENT_UPPER
-
-
 MARGINAL_CODES = {code: name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code: name for name, code in COPULA_NAMES.items()}
-DISCRETE_CODES = {code: name for name, code in DISCRETE_NAMES.items()}
 
 # Subset of copula currently supported in the stan model
 COPULA_NAMES_STAN = ["Gaussian", "Clayton", "Gumbel"]
@@ -614,104 +606,4 @@ class StanSamplingDataset():
             "i13": self.i13,
             "i23": self.i23
             })
-        return dd
-
-
-class StanDiscreteVariable():
-    def __init__(self, data, discrete_name,
-                 ninits=NCHAINS_DEFAULT):
-        self.name = "k"
-        self._N = 0
-        self._data = None
-        self._discrete_code = None
-        self._discrete_name = None
-        self._initial_parameters = []
-        self.ninits = ninits
-
-        # Set if the 2 inputs are set
-        if data is not None and discrete_name is not None:
-            self.set_data(data, discrete_name)
-            data_set = True
-
-        if data_set:
-            self.set_initial_parameters()
-
-    @property
-    def N(self):
-        return self._N
-
-    @property
-    def initial_parameters(self):
-        if len(self._initial_parameters) == 0:
-            errmess = f"Variable {self.name}: "\
-                      + "Initial parameters have not been set."
-            raise ValueError(errmess)
-
-        return self._initial_parameters
-
-    @property
-    def discrete_name(self):
-        return self._discrete_name
-
-    @property
-    def discrete_code(self):
-        return DISCRETE_NAMES[self._discrete_name]
-
-    @property
-    def data(self):
-        if self._data is None:
-            errmess = "Data has not been set."
-            raise ValueError(errmess)
-        return self._data
-
-    def set_data(self, data, discrete_name):
-        if discrete_name not in DISCRETE_NAMES:
-            errmess = f"Cannot find discrete {discrete_name}."
-            raise ValueError(errmess)
-
-        self._discrete_name = discrete_name
-
-        data = np.array(data).astype(np.int64)
-        if data.ndim != 1:
-            errmess = "Expected data as 1d array."
-            raise ValueError(errmess)
-
-        if np.any(data < 0):
-            errmess = "Need all data to be >=0."
-            raise ValueError(errmess)
-
-        nmax = 1 if discrete_name == "Bernoulli" else NEVENT_UPPER
-        if np.any(data > nmax):
-            errmess = f"Need all data to be <={nmax}."
-            raise ValueError(errmess)
-
-        self._data = data
-        self._N = len(data)
-
-    def set_initial_parameters(self):
-        inits = []
-        for i in range(self.ninits):
-            locn = self.data.mean()*max(0.05, np.random.normal(scale=0.2))
-            inits.append({
-                "locn": locn,
-                "phi": 1
-                })
-        self._initial_parameters = inits
-
-    def to_dict(self):
-        """ Export stan data to be used by stan program """
-        vn = self.name
-        isbern = self.discrete_name == "Bernoulli"
-        dd = {
-            f"{vn}disc": self.discrete_code,
-            "N": self.N,
-            vn: self.data,
-            "locn_upper": 1 if isbern else LOCN_UPPER_DIST,
-            "phi_lower": PHI_LOWER,
-            "phi_upper": PHI_UPPER,
-            "nevent_upper": 1 if isbern else NEVENT_UPPER,
-            f"{vn}locn_prior": [0.5, 3] if isbern else DISCRETE_LOCN_PRIOR,
-            f"{vn}phi_prior": DISCRETE_PHI_PRIOR
-            }
-
         return dd
