@@ -11,8 +11,12 @@ if [ ! -f "$PYSCRIPT" ]; then
     exit 1
 fi
 
-FLOG=$FHERE/logs
+FLOG=$FHERE/logs/univariate_sampling
 mkdir -p $FLOG
+
+# Assuming we run 5 distribution using 2 cpus per process
+# => total of 10 cpus
+NPARALLEL=2
 
 echo
 echo -----------------------

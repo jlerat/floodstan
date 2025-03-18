@@ -21,6 +21,7 @@ import importlib
 from tqdm import tqdm
 
 from floodstan import marginals, sample, copulas
+from floodstan import report
 from floodstan import univariate_censored_sampling
 
 from tqdm import tqdm
@@ -106,10 +107,17 @@ def test_stan_sampling_variable(distname, allclose):
     for key in keys:
         assert key in dd
 
-    assert allclose(dd["yshape1_prior"], sample.SHAPE1_PRIOR)
+    if distname != "LogPearson3":
+        prior = [marginals.SHAPE1_PRIOR_LOC_DEFAULT,
+                 marginals.SHAPE1_PRIOR_SCALE_DEFAULT]
+        assert allclose(dd["yshape1_prior"], prior)
+    else:
+        assert allclose(dd["yshape1_prior"][1],
+                        marginals.SHAPE1_PRIOR_SCALE_DEFAULT)
 
     # Rapid setting
     sv = sample.StanSamplingVariable(y)
+
     msg = "Initial parameters"
     with pytest.raises(ValueError, match=msg):
         ip = sv.initial_parameters
@@ -167,14 +175,25 @@ def test_stan_sampling_dataset(distname, allclose):
                 assert f"{n}{pn}" in init
 
 
-def test_univariate_sampling_short_syntax(allclose):
+@pytest.mark.parametrize("distname",
+                         marginals.MARGINAL_NAMES)
+@pytest.mark.parametrize("censoring", [False, True])
+def test_univariate_censored_sampling(distname, censoring, allclose):
+    if distname.startswith("Generalized"):
+        pytest.skip(f"Need to test {distname}")
+
     stationids = get_stationids()
     stationid = stationids[0]
-    marginal = "GEV"
     y = get_ams(stationid)
+    censor = y.median() if censoring else np.nanmin(y) - 1.
 
     # Set STAN
-    sv = sample.StanSamplingVariable(y, marginal)
+    stan_nwarm = 10000
+    stan_nsamples = 5000
+    stan_nchains = 5
+
+    sv = sample.StanSamplingVariable(y, distname, censor,
+                                     ninits=stan_nchains)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
     stan_inits3 = stan_inits[:3]
@@ -194,8 +213,21 @@ def test_univariate_sampling_short_syntax(allclose):
 
     # Sample
     smp = univariate_censored_sampling(data=stan_data,
+                                       chains=stan_nchains,
+                                       seed=SEED,
+                                       iter_warmup=stan_nwarm,
+                                       iter_sampling=stan_nsamples // stan_nchains,
                                        inits=stan_inits,
                                        output_dir=fout)
     df = smp.draws_pd()
+    diag = report.process_stan_diagnostic(smp.diagnose())
 
+    # Test diag
+    assert diag["treedepth"] == "satisfactory"
+    assert diag["ebfmi"] == "satisfactory"
+    assert diag["rhat"] == "satisfactory"
 
+    # Test divergence
+    prc = diag["divergence_proportion"]
+    thresh = 30 if distname in ["LogPearson3"] and censoring else 5
+    assert prc < thresh

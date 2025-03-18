@@ -33,7 +33,6 @@ generated quantities {
   real ylocn_check = ylocn;
   real ylogscale_check = ylogscale;
   real yshape1_check = yshape1;
-
   real yscale = exp(ylogscale);
 
   // un censored case

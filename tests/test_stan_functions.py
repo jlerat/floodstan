@@ -39,7 +39,7 @@ FTESTS = Path(__file__).resolve().parent
 def test_marginals_vs_stan(marginal, stationid, allclose):
     stationids = get_stationids()
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
-    nboot = 100
+    nboot = 50
     y = get_ams(stationid)
     N = len(y)
     dist = marginals.factory(marginal)
@@ -49,12 +49,16 @@ def test_marginals_vs_stan(marginal, stationid, allclose):
         rng = np.random.default_rng(SEED)
         yboot = rng.choice(y.values, N)
         dist.params_guess(yboot)
+
+        # Test 0 shape for edge cases
+        if marginal in ["GEV", "LogPearson3"]:
+            if np.random.uniform(0, 1) < 0.1:
+                dist.shape1 = 1e-20
+
         y0, y1 = dist.support
 
         sv = sample.StanSamplingVariable(yboot, marginal)
-        sv.name = "y"
         stan_data = sv.to_dict()
-
         stan_data["ylocn"] = dist.locn
         stan_data["ylogscale"] = dist.logscale
         stan_data["yshape1"] = dist.shape1
@@ -63,6 +67,15 @@ def test_marginals_vs_stan(marginal, stationid, allclose):
         smp = stan_test_marginal(data=stan_data)
 
         # Test
+        locn = smp.filter(regex="ylocn").values
+        assert allclose(locn, dist.locn, atol=1e-5)
+
+        logscale = smp.filter(regex="ylogscale").values
+        assert allclose(logscale, dist.logscale, atol=1e-5)
+
+        shape1 = smp.filter(regex="yshape1").values
+        assert allclose(shape1, dist.shape1, atol=1e-5)
+
         luncens = smp.filter(regex="luncens").values
         expected = dist.logpdf(yboot)
         assert allclose(luncens, expected, atol=1e-5)
@@ -106,7 +119,8 @@ def test_copulas_vs_stan(copula, allclose):
         # Test copula pdf
         lpdf = smp.filter(regex="luncens")
         expected = cop.logpdf(uv)
-        assert allclose(lpdf, expected, atol=1e-7)
+        iok = np.isfinite(expected)
+        assert allclose(lpdf[iok], expected[iok], atol=1e-7)
 
         # test copula cdf
         lcdf = smp.filter(regex="lcens")

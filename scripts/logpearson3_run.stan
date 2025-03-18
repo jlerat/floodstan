@@ -1,41 +1,11 @@
-
-/**
-* Univariate
-*
-*  Throughout the code:
-*   - Obs variable is y
-*
-*  Marginal codes:
-*   - 1=Gumbel
-*   - 2=LogNormal
-*   - 3=GEV
-*   - 4=LogPearson3
-*   - 5=Normal
-*   - 6=Generalized Pareto
-*   - 7=Generalized Logistic
-*   - 8=Gamma
-*
-*  The 2 different cases depending on data availability are coded as follows:
-*  11: y observed         
-*  21: y censored
-*  Other cases described in bivariate_censoring.stan are not used.
-*
-**/
-
-
 functions {
 
-    #include marginal.stanfunctions
+    #include logpearson3.stanfunctions
 
 }
 
 
 data {
-  // Defines marginal distributions
-  // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal
-  // 6=Gen Pareto, 7=Gen Logistic, 8=Gamma
-  int<lower=1, upper=8> ymarginal; 
-
   int N; // total number of values
   vector[N] y; // Data for first variable (ams streamflow)
 
@@ -66,10 +36,6 @@ data {
 }
 
 parameters {
-  // Parameter for observed streamflow
-  //real<lower=locn_lower, upper=locn_upper> ylocn; 
-  //real<lower=logscale_lower, upper=logscale_upper> ylogscale;
-  //real<lower=shape1_lower, upper=shape1_upper> yshape1;
   real ylocn; 
   real ylogscale;
   real yshape1;
@@ -92,11 +58,9 @@ model {
   //  21: y censored
 
   // Case 11 : y observed
-  target += marginal_lpdf(y[i11] | ymarginal, ylocn, yscale, yshape1);
+  target += logpearson3_lpdf(y[i11] | ylocn, yscale, yshape1);
 
   // Case 21 : y censored 
   if(Ncases[2, 1] > 0)
-     target += Ncases[2, 1] * marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
+     target += Ncases[2,1] * logpearson3_lcdf(ycensor | ylocn, yscale, yshape1);
 }
-
-

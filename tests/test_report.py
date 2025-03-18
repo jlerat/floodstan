@@ -29,9 +29,12 @@ def test_process_stan_diagnostic():
         diag = fo.read()
 
     dd = report.process_stan_diagnostic(diag)
-    kk = ["message", "treedepth", "divergence", "ebfmi", "effsamplesz", "rhat"]
+    kk = ["message", "treedepth", "divergence", "ebfmi", "effsamplesz", "rhat",
+          "divergence_proportion"]
     for k in kk:
         assert k in dd
+
+    assert dd["divergence_proportion"] == 0
 
 
 def test_report(allclose):

@@ -4,7 +4,7 @@ import logging
 
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
+from scipy.stats import norm, kendalltau
 
 from floodstan import marginals
 
@@ -14,15 +14,11 @@ from floodstan.copulas import COPULA_NAMES
 from floodstan.copulas import factory
 
 from floodstan.marginals import MARGINAL_NAMES
-from floodstan.marginals import LOGSCALE_LOWER
-from floodstan.marginals import LOGSCALE_UPPER
-from floodstan.marginals import SHAPE1_LOWER
-from floodstan.marginals import SHAPE1_UPPER
 
 from floodstan.discretes import DISCRETE_NAMES
 from floodstan.discretes import PHI_LOWER
 from floodstan.discretes import PHI_UPPER
-from floodstan.discretes import LOCN_UPPER
+from floodstan.discretes import LOCN_UPPER as LOCN_UPPER_DIST
 from floodstan.discretes import NEVENT_UPPER
 
 
@@ -32,9 +28,6 @@ DISCRETE_CODES = {code: name for name, code in DISCRETE_NAMES.items()}
 
 # Subset of copula currently supported in the stan model
 COPULA_NAMES_STAN = ["Gaussian", "Clayton", "Gumbel"]
-
-# Tight prior on shape parameter
-SHAPE1_PRIOR = [0, 0.2]
 
 # Prior on copula parameter
 RHO_PRIOR = [0.7, 1.]
@@ -97,7 +90,7 @@ def get_logger(level="INFO", flog=None, stan_logger=True):
     return LOGGER
 
 
-def format_prior(values):
+def _check_prior(values):
     values = np.array(values).astype(float)
     if values.shape != (2, ):
         errmess = f"Expected an array of shape (2, ), got {values.shape}."
@@ -108,7 +101,8 @@ def format_prior(values):
 def are_marginal_params_valid(dist, locn, logscale, shape1, data, censor):
     dist.locn = locn
     dist.logscale = logscale
-    dist.shape1 = shape1
+    if dist.has_shape:
+        dist.shape1 = shape1
 
     cdf = dist.cdf(data)
     cdf[data < censor] = np.nan
@@ -128,6 +122,38 @@ def are_marginal_params_valid(dist, locn, logscale, shape1, data, censor):
         return dd, cdf
 
     return None, None
+
+
+def bootstrap(marginal, data, fit_method="params_guess",
+              nboot=10000, eta=0):
+
+    expected = ["fit_lh_moments", "params_guess"]
+    if fit_method not in expected:
+        errmess = f"Expected fit_method in [{'/'.join(expected)}]."
+        raise ValueError(errmess)
+
+    data = np.array(data)
+    nval = len(data)
+
+    # Parameter estimation method
+    fun = getattr(marginal, fit_method)
+    kw = {"eta": eta} if fit_method == "fit_lh_moments" else {}
+
+    # Prepare data
+    boots = pd.DataFrame(np.nan, index=np.arange(nboot),
+                         columns=["locn", "logscale", "shape1"])
+
+    # Run bootstrap
+    for i in range(nboot):
+        resampled = np.random.choice(data, nval, replace=True)
+        try:
+            fun(resampled, **kw)
+        except Exception:
+            continue
+
+        boots.loc[i, :] = marginal.params
+
+    return boots
 
 
 class StanSamplingVariable():
@@ -251,7 +277,7 @@ class StanSamplingVariable():
 
     @locn_prior.setter
     def locn_prior(self, values):
-        values = format_prior(values)
+        values = _check_prior(values)
         self._locn_prior = values
 
     @property
@@ -263,7 +289,7 @@ class StanSamplingVariable():
 
     @logscale_prior.setter
     def logscale_prior(self, values):
-        values = format_prior(values)
+        values = _check_prior(values)
         self._logscale_prior = values
 
     @property
@@ -275,8 +301,9 @@ class StanSamplingVariable():
 
     @shape1_prior.setter
     def shape1_prior(self, values):
-        values = format_prior(values)
-        self._shape1_prior = values
+        if self.marginal.has_shape:
+            values = _check_prior(values)
+            self._shape1_prior = values
 
     def set_marginal(self, marginal_name):
         if marginal_name not in MARGINAL_NAMES:
@@ -313,7 +340,8 @@ class StanSamplingVariable():
         self._is_cens = data < self.censor
         self.i11 = np.where(self.is_obs)[0] + 1
         self.i21 = np.where(self.is_cens)[0] + 1
-        # .. 3x3 due to stan code requirement. Only first 2 top left cells used
+        # .. 3x3 due to stan code requirement.
+        #    Only first 2 top left cells used
         self.Ncases = np.zeros((3, 3), dtype=int)
         self.Ncases[:2, 0] = [len(self.i11), len(self.i21)]
 
@@ -325,14 +353,11 @@ class StanSamplingVariable():
     def set_guess_parameters(self):
         dok = self.data[~np.isnan(self.data)]
         dist = self.marginal
-
-        # Get guess parameter set
         dist.params_guess(dok)
-        params0 = dist.params
         self._guess_parameters = {
-                "locn": params0[0],
-                "logscale": params0[1],
-                "shape1": params0[2]
+                "locn": dist.locn,
+                "logscale": dist.logscale,
+                "shape1": dist.shape1
                 }
 
     def set_initial_parameters(self):
@@ -354,11 +379,11 @@ class StanSamplingVariable():
             niter += 1
             # Perturb guess parameters
             locn = params0[0] * max(5e-1, 1 + normvar.rvs())
-            logscale = max(LOGSCALE_LOWER,
-                           min(LOGSCALE_UPPER,
+            logscale = max(dist.logscale_lower,
+                           min(dist.logscale_upper,
                                params0[1] + normvar.rvs()))
-            shape1 = max(SHAPE1_LOWER,
-                         min(SHAPE1_UPPER,
+            shape1 = max(dist.shape1_lower,
+                         min(dist.shape1_upper,
                              params0[2] + normvar.rvs()))
 
             pp, cdf = are_marginal_params_valid(dist, locn, logscale,
@@ -402,14 +427,18 @@ class StanSamplingVariable():
         self._locn_prior = [locn_start, 10 * abs(locn_start)]
 
         logscale_start = start["logscale"]
-        dscale = (LOGSCALE_UPPER-LOGSCALE_LOWER) / 2
+        dist = self.marginal
+        dscale = (dist.logscale_upper - dist.logscale_lower) / 2
         self._logscale_prior = [logscale_start, dscale]
 
-        self._shape1_prior = SHAPE1_PRIOR
+        dist = self.marginal
+        self._shape1_prior = [dist.shape1_prior_loc,
+                              dist.shape1_prior_scale]
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
         vn = self.name
+        dist = self.marginal
         dd = {
             f"{vn}marginal": self.marginal_code,
             "N": self.N,
@@ -418,10 +447,12 @@ class StanSamplingVariable():
             f"{vn}locn_prior": self.locn_prior,
             f"{vn}logscale_prior": self.logscale_prior,
             f"{vn}shape1_prior": self.shape1_prior,
-            "logscale_lower": LOGSCALE_LOWER,
-            "logscale_upper": LOGSCALE_UPPER,
-            "shape1_lower": SHAPE1_LOWER,
-            "shape1_upper": SHAPE1_UPPER,
+            "locn_lower": dist.locn_lower,
+            "locn_upper": dist.locn_upper,
+            "logscale_lower": dist.logscale_lower,
+            "logscale_upper": dist.logscale_upper,
+            "shape1_lower": dist.shape1_lower,
+            "shape1_upper": dist.shape1_upper,
             "i11": self.i11,
             "i21": self.i21,
             "Ncases": self.Ncases
@@ -517,9 +548,10 @@ class StanSamplingDataset():
 
     def set_initial_parameters(self):
         copula = self._copula
-        rho_min = copula.rho_min + 0.02
-        rho_max = copula.rho_max - 0.02
         inits = []
+
+        # Finds number of initial parameters
+        # (minimum of number of initial params for each variable)
         ninits = min([vs.ninits for vs in self._stan_variables])
 
         for i in range(ninits):
@@ -538,13 +570,17 @@ class StanSamplingDataset():
             cdfs = cdfs[notnan]
 
             niter = 0
+            rho0 = kendalltau(cdfs[:, 0], cdfs[:, 1]).statistic
+
             rho = np.nan
+            rho_max = min(copula.rho_max - 2e-2, rho0 + 2e-2)
+            rho_min = min(rho_max - 1e-1,
+                          max(copula.rho_min + 2e-2, rho0 - 2e-2))
+
             while True and niter < MAX_INIT_PARAM_SEARCH:
                 niter += 1
-                rho = np.random.normal(loc=RHO_PRIOR[0], scale=0.2)
-                rho = max(min(rho, rho_max), rho_min)
-
-                # Check likelihood and reduce correlation if needed
+                rho = np.random.uniform(rho_min, rho_max)
+                # Check likelihood
                 copula.rho = rho
                 copula_pdfs = copula.pdf(cdfs)
                 isok = np.all(~np.isnan(copula_pdfs))
@@ -670,7 +706,7 @@ class StanDiscreteVariable():
             f"{vn}disc": self.discrete_code,
             "N": self.N,
             vn: self.data,
-            "locn_upper": 1 if isbern else LOCN_UPPER,
+            "locn_upper": 1 if isbern else LOCN_UPPER_DIST,
             "phi_lower": PHI_LOWER,
             "phi_upper": PHI_UPPER,
             "nevent_upper": 1 if isbern else NEVENT_UPPER,

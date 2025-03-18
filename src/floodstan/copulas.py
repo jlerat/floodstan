@@ -117,7 +117,6 @@ class Copula():
 class GaussianCopula(Copula):
     def __init__(self):
         super(GaussianCopula, self).__init__("Gaussian")
-        self.rho_max = 0.85
         self._rho = np.nan
 
     def _transform(self, uv):
@@ -145,14 +144,14 @@ class GaussianCopula(Copula):
         s2 = (pq*pq).sum(axis=1)
         z = s2 - 2 * theta * pq.prod(axis=1)
         r2 = 1 - theta*theta
-        return 1. / math.sqrt(r2) * np.exp(-z / r2 / 2 + s2 / 2)
+        return 1. / math.sqrt(r2) * np.exp(-z / r2 / 2. + s2 / 2.)
 
     def conditional_density(self, ucond, v):
         pcensor = norm.ppf(ucond)
         q = norm.ppf(v)
         theta = self.theta
-        sqr = math.sqrt(1-theta*theta)
-        return norm.cdf((q-theta*pcensor)/sqr)
+        sqr = math.sqrt(1. - theta * theta)
+        return norm.cdf((q - theta * pcensor) / sqr)
 
     def cdf(self, uv):
         uv, pq = self._transform(uv)
@@ -174,7 +173,7 @@ class GaussianCopula(Copula):
         pcond = norm.ppf(ucond)
         theta = self.theta
         return norm.cdf(theta * pcond + norm.ppf(q)
-                        * math.sqrt(1 - theta*theta))
+                        * math.sqrt(1. - theta*theta))
 
 
 class GumbelCopula(Copula):
@@ -191,7 +190,7 @@ class GumbelCopula(Copula):
                 + f"{self.rho_max}], got {rho}."
             raise ValueError(errmess)
         self._rho = rho
-        self.theta = 1. / (1 - rho)
+        self.theta = 1. / (1. - rho)
 
     def pdf(self, uv):
         uv = to2d(uv)
@@ -200,9 +199,9 @@ class GumbelCopula(Copula):
         expsum = np.power(xy, theta).sum(axis=1)
         exppow = np.power(expsum, 1. / theta)
         F = np.exp(-exppow)
-        return F * (exppow + theta - 1) * np.power(expsum, 1 / theta - 2)\
-            * np.power(xy.prod(axis=1), theta - 1)\
-            * 1 / uv.prod(axis=1)
+        return F * (exppow + theta - 1.) * np.power(expsum, 1. / theta - 2.)\
+            * np.power(xy.prod(axis=1), theta - 1.)\
+            * 1. / uv.prod(axis=1)
 
     def conditional_density(self, ucond, v):
         x = -np.log(ucond)
@@ -210,7 +209,7 @@ class GumbelCopula(Copula):
         theta = self.theta
         e1 = np.exp(-np.power(np.power(x, theta)
                               + np.power(y, theta), 1. / theta))
-        e2 = np.power(1 + np.power(y / x, theta), 1. / theta - 1)
+        e2 = np.power(1. + np.power(y / x, theta), 1. / theta - 1.)
         return 1. / ucond * e1 * e2
 
     def cdf(self, uv):
@@ -222,17 +221,17 @@ class GumbelCopula(Copula):
 
     def sample(self, nsamples):
         # Sample first variable
-        delta = 1. / nsamples / 2
-        u = np.linspace(delta, 1 - delta, nsamples)
+        delta = 1. / nsamples / 2.
+        u = np.linspace(delta, 1. - delta, nsamples)
         k1 = np.random.permutation(nsamples)
-        p = u[k1] + np.random.uniform(-delta / 2, delta / 2, size=nsamples)
+        p = u[k1] + np.random.uniform(-delta / 2., delta / 2., size=nsamples)
 
         # From cdf to exponential reduced var
         expu = -np.log(p)
 
         # Sample second variable
         k2 = np.random.permutation(nsamples)
-        q = u[k2] + np.random.uniform(-delta / 2, delta / 2, size=nsamples)
+        q = u[k2] + np.random.uniform(-delta / 2., delta / 2., size=nsamples)
 
         # solve for z in z+(m-1)*log(z) = x+(m-1)*log(x)+log(q)
         # See joe (2014), equation 4.15 page 172
@@ -265,33 +264,33 @@ class ClaytonCopula(Copula):
             + f"{self.rho_max}], got {rho}."
         assert rho >= self.rho_min and rho <= self.rho_max, errmsg
         self._rho = rho
-        self.theta = 2 * rho/(1 - rho)
+        self.theta = 2. * rho/(1. - rho)
 
     def pdf(self, uv):
         uv = to2d(uv)
         theta = self.theta
-        expsum = np.power(uv, -theta).sum(axis=1) - 1
+        expsum = np.power(uv, -theta).sum(axis=1) - 1.
         return (1 + theta)\
-            * np.power(uv.prod(axis=1), -theta - 1) \
-            * np.power(expsum, -2 - 1. / theta)
+            * np.power(uv.prod(axis=1), -theta - 1.) \
+            * np.power(expsum, -2. - 1. / theta)
 
     def conditional_density(self, ucond, v):
         theta = self.theta
         # see Joe (2014), eq 4.10 page 168
         return np.power(1 + np.power(ucond, theta)
-                        * (np.power(v, -theta) - 1), -1 - 1. / theta)
+                        * (np.power(v, -theta) - 1.), -1. - 1. / theta)
 
     def cdf(self, uv):
         uv = to2d(uv)
         theta = self.theta
-        expsum = np.power(uv, -theta).sum(axis=1) - 1
+        expsum = np.power(uv, -theta).sum(axis=1) - 1.
         return np.power(expsum, -1. / theta)
 
     def ppf_conditional(self, ucond, q):
         theta = self.theta
         # see Joe (2014), eq 4.10 page 168
-        bb = np.power(q, -theta / (1 + theta)) - 1
-        cc = bb*np.power(ucond, -theta) + 1
+        bb = np.power(q, -theta / (1. + theta)) - 1.
+        cc = bb*np.power(ucond, -theta) + 1.
         return np.power(cc, -1. / theta)
 
 
@@ -299,7 +298,6 @@ class FrankCopula(Copula):
     def __init__(self):
         super(FrankCopula, self).__init__("Frank")
         self.theta = np.nan
-        self.rho_max = 0.9
 
     @Copula.rho.setter
     def rho(self, val):
@@ -308,15 +306,15 @@ class FrankCopula(Copula):
         errmsg = f"Expected rho in [{RHO_LOWER}, {RHO_UPPER}], got {rho}."
         assert rho >= RHO_LOWER and rho <= RHO_UPPER, errmsg
         self._rho = rho
-        self.theta = 2 * rho / (1 - rho)
+        self.theta = 2. * rho / (1. - rho)
 
     def pdf(self, uv):
         uv = to2d(uv)
         theta = self.theta
         x = np.exp(-theta * uv[:, 0])
         y = np.exp(-theta * uv[:, 1])
-        w = 1 - math.exp(-theta)
-        z = w - (1 - x) * (1 - y)
+        w = 1. - math.exp(-theta)
+        z = w - (1. - x) * (1 - y)
         return theta * w * x * y / z / z
 
     def conditional_density(self, ucond, v):

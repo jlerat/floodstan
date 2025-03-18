@@ -1,0 +1,132 @@
+real sign(real x) {
+    return x < 0 ? -1. : x > 0 ? 1. : 0;
+}
+
+// Using transition from Pearson3 to Normal
+real logpearson3_norm2pearson_transition() {
+    return 1e-3;
+}
+
+real logpearson3_lpdf_linear_transition() {
+    return 1e-3;
+}
+
+// Compute x such that gamminc(alpha, x) ~ 1e-50
+// using piecewise quadratic functions.
+// This is used to extend logpearson 3 distribution
+// close to support boundaries
+// 
+real logpearson3_lcdf_linear_transition(real abs_g) {
+    int N = 11;
+    row_vector[11] a = [0.0,5717.187,1908.359,590.074,168.443,37.450,
+                                        -7.107,-23.774,-27.055,0.0,0.0];
+    row_vector[11] b = [-199.246,-313.590,-184.958,-106.884,-61.847,-36.176,
+                                        -19.896,-8.719,-4.750,-0.0,0.0];
+    row_vector[11] c = [12.513,13.085,11.999,10.843,9.641,8.383,
+                                        6.896,5.022,3.824,-39.144,-39.144];
+    row_vector[12] g_bounds = [0.0,0.010,0.017,0.030,0.054,0.098,
+                                        0.182,0.338,0.630,1.175,10.0,2.000];
+    if(abs_g < 0)
+        return not_a_number();
+
+    for(i in 1:N) {
+        if((abs_g >= g_bounds[i]) && (abs_g < g_bounds[i+1]))
+            return exp(a[i] * abs_g * abs_g + b[i] * abs_g + c[i]);
+    } 
+    real gup = g_bounds[N+1];
+    return exp(a[N] * gup * gup + b[N] * gup + c[N]);
+}
+
+
+real logpearson3_lpdf(vector y, real m, real s, real g) {
+    int N = rows(y);
+
+    real n2p_trans = logpearson3_norm2pearson_transition(); 
+
+    real abs_g = abs(g);
+    real sign_g = sign(g);
+   
+    if(abs_g < n2p_trans) {
+        return normal_lpdf(log(y) | m, s);
+
+    } else {
+        // Original LogPearson3 parameterisation
+        real alpha = 4 / g / g;
+        real beta = 2 / g / s;
+        real abs_beta = abs(beta);
+        real log_s = log(s);
+        real log_beta = log(2) - log(abs_g) - log_s;
+        real tau = m - alpha / beta;
+
+        real u;
+        real ly;
+        real lpdf_sum = 0;
+
+        //real lin_trans = logpearson3_lpdf_linear_transition();
+        //real f0 = gamma_lpdf(lin_trans | alpha, 1.);
+        //real df0 = (alpha - 1.) / lin_trans - 1.;
+
+        for(i in 1:N) {
+            ly = log(y[i]);
+            u = beta * (ly - tau);
+            
+            lpdf_sum += gamma_lpdf(u | alpha, 1.);
+
+            //if(u > lin_trans) {
+            //    lpdf_sum += gamma_lpdf(u | alpha, 1.);
+            //} else {
+            //    lpdf_sum += f0 + df0 * (u - lin_trans);
+            //}
+
+            lpdf_sum += log_beta - ly;
+        }
+        return lpdf_sum;
+    }
+}
+
+real logpearson3_lcdf(real y, real m, real s, real g){
+   
+    real abs_g = abs(g);
+    real sign_g = sign(g);
+    
+    real n2p_trans = logpearson3_norm2pearson_transition(); 
+
+    if (abs_g < n2p_trans) {
+      return normal_lcdf(log(y) | m, s);
+
+    } else {
+      // Original LogPearson3 parameterisation
+      real alpha = 4 / g / g;
+      real beta = 2 / g / s;
+      real abs_beta = abs(beta);
+      real tau = m - alpha / beta;
+      
+      //real lin_trans = logpearson3_lcdf_linear_transition(abs_g);
+      //real f0 = gamma_lcdf(lin_trans | alpha, 1.);
+      //real ldf0 = gamma_lpdf(lin_trans | alpha, 1.) - f0;
+      //real df0 = exp(ldf0);
+
+      real lcdf;
+      real u = beta * (log(y) - tau);
+      
+      lcdf = gamma_lcdf(u | alpha, 1.);
+      // cdf = gamma_cdf(u | alpha, 1.);
+
+      //if(u > lin_trans) {
+      //  lcdf = gamma_lcdf(u | alpha, 1.);
+      //} else {
+      //  lcdf = f0 + df0 * (u - lin_trans);
+      //}
+
+      if(beta < 0)
+          lcdf = log1m(lcdf);
+      
+      return lcdf;
+    }
+}
+
+// Log Pearson 3 
+real logpearson3_cdf(real y, real m, real s, real g) {
+    return exp(logpearson3_lcdf(y | m, s, g));
+}
+

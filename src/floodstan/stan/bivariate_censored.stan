@@ -10,8 +10,10 @@
 *   - 2=LogNormal
 *   - 3=GEV
 *   - 4=LogPearson3
-*   - 5=LogPearson3
+*   - 5=Normal
 *   - 6=Generalized Pareto
+*   - 7=Generalized Logistic
+*   - 8=Gamma
 *
 *  Copula codes:
 *   - 1=Gumbel
@@ -25,7 +27,6 @@
 *
 **/
 
-
 functions {
 
     #include marginal.stanfunctions
@@ -33,11 +34,8 @@ functions {
 
 }
 
-
 data {
   // Defines marginal distributions
-  // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal, 6=Gen Pareto
-  // 7=Gen Logistic, 8=Gamma
   int<lower=1, upper=8> ymarginal; 
   int<lower=1, upper=8> zmarginal; 
 
@@ -68,9 +66,11 @@ data {
   array[Ncases[2,3]] int<lower=1, upper=N> i23;
 
   // Prior parameters
+  real<lower=-1e10> locn_lower;
+  real<lower=locn_lower, upper=1e10> locn_upper;
   vector[2] ylocn_prior;
   
-  real<lower=-10> logscale_lower;
+  real<lower=-20> logscale_lower;
   real<lower=logscale_lower, upper=20> logscale_upper;
   vector[2] ylogscale_prior;
   
@@ -93,18 +93,31 @@ data {
 }
 
 parameters {
+  //// Parameter for observed streamflow
+  //real<lower=locn_lower, upper=locn_upper> ylocn; 
+  //real<lower=logscale_lower, upper=logscale_upper> ylogscale;
+  //real<lower=shape1_lower, upper=shape1_upper> yshape1;
+
+  //// Parameter for covariate
+  //real<lower=locn_lower, upper=locn_upper> zlocn; 
+  //real<lower=logscale_lower, upper=logscale_upper> zlogscale;
+  //real<lower=shape1_lower, upper=shape1_upper> zshape1;
+
+  //// Parameter for copula correlation
+  //real<lower=rho_lower, upper=rho_upper> rho;
+
   // Parameter for observed streamflow
   real ylocn; 
-  real<lower=logscale_lower, upper=logscale_upper> ylogscale;
-  real<lower=shape1_lower, upper=shape1_upper> yshape1;
+  real ylogscale;
+  real yshape1;
 
   // Parameter for covariate
   real zlocn; 
-  real<lower=logscale_lower, upper=logscale_upper> zlogscale;
-  real<lower=shape1_lower, upper=shape1_upper> zshape1;
+  real zlogscale;
+  real zshape1;
 
   // Parameter for copula correlation
-  real<lower=rho_lower, upper=rho_upper> rho;
+  real rho;
 }  
 
 
@@ -121,20 +134,20 @@ transformed parameters {
   // Reduced variable for y and z
   matrix[N, 2] uv;
   
-  // .. cases with y observed
-  for(i in 1:Ncases[1, 1])
+  // .. cases with y and z observed
+  for(i in 1:Ncases[1, 1]) {
     uv[i11[i], 1] = marginal_cdf(y[i11[i]] | ymarginal, ylocn, yscale, yshape1);
+    uv[i11[i], 2] = marginal_cdf(z[i11[i]] | zmarginal, zlocn, zscale, zshape1);
+  }
 
+  // .. cases with y observed only
   for(i in 1:Ncases[1, 2])
     uv[i12[i], 1] = marginal_cdf(y[i12[i]] | ymarginal, ylocn, yscale, yshape1);
   
   for(i in 1:Ncases[1, 3])
     uv[i13[i], 1] = marginal_cdf(y[i13[i]] | ymarginal, ylocn, yscale, yshape1);
 
-  // .. cases with z observed
-  for(i in 1:Ncases[1, 1])
-    uv[i11[i], 2] = marginal_cdf(z[i11[i]] | zmarginal, zlocn, zscale, zshape1);
-
+  // .. cases with z observed only
   for(i in 1:Ncases[2, 1])
     uv[i21[i], 2] = marginal_cdf(z[i21[i]] | zmarginal, zlocn, zscale, zshape1);
 
@@ -145,11 +158,11 @@ transformed parameters {
 
 model {
   // --- Priors --
-  ylocn ~ normal(ylocn_prior[1], ylocn_prior[2]);
+  ylocn ~ normal(ylocn_prior[1], ylocn_prior[2]) T[locn_lower, locn_upper];
   ylogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]) T[logscale_lower, logscale_upper];
   yshape1 ~ normal(yshape1_prior[1], yshape1_prior[2]) T[shape1_lower, shape1_upper];
 
-  zlocn ~ normal(ylocn_prior[1], ylocn_prior[2]);
+  zlocn ~ normal(ylocn_prior[1], ylocn_prior[2]) T[locn_lower, locn_upper];
   zlogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]) T[logscale_lower, logscale_upper];
   zshape1 ~ normal(zshape1_prior[1], zshape1_prior[2]) T[shape1_lower, shape1_upper];
 
@@ -183,12 +196,14 @@ model {
 
   // Case 22 : both y and z censored. Copulas cdf times 
   // the number of occurences for 22
-  target += Ncases[2,2]*copula_lcdf(uvcensors | copula, rho);
+  if(Ncases[2, 2] > 0)
+     target += Ncases[2, 2]*copula_lcdf(uvcensors | copula, rho);
 
   // Case 32 : y is missing and z is censored 
   // this a marginal cdf for z reduced variable times
   // the number of occurences for 32
-  target += Ncases[3,2]*marginal_lcdf(zcensor | zmarginal, zlocn, zscale, zshape1);
+  if(Ncases[3, 2] > 0)
+     target += Ncases[3, 2] * marginal_lcdf(zcensor | zmarginal, zlocn, zscale, zshape1);
   
   // Case 13 : y is obs, z is missing
   // this is marginal pdf for y (analogous to case 31)
@@ -196,7 +211,8 @@ model {
 
   // Case 23 : y is cens, z is missing
   // this is marginal cdf for y (analogous to case 32)
-  target += Ncases[2,3]*marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
+  if(Ncases[2, 3] > 0)
+     target += Ncases[2, 3] * marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
 }
 
 

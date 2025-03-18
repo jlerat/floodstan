@@ -46,9 +46,12 @@ def process_stan_diagnostic(diag):
         line = line[0]
         if re.search("satisfactory|No divergent", line):
             stan_status[nelem] = "satisfactory"
+            if delem == "divergence":
+                stan_status[f"{nelem}_proportion"] = 0.
         else:
             if delem == "divergence":
                 prop_div = float(re.sub(".*\\(|%\\).*", "", line))
+                stan_status[f"{nelem}_proportion"] = prop_div
                 if prop_div < 5:
                     stan_status[nelem] = "satisfactory"
                 else:
@@ -154,9 +157,13 @@ def ams_report(marginal, params=None, observed=None,
     # Loop through parameters
     for iparams, (_, p) in enumerate(params.iterrows()):
         # .. set parameters
-        marginal.locn = p[params_columns["locn"]]
-        marginal.logscale = p[params_columns["logscale"]]
-        marginal.shape1 = p[params_columns["shape1"]]
+        try:
+            marginal.locn = p[params_columns["locn"]]
+            marginal.logscale = p[params_columns["logscale"]]
+            if marginal.has_shape:
+                marginal.shape1 = p[params_columns["shape1"]]
+        except ValueError:
+            continue
 
         # .. compute design streamflow
         toset[iparams, :ndesign] = marginal.ppf(design_cdf)
