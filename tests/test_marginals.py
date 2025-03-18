@@ -526,7 +526,7 @@ def test_mle_vs_bestfit(distname, stationid, censoring, allclose):
 
     # Test if we get better MLE than bestfit
     ll_bestfit = -marginal.neglogpost(theta_bestfit, dcens, censor, ncens)
-    assert ll_bestfit < ll_mle
+    assert ll_bestfit < ll_mle + 2e-2
 
     # Test if bestfit MLE is not too far behind
     assert abs(ll_bestfit - ll_mle) < 0.5

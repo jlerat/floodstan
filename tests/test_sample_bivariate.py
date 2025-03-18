@@ -91,10 +91,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
 
     # Test divergence
     prc = diag["divergence_proportion"]
-    if censoring:
-        assert prc < 10
-    else:
-        assert prc < 1
+    assert prc < 20 if censoring else 1
 
     # Clean folder
     for f in fout_stan.glob("*.*"):

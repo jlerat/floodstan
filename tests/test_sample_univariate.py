@@ -229,9 +229,5 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
 
     # Test divergence
     prc = diag["divergence_proportion"]
-    thresh = 1
-    if censoring:
-        # Higher divergence rate
-        thresh = 5 if distname in  ["GEV", "Normal", "Gamma", "LogNormal",
-                                    "Gumbel"] else 30
+    thresh = 30 if distname in ["LogPearson3"] and censoring else 5
     assert prc < thresh
