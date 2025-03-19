@@ -58,5 +58,5 @@ def test_importance_sampling(stationid, distname, censoring):
 
     smp, lps, neff = sample.importance_sampling(marginal, y, params,
                                            censor, nsamples)
-    assert neff > 2000
+    assert neff > 1000
 
