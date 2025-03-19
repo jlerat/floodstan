@@ -3,7 +3,7 @@ import re
 import os
 import warnings
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 import cmdstanpy
 
@@ -18,6 +18,8 @@ NCHAINS_DEFAULT = 10
 NWARM_DEFAULT = 10000
 SEED_DEFAULT = 5446
 
+# Possible method invoked
+STAN_METHODS = ["mcmc", "variational", "laplace", "optimize"]
 
 # on Windows specifically, we should point cmdstanpy to the repackaged
 # CmdStan if it exists. This lets cmdstanpy handle the TBB path for us.
@@ -26,7 +28,7 @@ if local_cmdstan.exists():
     cmdstanpy.set_cmdstan_path(str(local_cmdstan.resolve()))
 
 
-def load_stan_model(name: str) -> Callable:
+def load_stan_model(name: str, method: Optional[str] = "mcmc") -> Callable:
     """
     Try to load precompiled Stan models. If that fails,
     compile them.
@@ -39,6 +41,11 @@ def load_stan_model(name: str) -> Callable:
 
     # Add exe suffix if we are running on windows
     suffix = ".exe" if os.name == "nt" else ""
+
+    if not method in STAN_METHODS:
+        errmess = f"Expected method in '{'/'.join(STAN_METHODS)}'"\
+                  + f", got {method}."
+        raise ValueError(errmesS)
 
     try:
         model = cmdstanpy.CmdStanModel(
@@ -62,7 +69,8 @@ def load_stan_model(name: str) -> Callable:
             pass
 
     def fun(*args, **kwargs):
-        kwargs["show_progress"] = kwargs.get("show_progress", False)
+        if method == "mcmc":
+            kwargs["show_progress"] = kwargs.get("show_progress", False)
 
         if "data" not in kwargs:
             errmess = "Expected data argument"
@@ -88,21 +96,45 @@ def load_stan_model(name: str) -> Callable:
                 raise ValueError(errmess)
 
             # .. set defaults as per package variables
-            kwargs["chains"] = kwargs.get("chains", NCHAINS_DEFAULT)
             kwargs["seed"] = kwargs.get("seed", SEED_DEFAULT)
-            kwargs["iter_warmup"] = kwargs.get("iter_warmup", NWARM_DEFAULT)
-            its = kwargs.get("iter_sampling",
+
+            if method == "mcmc":
+                kwargs["chains"] = kwargs.get("chains", NCHAINS_DEFAULT)
+                kwargs["iter_warmup"] = kwargs.get("iter_warmup", NWARM_DEFAULT)
+
+                its = kwargs.get("iter_sampling",
                              NSAMPLES_DEFAULT//NCHAINS_DEFAULT)
-            kwargs["iter_sampling"] = its
+                kwargs["iter_sampling"] = its
+
+            elif method == "variational":
+                its = kwargs.get("iter_sampling", NSAMPLES_DEFAULT)
+                kwargs.pop("iter_sampling")
+                kwargs["output_samples"] = its
+
+            elif method == "laplace":
+                its = kwargs.get("iter_sampling", NSAMPLES_DEFAULT)
+                kwargs.pop("iter_sampling")
+                kwargs["draws"] = its
 
             # Check inits is of the right size
             ninits = len(kwargs["inits"])
             if ninits != 1 and not isinstance(kwargs["inits"], dict):
-                if ninits != kwargs["chains"]:
-                    nchains = kwargs["chains"]
-                    errmess = f"Expected 1 or {nchains} initial "\
-                              + f"parameter sets, got {ninits}."
-                    raise ValueError(errmess)
+                if method in ["variational", "laplace", "optimize"]:
+                    if ninits != 1:
+                        errmess = f"Expected 1 initial "\
+                                  + f"parameter sets, got {ninits}."
+                        raise ValueError(errmess)
+                else:
+                    if ninits != kwargs["chains"]:
+                        nchains = kwargs["chains"]
+                        errmess = f"Expected 1 or {nchains} initial "\
+                                  + f"parameter sets, got {ninits}."
+                        raise ValueError(errmess)
+
+            if method == "laplace":
+                inits = kwargs["inits"]
+                kwargs.pop("inits")
+                kwargs["opt_args"] = {"inits": inits}
 
         if "output_dir" in kwargs:
             fout = Path(kwargs["output_dir"])
@@ -112,11 +144,19 @@ def load_stan_model(name: str) -> Callable:
 
         # the function returns the sample function only,
         # not the full stan model object
-        smp = model.sample(**kwargs)
         if is_test:
             # .. simplify return for tests
+            smp = model.sample(**kwargs)
             return smp.draws_pd().squeeze()
         else:
+            if method == "mcmc":
+                smp = model.sample(**kwargs)
+            elif method == "variational":
+                smp = model.variational(**kwargs)
+            elif method == "laplace":
+                smp = model.laplace_sample(**kwargs)
+            elif method == "optimize":
+                smp = model.optimize(**kwargs)
             return smp
 
     return fun

@@ -32,8 +32,8 @@ LOCN_UPPER = 1e10
 LOGSCALE_LOWER = -20
 LOGSCALE_UPPER = 20
 
-SHAPE1_LOWER = -2.0
-SHAPE1_UPPER = 2.0
+SHAPE1_LOWER = -3.0
+SHAPE1_UPPER = 3.0
 
 SHAPE1_PRIOR_LOC_DEFAULT = 0.
 
@@ -85,16 +85,6 @@ def _comb(n, i):
         return n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)*(n-6)*(n-7)/40320
 
 
-def _prepare_censored_data(data, low_censor):
-    data = np.array(data)
-    low_censor = -1e10 if low_censor is None else float(low_censor)
-    dcens = data[data > low_censor]
-    if len(dcens) < 5:
-        errmess = "Expected at least 5 uncensored values"
-        raise ValueError(errmess)
-    return dcens, len(data)-len(dcens)
-
-
 def _check_param_value(x, lower=-np.inf, upper=np.inf, name=None):
     name = "" if name is None else f"{name} "
     errmess = f"Invalid value for parameter {name}'{x}'."
@@ -114,6 +104,17 @@ def _check_param_value(x, lower=-np.inf, upper=np.inf, name=None):
         raise ValueError(errmess)
 
     return x
+
+
+def prepare_censored_data(data, low_censor):
+    data = np.array(data)
+    low_censor = -1e10 if low_censor is None else float(low_censor)
+    dcens = data[data > low_censor]
+    if len(dcens) < 5:
+        errmess = "Expected at least 5 uncensored values"
+        raise ValueError(errmess)
+    return dcens, len(data)-len(dcens)
+
 
 
 def lh_moments(data, eta=0, compute_lam4=True):
@@ -308,7 +309,13 @@ class FloodFreqDistribution():
             errmess = "Expected 3 parameters, got {len(theta)}."
             raise ValueError(errmess)
 
-        locn, logscale, shape1 = value
+        if isinstance(value, dict):
+            locn = value.get("locn", np.nan)
+            logscale = value.get("logscale", np.nan)
+            shape1 = value.get("shape1", np.nan)
+        else:
+            locn, logscale, shape1 = value
+
         self.locn = locn
         self.logscale = logscale
         if self.has_shape:
@@ -422,7 +429,7 @@ class FloodFreqDistribution():
                                    nexplore=5000,
                                    explore_scale=0.2):
         # Prepare data
-        dcens, ncens = _prepare_censored_data(data, low_censor)
+        dcens, ncens = prepare_censored_data(data, low_censor)
 
         # Initial parameter exploration
         # random perturb guesses parameters in
@@ -444,24 +451,30 @@ class FloodFreqDistribution():
                 nlp_min = nlp
 
         # Nelder-Mead fit
-        options = dict(xatol=1e-5, fatol=1e-5,
-                       maxiter=10000, maxfev=50000)
+        options = dict(maxiter=10000)
         theta0 = theta0[:2] if not self.has_shape else theta0
         opt = minimize(self.neglogpost, theta0,
                        args=(dcens, low_censor, ncens),
-                       method="Nelder-Mead",
-                       options=options)
+                       method="BFGS")
+
         self.locn = opt.x[0]
         self.logscale = opt.x[1]
         if self.has_shape:
             self.shape1 = opt.x[2]
 
-        if not opt.success:
+        if opt.success != 0:
             warnmess = "Nelder-Mead optimisation did not converge."\
                        + f"Message: {opt.message}."
             warnings.warn(warnmess)
 
-        return -opt.fun, self.params, dcens, ncens
+        # Parameters hessian (noted H)
+        # -> Laplace approx: pdf = sqrt(D) / 2pi exp(-1/2 d^T H d)
+        # d = theta - theta0
+        # D = det(H)
+        # See https://james-brennan.github.io/posts/laplace_approximation/
+        cov = np.linalg.inv(opt.hess_inv)
+
+        return -opt.fun, opt.x, dcens, ncens, cov
 
 
 class Normal(FloodFreqDistribution):
@@ -657,10 +670,11 @@ class LogPearson3(FloodFreqDistribution):
 
     @property
     def support(self):
+        x0 = math.exp(max(-100, min(100, self.tau)))
         if self.beta < 0:
-            return [0, math.exp(max(-100, min(100, self.tau)))]
+            return [0, x0]
         else:
-            return [math.exp(max(-100, min(100, self.tau))), np.inf]
+            return [x0, np.inf]
 
     def pdf(self, x):
         kw = self.get_scipy_params()

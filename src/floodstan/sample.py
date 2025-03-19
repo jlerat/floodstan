@@ -11,9 +11,9 @@ from floodstan import marginals
 from floodstan import NCHAINS_DEFAULT
 
 from floodstan.copulas import COPULA_NAMES
-from floodstan.copulas import factory
-
 from floodstan.marginals import MARGINAL_NAMES
+from floodstan.copulas import factory
+from floodstan.marginals import prepare_censored_data
 
 MARGINAL_CODES = {code: name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code: name for name, code in COPULA_NAMES.items()}
@@ -118,7 +118,6 @@ def are_marginal_params_valid(dist, locn, logscale, shape1, data, censor):
 
 def bootstrap(marginal, data, fit_method="params_guess",
               nboot=10000, eta=0):
-
     expected = ["fit_lh_moments", "params_guess"]
     if fit_method not in expected:
         errmess = f"Expected fit_method in [{'/'.join(expected)}]."
@@ -146,6 +145,54 @@ def bootstrap(marginal, data, fit_method="params_guess",
         boots.loc[i, :] = marginal.params
 
     return boots
+
+
+def importance_sampling(marginal, data, params, censor=-np.inf,
+                        nsamples=10000):
+    """ See
+    Smith, A. F. M., & Gelfand, A. E. (1992).
+    Bayesian Statistics without Tears: A Sampling-Resampling Perspective.
+    The American Statistician, 46(2), 84–88. https://doi.org/10.2307/2684170
+    """
+    dcens, ncens = prepare_censored_data(data, censor)
+    params = np.array(params)
+    nparams = len(params)
+
+    niter_max = 5
+    neff_factor = 0.9
+    neff_min = 5
+
+    for niter in range(3):
+        # Compute log posteriors
+        logposts = np.zeros(len(params))
+        for i, param in enumerate(params):
+            lp = -marginal.neglogpost(param, dcens, censor, ncens)
+            logposts[i] = -1e100 if np.isnan(lp) or not np.isfinite(lp) else lp
+
+        # Resample
+        lp_max = np.nanmax(logposts)
+        weights = np.exp(logposts - lp_max)
+        weights /= weights.sum()
+        neff = 1./ (weights**2).sum()
+
+        if neff < neff_min:
+            errmess = f"Effective sample size < {neff_min} ({neff})."
+            raise ValueError(errmesS)
+
+        k = np.random.choice(np.arange(len(weights)), size=nsamples, p=weights)
+        samples = params[k]
+        logposts = logposts[k]
+
+        if niter == 0:
+            mean = samples.mean(axis=0)
+            cov = np.cov(samples.T)
+            params = np.random.multivariate_normal(mean=mean, cov=cov,
+                                                   size=nsamples)
+
+        if neff > neff_factor * nsamples:
+            break
+
+    return samples, logposts, neff
 
 
 class StanSamplingVariable():

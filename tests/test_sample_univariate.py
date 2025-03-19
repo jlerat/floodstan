@@ -23,6 +23,7 @@ from tqdm import tqdm
 from floodstan import marginals, sample, copulas
 from floodstan import report
 from floodstan import univariate_censored_sampling
+from floodstan import load_stan_model
 
 from tqdm import tqdm
 
@@ -231,3 +232,44 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
     prc = diag["divergence_proportion"]
     thresh = 30 if distname in ["LogPearson3"] and censoring else 5
     assert prc < thresh
+
+
+def test_logpearson3_divergence(allclose):
+    fd = FTESTS / "data" / "LogPearson3_divergence_test.csv"
+    y = pd.read_csv(fd).squeeze()
+    censor = np.percentile(y, 30)
+
+    marginal = marginals.factory("LogPearson3")
+
+    # Set very wide prior scale to get max likelihood
+    marginals.SHAPE1_PRIOR_SCALE_MAX = 1e100
+    marginal.shape1_prior_scale = 1e100
+    f, theta_mle, dcens, ncens, cov = \
+        marginal.maximum_posterior_estimate(y, low_censor=censor)
+
+    ## Set STAN
+    #stan_nwarm = 10000
+    #stan_nsamples = 5000
+    #stan_nchains = 5
+
+    #sv = sample.StanSamplingVariable(y, "LogPearson3", censor,
+    #                                 ninits=stan_nchains)
+    #stan_data = sv.to_dict()
+    #stan_inits = sv.initial_parameters
+
+    ## Clean output folder
+    #fout = FTESTS / "sampling" / "logpearson3_divergence_test"
+    #fout.mkdir(parents=True, exist_ok=True)
+    #for f in fout.glob("*.*"):
+    #    f.unlink()
+
+    #smp = univariate_censored_sampling(data=stan_data,
+    #                                   chains=stan_nchains,
+    #                                   seed=SEED,
+    #                                   iter_warmup=stan_nwarm,
+    #                                   iter_sampling=stan_nsamples // stan_nchains,
+    #                                   inits=stan_inits,
+    #                                   output_dir=fout)
+    #df = smp.draws_pd()
+    #diag = report.process_stan_diagnostic(smp.diagnose())
+

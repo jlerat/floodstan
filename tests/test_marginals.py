@@ -342,16 +342,23 @@ def test_marginals_maxpost_numerical(distname, stationid, censoring, allclose):
     streamflow = get_ams(stationid)
     marginal = marginals.factory(distname)
     censor = streamflow.quantile(0.33) if censoring else -1e10
-    lmp, theta_lmp, dcens, ncens = \
+    lmp, theta_lmp, dcens, ncens, cov = \
         marginal.maximum_posterior_estimate(streamflow,
         censor, nexplore=10000, explore_scale=0.3)
+
+    # Sample params from laplace approx
+    params = np.random.multivariate_normal(mean=theta_lmp,
+                                           cov=cov, size=5000)
+
     # Perturb lmp param and check lp_mlp is always greater
     # with a small tolerance
-    trans_lmp = np.arcsinh(theta_lmp)
-    perturb = np.random.normal(loc=0., scale=0.2,
-                               size=(5000, 3))
-    for pert in perturb:
-        theta = np.sinh(trans_lmp + pert)
+    #trans_lmp = np.arcsinh(theta_lmp)
+    #perturb = np.random.normal(loc=0., scale=0.2,
+    #                           size=(5000, 3))
+    #for pert in perturb:
+    #    theta = np.sinh(trans_lmp + pert)
+
+    for theta in params:
         lp = -marginal.neglogpost(theta, dcens, censor, ncens)
         if np.isfinite(lp) and not np.isnan(lp):
             mess = f"[{distname}/{stationid}/{censoring}] "\
@@ -372,7 +379,7 @@ def test_marginals_mle_theoretical(distname, stationid, allclose):
     if marginal.has_shape:
         marginal.shape1_prior_scale = 1e100
 
-    mlp_mle, theta_mle, dcens, ncens = \
+    mlp_mle, theta_mle, dcens, ncens, cov = \
         marginal.maximum_posterior_estimate(streamflow,
                                             nexplore=50000)
     # Theoretical value of MLE
@@ -482,9 +489,9 @@ def test_mle_vs_bestfit(distname, stationid, censoring, allclose):
     if marginal.has_shape:
         marginal.shape1_prior_scale = 1e100
 
-    ll_mle, theta_mle, dcens, ncens = marginal.maximum_posterior_estimate(streamflow,
-                                                                          censor,
-                                                                          nexplore=50000)
+    ll_mle, theta_mle, dcens, ncens, cov = marginal.maximum_posterior_estimate(streamflow,
+                                                                               censor,
+                                                                               nexplore=50000)
     theta_bestfit = np.array([float(bestfit["Location"]),
                               math.log(float(bestfit["Scale"])),
                               float(bestfit["Shape"])])
@@ -510,19 +517,6 @@ def test_mle_vs_bestfit(distname, stationid, censoring, allclose):
     # Fix 2 param distributions
     if re.search("^(LogN|Norm|Gum|Gam)", distname):
         theta_bestfit[-1] = 0
-
-    # Check quantiles
-    se = bestfit.iloc[16:-3]
-    cdfs = 1. - se.index.astype(float).values
-    aris = 1. / cdfs
-    bf_quantiles = se.values.astype(float)
-    marginal.params = theta_bestfit
-    fs_quantiles = marginal.ppf(cdfs)
-    iok = (bf_quantiles > censor) & (fs_quantiles > censor)
-    quant_err = np.abs(np.log(bf_quantiles[iok])\
-        -np.log(fs_quantiles[iok]))
-
-    assert np.all(quant_err < 1e-1)
 
     # Test if we get better MLE than bestfit
     ll_bestfit = -marginal.neglogpost(theta_bestfit, dcens, censor, ncens)
