@@ -121,6 +121,9 @@ class GaussianCopula(Copula):
         # rho max reduced to pass conditional density tests
         self.rho_max = 0.92
 
+        # rho max reduced to pass conditional density tests
+        self.rho_max = 0.92
+
     def _transform(self, uv):
         uv = to2d(uv)
         pq = norm.ppf(uv)

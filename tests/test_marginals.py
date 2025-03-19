@@ -524,4 +524,3 @@ def test_mle_vs_bestfit(distname, stationid, censoring, allclose):
 
     # Test if bestfit MLE is not too far behind
     assert abs(ll_bestfit - ll_mle) < 1.0
-
