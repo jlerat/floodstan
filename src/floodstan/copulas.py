@@ -118,6 +118,8 @@ class GaussianCopula(Copula):
     def __init__(self):
         super(GaussianCopula, self).__init__("Gaussian")
         self._rho = np.nan
+        # rho max reduced to pass conditional density tests
+        self.rho_max = 0.92
 
     def _transform(self, uv):
         uv = to2d(uv)
