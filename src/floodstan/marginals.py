@@ -116,7 +116,6 @@ def prepare_censored_data(data, low_censor):
     return dcens, len(data)-len(dcens)
 
 
-
 def lh_moments(data, eta=0, compute_lam4=True):
     """Compute LH moments as per Wang et al. (1997).
 
@@ -455,7 +454,7 @@ class FloodFreqDistribution():
         theta0 = theta0[:2] if not self.has_shape else theta0
         opt = minimize(self.neglogpost, theta0,
                        args=(dcens, low_censor, ncens),
-                       method="BFGS")
+                       options=options, method="BFGS")
 
         self.locn = opt.x[0]
         self.logscale = opt.x[1]

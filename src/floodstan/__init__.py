@@ -42,10 +42,10 @@ def load_stan_model(name: str, method: Optional[str] = "mcmc") -> Callable:
     # Add exe suffix if we are running on windows
     suffix = ".exe" if os.name == "nt" else ""
 
-    if not method in STAN_METHODS:
+    if method not in STAN_METHODS:
         errmess = f"Expected method in '{'/'.join(STAN_METHODS)}'"\
                   + f", got {method}."
-        raise ValueError(errmesS)
+        raise ValueError(errmess)
 
     try:
         model = cmdstanpy.CmdStanModel(
@@ -100,10 +100,11 @@ def load_stan_model(name: str, method: Optional[str] = "mcmc") -> Callable:
 
             if method == "mcmc":
                 kwargs["chains"] = kwargs.get("chains", NCHAINS_DEFAULT)
-                kwargs["iter_warmup"] = kwargs.get("iter_warmup", NWARM_DEFAULT)
+                kwargs["iter_warmup"] = kwargs.get("iter_warmup",
+                                                   NWARM_DEFAULT)
 
                 its = kwargs.get("iter_sampling",
-                             NSAMPLES_DEFAULT//NCHAINS_DEFAULT)
+                                 NSAMPLES_DEFAULT//NCHAINS_DEFAULT)
                 kwargs["iter_sampling"] = its
 
             elif method == "variational":
@@ -121,7 +122,7 @@ def load_stan_model(name: str, method: Optional[str] = "mcmc") -> Callable:
             if ninits != 1 and not isinstance(kwargs["inits"], dict):
                 if method in ["variational", "laplace", "optimize"]:
                     if ninits != 1:
-                        errmess = f"Expected 1 initial "\
+                        errmess = "Expected 1 initial "\
                                   + f"parameter sets, got {ninits}."
                         raise ValueError(errmess)
                 else:

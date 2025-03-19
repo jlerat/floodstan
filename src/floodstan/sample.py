@@ -156,13 +156,12 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
     """
     dcens, ncens = prepare_censored_data(data, censor)
     params = np.array(params)
-    nparams = len(params)
 
     niter_max = 5
     neff_factor = 0.9
     neff_min = 5
 
-    for niter in range(3):
+    for niter in range(niter_max):
         # Compute log posteriors
         logposts = np.zeros(len(params))
         for i, param in enumerate(params):
@@ -173,11 +172,11 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
         lp_max = np.nanmax(logposts)
         weights = np.exp(logposts - lp_max)
         weights /= weights.sum()
-        neff = 1./ (weights**2).sum()
+        neff = 1. / (weights**2).sum()
 
         if neff < neff_min:
             errmess = f"Effective sample size < {neff_min} ({neff})."
-            raise ValueError(errmesS)
+            raise ValueError(errmess)
 
         k = np.random.choice(np.arange(len(weights)), size=nsamples, p=weights)
         samples = params[k]
