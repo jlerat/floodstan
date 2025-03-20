@@ -12,6 +12,7 @@ from floodstan import NCHAINS_DEFAULT
 
 from floodstan.copulas import COPULA_NAMES
 from floodstan.marginals import MARGINAL_NAMES
+from floodstan.marginals import PARAMETERS
 from floodstan.copulas import factory
 from floodstan.marginals import prepare_censored_data
 
@@ -132,8 +133,7 @@ def bootstrap(marginal, data, fit_method="params_guess",
 
     # Prepare data
     boots = pd.DataFrame(np.nan, index=np.arange(nboot),
-                         columns=["locn", "logscale", "shape1"])
-
+                         columns=PARAMETERS)
     # Run bootstrap
     for i in range(nboot):
         resampled = np.random.choice(data, nval, replace=True)
@@ -168,7 +168,7 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
             lp = -marginal.neglogpost(param, dcens, censor, ncens)
             logposts[i] = -1e100 if np.isnan(lp) or not np.isfinite(lp) else lp
 
-        # Resample
+        # Compute rescaled pdf (normalized by lp_max to avoid underflow)
         lp_max = np.nanmax(logposts)
         weights = np.exp(logposts - lp_max)
         weights /= weights.sum()
@@ -190,6 +190,8 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
 
         if neff > neff_factor * nsamples:
             break
+
+    samples = pd.DataFrame(samples, columns=PARAMETERS)
 
     return samples, logposts, neff
 

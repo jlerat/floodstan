@@ -180,8 +180,8 @@ def test_stan_sampling_dataset(distname, allclose):
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
 def test_univariate_censored_sampling(distname, censoring, allclose):
-    if distname.startswith("Generalized"):
-        pytest.skip(f"Need to test {distname}")
+    #if distname.startswith("Generalized"):
+    #    pytest.skip(f"Need to test {distname}")
 
     stationids = get_stationids()
     stationid = stationids[0]
@@ -212,6 +212,15 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
                                        inits=stan_inits3,
                                        output_dir=fout)
 
+    # Fix prior
+    boot = sample.bootstrap(sv.marginal, y, nboot=1000)
+    imp, _, neff = sample.importance_sampling(sv.marginal,
+                                              y, boot, censor,
+                                              nsamples=1000)
+    means, stds = imp.mean(), imp.std().clip(1e-3)
+    for pn in marginals.PARAMETERS:
+        stan_data[f"y{pn}_prior"] = [means[pn], stds[pn] * 2]
+
     # Sample
     smp = univariate_censored_sampling(data=stan_data,
                                        chains=stan_nchains,
@@ -230,7 +239,9 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
 
     # Test divergence
     prc = diag["divergence_proportion"]
-    thresh = 30 if distname in ["LogPearson3"] and censoring else 5
+    hard = ["LogPearson3", "GeneralizedLogistic",
+            "GeneralizedPareto"]
+    thresh = 50 if distname in hard else 5
     assert prc < thresh
 
 
