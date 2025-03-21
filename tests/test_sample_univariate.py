@@ -22,12 +22,14 @@ from tqdm import tqdm
 
 from floodstan import marginals, sample, copulas
 from floodstan import report
+from floodstan import load_stan_model
 from floodstan import univariate_censored_sampling
 from floodstan import load_stan_model
 
 from tqdm import tqdm
 
 SEED = 5446
+np.random.seed(SEED)
 
 FTESTS = Path(__file__).resolve().parent
 
@@ -71,28 +73,25 @@ def get_info():
                          marginals.MARGINAL_NAMES)
 def test_stan_sampling_variable(distname, allclose):
     y = get_ams("203010")
-    sv = sample.StanSamplingVariable()
     censor = y.median()
+
+    marginal = marginals.factory(distname)
+    sv = sample.StanSamplingVariable(marginal)
 
     msg = "Data has not been set."
     with pytest.raises(ValueError, match=msg):
         d = sv.data
 
-    msg = "Cannot find"
-    with pytest.raises(ValueError, match=msg):
-        sv.set_marginal("bidule")
-
     msg = "Expected data"
     with pytest.raises(ValueError, match=msg):
         sv.set_data(y.values[:, None], censor)
 
-    sv = sample.StanSamplingVariable(y, distname, censor)
+    sv = sample.StanSamplingVariable(marginal, y, censor)
+
     assert allclose(sv.censor, censor)
-    assert isinstance(sv.marginal, marginals.FloodFreqDistribution)
     assert allclose(sv.data, y)
     assert sv.N == len(y)
     assert sv.marginal_code == marginals.MARGINAL_NAMES[distname]
-    assert sv.marginal_name == distname
     nhigh, nlow = (y>=censor).sum(), (y<censor).sum()
     Ncases = [[nhigh, 0, 0], [nlow, 0, 0], [0, 0, 0]]
     assert allclose(sv.Ncases, Ncases)
@@ -108,14 +107,6 @@ def test_stan_sampling_variable(distname, allclose):
     for key in keys:
         assert key in dd
 
-    if distname != "LogPearson3":
-        prior = [marginals.SHAPE1_PRIOR_LOC_DEFAULT,
-                 marginals.SHAPE1_PRIOR_SCALE_DEFAULT]
-        assert allclose(dd["yshape1_prior"], prior)
-    else:
-        assert allclose(dd["yshape1_prior"][1],
-                        marginals.SHAPE1_PRIOR_SCALE_DEFAULT)
-
     # Rapid setting
     sv = sample.StanSamplingVariable(y)
 
@@ -123,7 +114,7 @@ def test_stan_sampling_variable(distname, allclose):
     with pytest.raises(ValueError, match=msg):
         ip = sv.initial_parameters
 
-    sv = sample.StanSamplingVariable(y, distname)
+    sv = sample.StanSamplingVariable(marginal, y)
     d = sv.data
 
     # Initial values
@@ -137,70 +128,55 @@ def test_stan_sampling_variable(distname, allclose):
     assert len(cdfs[0]) == len(sv.data)
 
 
-@pytest.mark.parametrize("distname",
-                         marginals.MARGINAL_NAMES)
-def test_stan_sampling_dataset(distname, allclose):
-    y = get_ams("203010")
-    z = get_ams("201001")
-    z.iloc[-2] = np.nan # to add a missing data in z
-    df = pd.DataFrame({"y": y, "z": z}).sort_index()
-    y, z = df.y, df.z
-
-    yv = sample.StanSamplingVariable(y, distname, 100)
-    zv = sample.StanSamplingVariable(z, distname, 100)
-    dset = sample.StanSamplingDataset([yv, zv], "Gaussian")
-
-    assert dset.copula_name == "Gaussian"
-    assert allclose(dset.Ncases, [[38, 3, 1], [6, 7, 0], [9, 1, 0]])
-
-    dd = dset.to_dict()
-    keys = ["marginal", "censor", "locn_prior",
-            "logscale_prior", "shape1_prior"]
-    for name, key in prod(["y", "z"], keys):
-        assert f"{name}{key}" in dd
-
-    i11 = dset.i11
-    assert pd.notnull(df.y.iloc[i11-1]).all()
-    assert pd.notnull(df.z.iloc[i11-1]).all()
-
-    i31 = dset.i31
-    assert pd.isnull(df.y.iloc[i31-1]).all()
-    assert pd.notnull(df.z.iloc[i31-1]).all()
-
-    # Initial values
-    inits = dset.initial_parameters
-    for init in inits:
-        assert "rho" in init
-        for pn in ["locn", "logscale", "shape1"]:
-            for n in ["y", "z"]:
-                assert f"{n}{pn}" in init
-
 
 @pytest.mark.parametrize("distname",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
 def test_univariate_censored_sampling(distname, censoring, allclose):
-    #if distname.startswith("Generalized"):
-    #    pytest.skip(f"Need to test {distname}")
-
     stationids = get_stationids()
     stationid = stationids[0]
+
     y = get_ams(stationid)
     censor = y.median() if censoring else np.nanmin(y) - 1.
+
+    marginal = marginals.factory(distname)
+
+    #marginal.params_guess(y)
+    #y = marginal.rvs(500)
+
+    # Fix bounds
+    boot = sample.bootstrap(marginal, y, nboot=1000)
+    imp, _, neff = sample.importance_sampling(marginal,
+                                              y, boot, censor,
+                                              nsamples=1000)
+    for n in marginals.PARAMETERS:
+        prior = getattr(marginal, f"{n}_prior")
+        se = imp.loc[:, n]
+        low, up = se.min(), se.max()
+        delta = (up - low) / 20.
+        prior.lower = low - delta
+        prior.upper = up + delta
+        prior.informative = True
 
     # Set STAN
     stan_nwarm = 10000
     stan_nsamples = 5000
-    stan_nchains = 5
+    stan_nchains = 10
 
-    sv = sample.StanSamplingVariable(y, distname, censor,
+    sv = sample.StanSamplingVariable(marginal, y, censor,
                                      ninits=stan_nchains)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
     stan_inits3 = stan_inits[:3]
 
+    m = sv.marginal
+    for p in stan_inits:
+        m.params = p
+        assert np.all(np.isfinite(m.logpdf(y)))
+        assert np.all(np.isfinite(m.logcdf(y)))
+
     # Clean output folder
-    fout = FTESTS / "sampling" / "univariate_short_syntax"
+    fout = FTESTS / "sampling" / "univariate"
     fout.mkdir(parents=True, exist_ok=True)
     for f in fout.glob("*.*"):
         f.unlink()
@@ -212,25 +188,28 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
                                        inits=stan_inits3,
                                        output_dir=fout)
 
-    # Fix prior
-    boot = sample.bootstrap(sv.marginal, y, nboot=1000)
-    imp, _, neff = sample.importance_sampling(sv.marginal,
-                                              y, boot, censor,
-                                              nsamples=1000)
-    means, stds = imp.mean(), imp.std().clip(1e-3)
-    for pn in marginals.PARAMETERS:
-        stan_data[f"y{pn}_prior"] = [means[pn], stds[pn] * 2]
+    # Sample arguments
+    kw = dict(data=stan_data,
+              seed=SEED,
+              iter_sampling=stan_nsamples // stan_nchains,
+              output_dir=fout,
+              inits=stan_inits,
+              chains=stan_nchains,
+              iter_warmup=stan_nwarm)
 
     # Sample
-    smp = univariate_censored_sampling(data=stan_data,
-                                       chains=stan_nchains,
-                                       seed=SEED,
-                                       iter_warmup=stan_nwarm,
-                                       iter_sampling=stan_nsamples // stan_nchains,
-                                       inits=stan_inits,
-                                       output_dir=fout)
+    smp = univariate_censored_sampling(**kw)
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
+
+    from termplot import splot
+    splot(imp.locn, imp.logscale)
+    splot(df.ylocn, df.ylogscale)
+    import pdb; pdb.set_trace()
+
+
+    import pdb; pdb.set_trace()
+
 
     # Test diag
     assert diag["treedepth"] == "satisfactory"
@@ -255,7 +234,7 @@ def test_logpearson3_divergence(allclose):
     # Set very wide prior scale to get max likelihood
     marginals.SHAPE1_PRIOR_SCALE_MAX = 1e100
     marginal.shape1_prior_scale = 1e100
-    f, theta_mle, dcens, ncens, cov = \
+    f, theta_mle, dcens, ncens = \
         marginal.maximum_posterior_estimate(y, low_censor=censor)
 
     ## Set STAN

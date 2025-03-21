@@ -5,6 +5,7 @@ import numpy as np
 
 from scipy.stats import genextreme, pearson3, gumbel_r
 from scipy.stats import gamma as gamma_dist
+from scipy.stats import truncnorm
 from scipy.stats import lognorm, norm, genpareto
 from scipy.optimize import brentq, minimize
 from scipy.special import gamma, gammaln, polygamma
@@ -26,20 +27,28 @@ EULER_CONSTANT = 0.577215664901532
 PARAMETERS = ["locn", "logscale", "shape1"]
 
 # Bounds
+PRIOR_SCALE_MIN = 1e-3
+
+# In stan, infinity = 1e10
 LOCN_LOWER = -1e10
 LOCN_UPPER = 1e10
+LOCN_PRIOR_LOC_DEFAULT = 0.
+LOCN_PRIOR_SCALE_DEFAULT = 1e10
 
 LOGSCALE_LOWER = -20
 LOGSCALE_UPPER = 20
+LOGSCALE_PRIOR_LOC_DEFAULT = 0.
+LOGSCALE_PRIOR_SCALE_DEFAULT = 1e3
 
 SHAPE1_LOWER = -3.0
 SHAPE1_UPPER = 3.0
-
 SHAPE1_PRIOR_LOC_DEFAULT = 0.
-
 SHAPE1_PRIOR_SCALE_DEFAULT = 0.2
-SHAPE1_PRIOR_SCALE_MIN = 1e-10
-SHAPE1_PRIOR_SCALE_MAX = 1.
+
+UNINFORMATIVE_PRIOR_LOWER = -1e10
+UNINFORMATIVE_PRIOR_UPPER = 1e10
+UNINFORMATIVE_PRIOR_LOC = 0.
+UNINFORMATIVE_PRIOR_SCALE = 1e10
 
 
 def _prepare(data):
@@ -99,21 +108,28 @@ def _check_param_value(x, lower=-np.inf, upper=np.inf, name=None):
     if np.isnan(x) or not np.isfinite(x):
         raise ValueError(errmess)
 
-    if x < lower or x > upper:
-        errmess += f" Expected value in [{lower}, {upper}]."
-        raise ValueError(errmess)
+    if np.isfinite(lower):
+        if x < lower:
+            errmess += f" Expected value ('{x}') > lower ('{lower}')."
+            raise ValueError(errmess)
+
+    if np.isfinite(upper):
+        if x > upper:
+            errmess += f" Expected value ('{x}') < upper ('{upper}')."
+            raise ValueError(errmess)
 
     return x
 
 
-def prepare_censored_data(data, low_censor):
+def _prepare_censored_data(data, low_censor):
     data = np.array(data)
     low_censor = -1e10 if low_censor is None else float(low_censor)
     dcens = data[data > low_censor]
     if len(dcens) < 5:
-        errmess = "Expected at least 5 uncensored values"
+        errmess = "Expected at least 5 uncensored values, "\
+                  + f"got {len(dcens)}."
         raise ValueError(errmess)
-    return dcens, len(data)-len(dcens)
+    return data, dcens, len(data)-len(dcens)
 
 
 def lh_moments(data, eta=0, compute_lam4=True):
@@ -204,6 +220,125 @@ def factory(distname):
         raise ValueError(errmsg)
 
 
+class TruncatedNormalParameterPrior():
+    def __init__(self, param_name):
+        if param_name not in PARAMETERS:
+            errmess = f"Expected param_name ('{param_name}') in"\
+                      + f" {'/'.join(PARAMETERS)}."
+            raise ValueError(errmess)
+
+        self.param_name = param_name
+        self._a = np.nan
+        self._b = np.nan
+
+        if param_name == "locn":
+            self._lower = LOCN_LOWER
+            self._upper = LOCN_UPPER
+            self._loc = LOCN_PRIOR_LOC_DEFAULT
+            self._scale = LOCN_PRIOR_SCALE_DEFAULT
+            self.uninformative = True
+
+        elif param_name == "logscale":
+            self._lower = LOGSCALE_LOWER
+            self._upper = LOGSCALE_UPPER
+            self._loc = LOGSCALE_PRIOR_LOC_DEFAULT
+            self._scale = LOGSCALE_PRIOR_SCALE_DEFAULT
+            self.uninformative = True
+
+        elif param_name == "shape1":
+            self._lower = SHAPE1_LOWER
+            self._upper = SHAPE1_UPPER
+            self._loc = SHAPE1_PRIOR_LOC_DEFAULT
+            self._scale = SHAPE1_PRIOR_SCALE_DEFAULT
+            self.uninformative = False
+
+    def _check_bounds(self):
+        if self._upper < self._lower:
+            errmess = f"Inconsistent lower ('{self._lower}') "\
+                      + f"and upper ('{self._upper}') boundaries."
+            raise ValueError(errmess)
+
+    def __str__(self):
+        txt = f"{self.param_name} truncdated normal prior:\n"
+        txt += f"{' '*2}lower = {self.lower:0.2f}\n"
+        txt += f"{' '*2}upper = {self.upper:0.2f}\n"
+        txt += f"{' '*2}loc   = {self.loc:0.2f}\n"
+        txt += f"{' '*2}scale = {self.scale:0.2f}\n"
+        txt += f"{' '*2}uninformative = {self.uninformative}\n"
+        return txt
+
+    @property
+    def lower(self):
+        self._check_bounds()
+        return self._lower
+
+    @lower.setter
+    def lower(self, value):
+        self._lower = _check_param_value(value, -np.inf, np.inf,
+                                         self.param_name)
+
+    @property
+    def upper(self):
+        self._check_bounds()
+        return self._upper
+
+    @upper.setter
+    def upper(self, value):
+        self._upper = _check_param_value(value, -np.inf, np.inf,
+                                         self.param_name)
+
+    @property
+    def loc(self):
+        return self._loc
+
+    @loc.setter
+    def loc(self, value):
+        self._loc = _check_param_value(value, -np.inf, np.inf,
+                                       self.param_name)
+
+    @property
+    def scale(self):
+        return self._scale
+
+    @scale.setter
+    def scale(self, value):
+        self._scale = _check_param_value(value, PRIOR_SCALE_MIN,
+                                         np.inf,
+                                         self.param_name)
+
+    def _set_a_b(self):
+        self._a = (self.lower - self.loc) / self.scale
+        self._b = (self.upper - self.loc) / self.scale
+
+    def set_uninformative(self):
+        self.lower = UNINFORMATIVE_PRIOR_LOWER
+        self.upper = UNINFORMATIVE_PRIOR_UPPER
+        self.loc = UNINFORMATIVE_PRIOR_LOC
+        self.scale = UNINFORMATIVE_PRIOR_SCALE
+        self.uninformative = False
+
+    @property
+    def rv(self):
+        self._set_a_b()
+        return truncnorm(loc=self.loc, scale=self.scale,
+                         a=self._a, b=self._b)
+
+    def sample(self, nsamples):
+        return self.rv.rvs(size=nsamples)
+
+    def logpdf(self, data):
+        return self.rv.logpdf(data)
+
+    def logcdf(self, data):
+        return self.rv.logcdf(data)
+
+    def to_list(self):
+        return [self.loc, self.scale]
+
+    def clip(self, x):
+        return min(self.upper, max(self.lower, x))
+
+
 class FloodFreqDistribution():
     """ Base class for flood frequency distribution """
 
@@ -212,22 +347,15 @@ class FloodFreqDistribution():
 
         self.has_shape = has_shape
 
-        # bounds
-        self.locn_lower = LOCN_LOWER
-        self.locn_upper = LOCN_UPPER
-        self.logscale_lower = LOGSCALE_LOWER
-        self.logscale_upper = LOGSCALE_UPPER
-        self.shape1_lower = SHAPE1_LOWER
-        self.shape1_upper = SHAPE1_UPPER
-
         # Default values
         self._locn = np.nan
         self._logscale = np.nan
         self._shape1 = np.nan
 
         # Priors
-        self._shape1_prior_loc = SHAPE1_PRIOR_LOC_DEFAULT
-        self._shape1_prior_scale = SHAPE1_PRIOR_SCALE_DEFAULT
+        self._locn_prior = TruncatedNormalParameterPrior("locn")
+        self._logscale_prior = TruncatedNormalParameterPrior("logscale")
+        self._shape1_prior = TruncatedNormalParameterPrior("shape1")
 
     def __str__(self):
         txt = f"{self.name} flood frequency distribution:\n"
@@ -260,8 +388,8 @@ class FloodFreqDistribution():
     @locn.setter
     def locn(self, value):
         self._locn = _check_param_value(value,
-                                        self.locn_lower,
-                                        self.locn_upper,
+                                        self.locn_prior.lower,
+                                        self.locn_prior.upper,
                                         "locn")
 
     @property
@@ -271,8 +399,8 @@ class FloodFreqDistribution():
     @logscale.setter
     def logscale(self, value):
         self._logscale = _check_param_value(value,
-                                            self.logscale_lower,
-                                            self.logscale_upper,
+                                            self.logscale_prior.lower,
+                                            self.logscale_prior.upper,
                                             "logscale")
 
     @property
@@ -293,8 +421,8 @@ class FloodFreqDistribution():
             raise ValueError(errmess)
 
         self._shape1 = _check_param_value(value,
-                                          self.shape1_lower,
-                                          self.shape1_upper,
+                                          self.shape1_prior.lower,
+                                          self.shape1_prior.upper,
                                           "shape1")
 
     @property
@@ -326,37 +454,16 @@ class FloodFreqDistribution():
         raise NotImplementedError(errmsg)
 
     @property
-    def shape1_prior_loc(self):
-        return self._shape1_prior_loc
-
-    @shape1_prior_loc.setter
-    def shape1_prior_loc(self, value):
-        if not self.has_shape:
-            errmess = "Try to set shape prior loc for"\
-                      + f"distribution {self.name}."
-            raise ValueError(errmess)
-
-        self._shape1_prior_loc = _check_param_value(value,
-                                                    SHAPE1_LOWER,
-                                                    SHAPE1_UPPER,
-                                                    "shape1_prior_loc")
+    def locn_prior(self):
+        return self._locn_prior
 
     @property
-    def shape1_prior_scale(self):
-        return self._shape1_prior_scale
+    def logscale_prior(self):
+        return self._logscale_prior
 
-    @shape1_prior_scale.setter
-    def shape1_prior_scale(self, value):
-        if not self.has_shape:
-            errmess = "Try to set shape prior loc for"\
-                      + f"distribution {self.name}."
-            raise ValueError(errmess)
-
-        smin = SHAPE1_PRIOR_SCALE_MIN
-        smax = SHAPE1_PRIOR_SCALE_MAX
-        self._shape1_prior_scale = _check_param_value(value,
-                                                      smin, smax,
-                                                      "shape1_prior_scale")
+    @property
+    def shape1_prior(self):
+        return self._shape1_prior
 
     def in_support(self, x):
         x0, x1 = self.support
@@ -410,40 +517,41 @@ class FloodFreqDistribution():
         except ValueError:
             return np.inf
 
-        nlp = -self.logpdf(data_censored).sum()
+        # Negative log-prior
+        nlp = -self.locn_prior.logpdf(theta[0])
+        nlp += -self.logscale_prior.logpdf(theta[1])
+        if self.has_shape:
+            nlp += -self.shape1_prior.logpdf(theta[2])
+
+        # Negative log-likelihood
+        nlp += -self.logpdf(data_censored).sum()
         if ncens > 0:
             nlp -= self.logcdf(low_censor)*ncens
 
         if not np.isfinite(nlp) or np.isnan(nlp):
             return np.inf
 
-        # Prior on shape param
-        if self.has_shape:
-            nlp -= norm.logpdf(theta[-1],
-                               loc=self.shape1_prior_loc,
-                               scale=self.shape1_prior_scale)
         return nlp
 
     def maximum_posterior_estimate(self, data, low_censor=None,
-                                   nexplore=5000,
-                                   explore_scale=0.2):
+                                   nexplore=1000):
         # Prepare data
-        dcens, ncens = prepare_censored_data(data, low_censor)
+        data, dcens, ncens = _prepare_censored_data(data, low_censor)
 
         # Initial parameter exploration
         # random perturb guesses parameters in
         # arcsinh space (log for large values and lin for small values)
         self.params_guess(data)
         theta0 = self.params
-        perturb = np.random.normal(loc=0, scale=explore_scale,
-                                   size=(nexplore, len(theta0)))
-        explore = np.sinh(np.arcsinh(theta0)[None, :] + perturb)
-        # .. keep guessed parameter last
-        explore[-1] = theta0
+        nlp_min = self.neglogpost(theta0, dcens, low_censor, ncens)
 
         # .. loop throught explored parameter and check loglike
-        nlp_min = np.inf
-        for theta in explore:
+        nval = len(data)
+        k = np.arange(nval)
+        for i in range(nexplore):
+            kk = np.random.choice(k, nval, replace=True)
+            self.params_guess(data[kk])
+            theta = self.params
             nlp = self.neglogpost(theta, dcens, low_censor, ncens)
             if nlp < nlp_min and np.isfinite(nlp) and not np.isnan(nlp):
                 theta0 = theta
@@ -471,9 +579,9 @@ class FloodFreqDistribution():
         # d = theta - theta0
         # D = det(H)
         # See https://james-brennan.github.io/posts/laplace_approximation/
-        cov = np.linalg.inv(opt.hess_inv)
+        # cov = np.linalg.inv(opt.hess_inv)
 
-        return -opt.fun, opt.x, dcens, ncens, cov
+        return -opt.fun, opt.x, dcens, ncens
 
 
 class Normal(FloodFreqDistribution):
@@ -651,6 +759,9 @@ class LogPearson3(FloodFreqDistribution):
 
     def __init__(self):
         super(LogPearson3, self).__init__("LogPearson3")
+
+        # Slightly wider prior due to fitting difficulties
+        self.shape1_prior.scale = 0.5
 
     def get_scipy_params(self):
         return {"skew": self.shape1, "loc": self.locn, "scale": self.scale}

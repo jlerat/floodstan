@@ -4,7 +4,7 @@ import logging
 
 import numpy as np
 import pandas as pd
-from scipy.stats import norm, kendalltau
+from scipy.stats import kendalltau
 
 from floodstan import marginals
 
@@ -14,7 +14,7 @@ from floodstan.copulas import COPULA_NAMES
 from floodstan.marginals import MARGINAL_NAMES
 from floodstan.marginals import PARAMETERS
 from floodstan.copulas import factory
-from floodstan.marginals import prepare_censored_data
+from floodstan.marginals import _prepare_censored_data
 
 MARGINAL_CODES = {code: name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code: name for name, code in COPULA_NAMES.items()}
@@ -91,26 +91,26 @@ def _check_prior(values):
     return values
 
 
-def are_marginal_params_valid(dist, locn, logscale, shape1, data, censor):
-    dist.locn = locn
-    dist.logscale = logscale
-    if dist.has_shape:
-        dist.shape1 = shape1
+def are_marginal_params_valid(marginal, locn, logscale, shape1, data, censor):
+    marginal.locn = locn
+    marginal.logscale = logscale
+    if marginal.has_shape:
+        marginal.shape1 = shape1
 
-    cdf = dist.cdf(data)
+    cdf = marginal.cdf(data)
     cdf[data < censor] = np.nan
     cdf_min = np.nanmin(cdf)
     cdf_max = np.nanmax(cdf)
-    cdf_censor = dist.cdf(censor)
+    cdf_censor = marginal.cdf(censor)
 
     cmin = STAN_VARIABLE_INITIAL_CDF_MIN
     isok = (cdf_min >= cmin) & (cdf_max <= 1 - cmin)
     isok &= (cdf_censor >= cmin) & (cdf_censor <= 1 - cmin)
 
     if isok:
-        dd = {"locn": dist.locn,
-              "logscale": dist.logscale,
-              "shape1": dist.shape1
+        dd = {"locn": marginal.locn,
+              "logscale": marginal.logscale,
+              "shape1": marginal.shape1
               }
         return dd, cdf
 
@@ -154,11 +154,14 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
     Bayesian Statistics without Tears: A Sampling-Resampling Perspective.
     The American Statistician, 46(2), 84–88. https://doi.org/10.2307/2684170
     """
-    dcens, ncens = prepare_censored_data(data, censor)
+    data, dcens, ncens = _prepare_censored_data(data, censor)
     params = np.array(params)
 
-    niter_max = 5
-    neff_factor = 0.9
+    # Maximum number of iterations
+    niter_max = 3
+    # Minimum ratio between neff and nsamples to stop iterating
+    neff_factor = 0.5
+    # Minimum neff tolerated during iteration
     neff_min = 5
 
     for niter in range(niter_max):
@@ -198,12 +201,11 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
 
 class StanSamplingVariable():
     def __init__(self,
+                 marginal,
                  data=None,
-                 marginal_name=None,
                  censor=CENSOR_DEFAULT,
                  name="y",
-                 ninits=NCHAINS_DEFAULT,
-                 init_perturb_scale=0.1):
+                 ninits=NCHAINS_DEFAULT):
         self.name = str(name)
         if len(self.name) != 1:
             errmess = "Expected one character for name."
@@ -211,9 +213,6 @@ class StanSamplingVariable():
 
         self._N = 0
         self._data = None
-        self._marginal_code = None
-        self._marginal_name = None
-        self._marginal = None
         self._censor = float(censor)
         self._guess_parameters = []
         self._initial_parameters = []
@@ -221,9 +220,10 @@ class StanSamplingVariable():
         self._is_obs = None
         self._is_cens = None
 
+        self.marginal = marginal
+
         # Initial parameters
         self.ninits = ninits
-        self.init_perturb_scale = init_perturb_scale
         self._initial_parameters = []
         self._initial_cdfs = []
 
@@ -232,12 +232,7 @@ class StanSamplingVariable():
             self.set_data(data, censor)
             data_set = True
 
-        marginal_set = False
-        if marginal_name is not None:
-            self.set_marginal(marginal_name)
-            marginal_set = True
-
-        if data_set and marginal_set:
+        if data_set:
             self.set_guess_parameters()
             self.set_initial_parameters()
             self.set_priors()
@@ -271,19 +266,8 @@ class StanSamplingVariable():
         return self._initial_cdfs
 
     @property
-    def marginal(self):
-        if self._marginal is None:
-            errmess = "Marginal has not been set."
-            raise ValueError(errmess)
-        return self._marginal
-
-    @property
-    def marginal_name(self):
-        return self._marginal_name
-
-    @property
     def marginal_code(self):
-        return MARGINAL_NAMES[self._marginal_name]
+        return MARGINAL_NAMES[self.marginal.name]
 
     @property
     def censor(self):
@@ -307,53 +291,6 @@ class StanSamplingVariable():
             errmess = "Data has not been set."
             raise ValueError(errmess)
         return self._data
-
-    @property
-    def locn_prior(self):
-        if self._locn_prior is None:
-            errmess = "locn_prior has not been set."
-            raise ValueError(errmess)
-        return self._locn_prior
-
-    @locn_prior.setter
-    def locn_prior(self, values):
-        values = _check_prior(values)
-        self._locn_prior = values
-
-    @property
-    def logscale_prior(self):
-        if self._logscale_prior is None:
-            errmess = "logscale_prior has not been set."
-            raise ValueError(errmess)
-        return self._logscale_prior
-
-    @logscale_prior.setter
-    def logscale_prior(self, values):
-        values = _check_prior(values)
-        self._logscale_prior = values
-
-    @property
-    def shape1_prior(self):
-        if self._shape1_prior is None:
-            errmess = "shape1_prior has not been set."
-            raise ValueError(errmess)
-        return self._shape1_prior
-
-    @shape1_prior.setter
-    def shape1_prior(self, values):
-        if self.marginal.has_shape:
-            values = _check_prior(values)
-            self._shape1_prior = values
-
-    def set_marginal(self, marginal_name):
-        if marginal_name not in MARGINAL_NAMES:
-            errmess = f"Cannot find marginal {marginal_name}."
-            raise ValueError(errmess)
-
-        self._marginal_name = marginal_name
-
-        dist = marginals.factory(self.marginal_name)
-        self._marginal = dist
 
     def set_data(self, data, censor):
         data = np.array(data).astype(np.float64)
@@ -391,9 +328,10 @@ class StanSamplingVariable():
         self._censor = censor
 
     def set_guess_parameters(self):
-        dok = self.data[~np.isnan(self.data)]
+        censor = self.censor
+        data, dcens, ncens = _prepare_censored_data(self.data, censor)
         dist = self.marginal
-        dist.params_guess(dok)
+        dist.params_guess(dcens)
         self._guess_parameters = {
                 "locn": dist.locn,
                 "logscale": dist.logscale,
@@ -401,31 +339,36 @@ class StanSamplingVariable():
                 }
 
     def set_initial_parameters(self):
-        data = self.data
         censor = self.censor
+        data, dcens, ncens = _prepare_censored_data(self.data, censor)
         dist = self.marginal
-        gp = self.guess_parameters
-        params0 = np.array([gp["locn"], gp["logscale"],
-                            gp["shape1"]])
 
-        # Create a random sample for each chain
+        # Default parameters
+        dist.params_guess(dcens)
+        params0 = dist.params
+
+        # Create a parameter from bootstrap guess
+        # parameters for each chain
         ninits = self.ninits
         niter = 0
         inits, cdfs = [], []
-        normvar = norm(loc=0, scale=self.init_perturb_scale)
+        nval = len(data)
+        k = np.where(~np.isnan(data))[0]
 
         while len(inits) < ninits \
                 and niter < MAX_INIT_PARAM_SEARCH:
             niter += 1
-            # Perturb guess parameters
-            locn = params0[0] * max(5e-1, 1 + normvar.rvs())
-            logscale = max(dist.logscale_lower,
-                           min(dist.logscale_upper,
-                               params0[1] + normvar.rvs()))
-            shape1 = max(dist.shape1_lower,
-                         min(dist.shape1_upper,
-                             params0[2] + normvar.rvs()))
+            kk = np.random.choice(k, nval, replace=True)
+            dboot = data[kk]
 
+            # Errors can occur here as params guess
+            # is not necessarily conform with prior
+            try:
+                dist.params_guess(dboot)
+            except ValueError:
+                continue
+
+            locn, logscale, shape1 = dist.params
             pp, cdf = are_marginal_params_valid(dist, locn, logscale,
                                                 shape1, data, censor)
             if pp is not None:
@@ -463,17 +406,13 @@ class StanSamplingVariable():
 
     def set_priors(self):
         start = self.guess_parameters
-        locn_start = start["locn"]
-        self._locn_prior = [locn_start, 10 * abs(locn_start)]
 
-        logscale_start = start["logscale"]
-        dist = self.marginal
-        dscale = (dist.logscale_upper - dist.logscale_lower) / 2
-        self._logscale_prior = [logscale_start, dscale]
-
-        dist = self.marginal
-        self._shape1_prior = [dist.shape1_prior_loc,
-                              dist.shape1_prior_scale]
+        # Special set for LogPearson3 due to
+        # fitting difficulties
+        if self.marginal.name == "LogPearson3":
+            self.marginal.locn_prior.loc = start["locn"]
+            self.marginal.logscale_prior.loc = start["logscale"]
+            self.marginal.shape1_prior.loc = start["shape1"]
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
@@ -484,15 +423,15 @@ class StanSamplingVariable():
             "N": self.N,
             vn: self.data,
             f"{vn}censor": self.censor,
-            f"{vn}locn_prior": self.locn_prior,
-            f"{vn}logscale_prior": self.logscale_prior,
-            f"{vn}shape1_prior": self.shape1_prior,
-            "locn_lower": dist.locn_lower,
-            "locn_upper": dist.locn_upper,
-            "logscale_lower": dist.logscale_lower,
-            "logscale_upper": dist.logscale_upper,
-            "shape1_lower": dist.shape1_lower,
-            "shape1_upper": dist.shape1_upper,
+            f"{vn}locn_prior": dist.locn_prior.to_list(),
+            f"{vn}logscale_prior": dist.logscale_prior.to_list(),
+            f"{vn}shape1_prior": dist.shape1_prior.to_list(),
+            "locn_lower": dist.locn_prior.lower,
+            "locn_upper": dist.locn_prior.upper,
+            "logscale_lower": dist.logscale_prior.lower,
+            "logscale_upper": dist.logscale_prior.upper,
+            "shape1_lower": dist.shape1_prior.lower,
+            "shape1_upper": dist.shape1_prior.upper,
             "i11": self.i11,
             "i21": self.i21,
             "Ncases": self.Ncases
@@ -506,6 +445,12 @@ class StanSamplingDataset():
         # Set stan variables
         if len(stan_variables) != 2:
             errmess = "Only bivariate case accepted."
+            raise ValueError(errmess)
+
+        ndata = set(len(v.data) for v in stan_variables)
+        if len(ndata) > 1:
+            errmess = "Expected all stan variables to have "\
+                      + "the same number of data samples."
             raise ValueError(errmess)
 
         # .. changing names to y and z (Stan code requirement)
@@ -610,16 +555,16 @@ class StanSamplingDataset():
             cdfs = cdfs[notnan]
 
             niter = 0
-            rho0 = kendalltau(cdfs[:, 0], cdfs[:, 1]).statistic
-
             rho = np.nan
-            rho_max = min(copula.rho_max - 2e-2, rho0 + 2e-2)
-            rho_min = min(rho_max - 1e-1,
-                          max(copula.rho_min + 2e-2, rho0 - 2e-2))
+            nval = len(cdfs)
+            k = np.arange(nval)
 
             while True and niter < MAX_INIT_PARAM_SEARCH:
                 niter += 1
-                rho = np.random.uniform(rho_min, rho_max)
+                kk = np.random.choice(k, nval, replace=True)
+                rho = kendalltau(cdfs[kk, 0], cdfs[kk, 1]).statistic
+                rho = min(copula.rho_max, max(copula.rho_min, rho))
+
                 # Check likelihood
                 copula.rho = rho
                 copula_pdfs = copula.pdf(cdfs)

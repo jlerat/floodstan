@@ -169,6 +169,9 @@ real logpearson3_cdf(real y, real m, real s, real g){
 
     // Compute log cdf depending on skew
     real x = beta * (log(y) - tau);
+    
+    if(x < 0 && abs_g > n2p_trans) 
+        reject("x (", x, ") < 0 with m=", m, " s=", s, " g=", g);
 
     if(abs_g < n2p_trans) {
         return lognormal_cdf(y | m, s);

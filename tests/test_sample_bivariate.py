@@ -26,15 +26,60 @@ from floodstan import bivariate_censored_sampling
 from test_sample_univariate import get_stationids, get_ams
 
 SEED = 5446
+np.random.seed(SEED)
 
 FTESTS = Path(__file__).resolve().parent
 
 STATIONIDS = get_stationids()
 
+
+@pytest.mark.parametrize("distname",
+                         marginals.MARGINAL_NAMES)
+def test_stan_sampling_dataset(distname, allclose):
+    y = get_ams("203010")
+    z = get_ams("201001")
+    z.iloc[-2] = np.nan # to add a missing data in z
+    df = pd.DataFrame({"y": y, "z": z}).sort_index()
+    y, z = df.y, df.z
+
+    marginal = marginals.factory(distname)
+
+    yv = sample.StanSamplingVariable(marginal, y, 100)
+    zv = sample.StanSamplingVariable(marginal, z, 100)
+    dset = sample.StanSamplingDataset([yv, zv], "Gaussian")
+
+    assert dset.copula_name == "Gaussian"
+    assert allclose(dset.Ncases, [[38, 3, 1], [6, 7, 0], [9, 1, 0]])
+
+    dd = dset.to_dict()
+    keys = ["marginal", "censor", "locn_prior",
+            "logscale_prior", "shape1_prior"]
+    for name, key in prod(["y", "z"], keys):
+        assert f"{name}{key}" in dd
+
+    i11 = dset.i11
+    assert pd.notnull(df.y.iloc[i11-1]).all()
+    assert pd.notnull(df.z.iloc[i11-1]).all()
+
+    i31 = dset.i31
+    assert pd.isnull(df.y.iloc[i31-1]).all()
+    assert pd.notnull(df.z.iloc[i31-1]).all()
+
+    # Initial values
+    inits = dset.initial_parameters
+    for init in inits:
+        assert "rho" in init
+        for pn in ["locn", "logscale", "shape1"]:
+            for n in ["y", "z"]:
+                assert f"{n}{pn}" in init
+
+
 @pytest.mark.parametrize("copula", sample.COPULA_NAMES_STAN)
 @pytest.mark.parametrize("censoring", [False, True])
 def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
     LOGGER = sample.get_logger(stan_logger=True)
+
+    marginal = marginals.factory("GEV")
 
     stan_nwarm = 10000
     stan_nsamples = 5000
@@ -54,10 +99,10 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
     y, z = df.y, df.z
 
     censor = y.median() if censoring else np.nanmin(y) - 1.
-    yv = sample.StanSamplingVariable(y, "GEV", censor,
+    yv = sample.StanSamplingVariable(marginal, y, censor,
                                      ninits=stan_nchains)
     censor = z.median() if censoring else np.nanmin(z) - 1.
-    zv = sample.StanSamplingVariable(z, "GEV", censor,
+    zv = sample.StanSamplingVariable(marginal, z, censor,
                                      ninits=stan_nchains)
 
     sv = sample.StanSamplingDataset([yv, zv], copula)

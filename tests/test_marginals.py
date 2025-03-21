@@ -47,8 +47,9 @@ def test_floodfreqdist(allclose):
     assert hasattr(dist, "locn")
     assert hasattr(dist, "logscale")
     assert hasattr(dist, "shape1")
-    assert hasattr(dist, "shape1_prior_loc")
-    assert hasattr(dist, "shape1_prior_scale")
+    assert hasattr(dist, "locn_prior")
+    assert hasattr(dist, "logscale_prior")
+    assert hasattr(dist, "shape1_prior")
 
     s = str(dist)
     assert isinstance(s, str)
@@ -89,8 +90,45 @@ def test_floodfreqdist(allclose):
     with pytest.raises(ValueError, match="Invalid"):
         dist.params = [10, 1, np.nan]
 
+    with pytest.raises(AttributeError, match="can't set"):
+        dist.locn_prior = "bidule"
+
+    with pytest.raises(ValueError, match="Invalid"):
+        dist.locn_prior.scale = np.nan
+
+
+@pytest.mark.parametrize("param_name",
+                         marginals.PARAMETERS)
+def test_prior_properties(param_name):
+    with pytest.raises(ValueError, match="Expected param_name"):
+        marginals.TruncatedNormalParameterPrior("bidule")
+
+    prior = marginals.TruncatedNormalParameterPrior(param_name)
+    str(prior)
+    assert len(prior.to_list()) == 2
+
+    s = prior.sample(100000)
+    assert np.all(s > prior.lower)
+    assert np.all(s < prior.upper)
+
+    p = np.linspace(-2, 2, 10)
+    assert np.all(np.isfinite(prior.logpdf(p)))
+    assert np.all(np.isfinite(prior.logcdf(p)))
+
+    prior.lower = 10.
+    prior.upper = -10.
+    with pytest.raises(ValueError, match="Inconsistent lower"):
+        prior.lower
+
     with pytest.raises(ValueError, match="Invalid value for"):
-        dist.shape1_prior_scale = 0
+        prior.scale = -10.
+
+    prior.set_uninformative()
+    rv = prior.rv
+    assert prior.loc == 0
+    assert prior.scale == 1e100
+    assert prior._a == -1.
+    assert prior._b == 1.
 
 
 @pytest.mark.parametrize("distname",
@@ -104,6 +142,7 @@ def test_marginals_properties(distname, allclose):
     p = dist.cdf(y)
     expected = dist.ppf(p)
     assert allclose(expected, y)
+
 
 
 @pytest.mark.parametrize("distname",
@@ -281,7 +320,7 @@ def test_quantile_vs_flike(distname, station, allclose):
 @pytest.mark.parametrize("station",
                          data_reader.STATIONS)
 @pytest.mark.parametrize("censoring", [True, False])
-def test_fit_lh_moments_flike(distname, station, censoring, allclose):
+def test_fit_lh_moments_vs_flike(distname, station, censoring, allclose):
     eta = 0
     try:
         testdata, fr = data_reader.get_test_data(station, distname, \
@@ -342,22 +381,14 @@ def test_marginals_maxpost_numerical(distname, stationid, censoring, allclose):
     streamflow = get_ams(stationid)
     marginal = marginals.factory(distname)
     censor = streamflow.quantile(0.33) if censoring else -1e10
-    lmp, theta_lmp, dcens, ncens, cov = \
-        marginal.maximum_posterior_estimate(streamflow,
-        censor, nexplore=10000, explore_scale=0.3)
+    lmp, theta_lmp, dcens, ncens = \
+        marginal.maximum_posterior_estimate(streamflow, censor)
+
+    cov = np.diag(theta_lmp ** 2)
 
     # Sample params from laplace approx
     params = np.random.multivariate_normal(mean=theta_lmp,
                                            cov=cov, size=5000)
-
-    # Perturb lmp param and check lp_mlp is always greater
-    # with a small tolerance
-    #trans_lmp = np.arcsinh(theta_lmp)
-    #perturb = np.random.normal(loc=0., scale=0.2,
-    #                           size=(5000, 3))
-    #for pert in perturb:
-    #    theta = np.sinh(trans_lmp + pert)
-
     for theta in params:
         lp = -marginal.neglogpost(theta, dcens, censor, ncens)
         if np.isfinite(lp) and not np.isnan(lp):
@@ -374,14 +405,14 @@ def test_marginals_mle_theoretical(distname, stationid, allclose):
     streamflow = get_ams(stationid)
     marginal = marginals.factory(distname)
 
-    # Set very wide prior scale to get max likelihood
-    marginals.SHAPE1_PRIOR_SCALE_MAX = 1e100
-    if marginal.has_shape:
-        marginal.shape1_prior_scale = 1e100
+    # Uninformative prior to get mle
+    marginal.locn_prior.set_uninformative()
+    marginal.logscale_prior.set_uninformative()
+    marginal.shape1_prior.set_uninformative()
 
-    mlp_mle, theta_mle, dcens, ncens, cov = \
-        marginal.maximum_posterior_estimate(streamflow,
-                                            nexplore=50000)
+    mlp_mle, theta_mle, dcens, ncens = \
+        marginal.maximum_posterior_estimate(streamflow)
+
     # Theoretical value of MLE
     if distname == "LogNormal":
         marginal.params_guess(streamflow)
@@ -484,19 +515,20 @@ def test_mle_vs_bestfit(distname, stationid, censoring, allclose):
 
     marginal = marginals.factory(distname)
 
-    # Set very wide prior scale to get max likelihood
-    marginals.SHAPE1_PRIOR_SCALE_MAX = 1e100
-    if marginal.has_shape:
-        marginal.shape1_prior_scale = 1e100
+    # Uninformative prior to get mle
+    marginal.locn_prior.set_uninformative()
+    marginal.logscale_prior.set_uninformative()
+    marginal.shape1_prior.set_uninformative()
 
-    ll_mle, theta_mle, dcens, ncens, cov = \
-        marginal.maximum_posterior_estimate(streamflow, censor,
-                                            nexplore=50000)
+    ll_mle, theta_mle, dcens, ncens = \
+        marginal.maximum_posterior_estimate(streamflow, censor)
+
+    # Get bestfit param
+    # + take into account bestfit parameterisation
     theta_bestfit = np.array([float(bestfit["Location"]),
                               math.log(float(bestfit["Scale"])),
                               float(bestfit["Shape"])])
 
-    # Take into account bestfit parameterisation
     if distname in ["LogPearson3"]:
         theta_bestfit[0] = math.log(10**theta_bestfit[0])
         theta_bestfit[1] = math.log(math.log(10**float(bestfit["Scale"])))
