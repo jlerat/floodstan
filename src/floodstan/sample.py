@@ -6,8 +6,6 @@ import numpy as np
 import pandas as pd
 from scipy.stats import kendalltau
 
-from floodstan import marginals
-
 from floodstan import NCHAINS_DEFAULT
 
 from floodstan.copulas import COPULA_NAMES
