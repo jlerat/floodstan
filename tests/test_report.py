@@ -9,10 +9,7 @@ import pandas as pd
 import pytest
 import warnings
 
-from hydrodiy.plot import putils
-
 import importlib
-from tqdm import tqdm
 
 from floodstan import marginals, sample, report
 from floodstan import univariate_censored_sampling

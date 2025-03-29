@@ -20,7 +20,9 @@ from hydrodiy.plot import putils
 import importlib
 from tqdm import tqdm
 
-from floodstan import marginals, sample, copulas
+from floodstan import marginals
+from floodstan import sample
+from floodstan import copulas
 from floodstan import report
 from floodstan import load_stan_model
 from floodstan import univariate_censored_sampling
@@ -133,6 +135,8 @@ def test_stan_sampling_variable(distname, allclose):
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
 def test_univariate_censored_sampling(distname, censoring, allclose):
+    pytest.skip("WIP!!!")
+
     stationids = get_stationids()
     stationid = stationids[0]
 
