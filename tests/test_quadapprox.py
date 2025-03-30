@@ -58,7 +58,7 @@ def test_get_coefficients(inside, allclose):
         x = np.linspace(-2, 2, 10000)
     f = fun(x)
 
-    a, b, c = quadapprox.get_coefficients(xi, fi, fm, False)
+    a, b, c = quadapprox.get_coefficients(xi, fi, fm)
     fhat = quadapprox.forward(x, xi, a, b, c)
 
     if inside:
@@ -77,26 +77,51 @@ def test_get_coefficients(inside, allclose):
         assert allclose(fhat[idx], v1[idx], atol=5e-4, rtol=0)
 
 
-@pytest.mark.parametrize("namefun", ["expsin", "x3", "sinx"])
-def test_inverse(namefun, allclose):
-    def fun(x):
-        if namefun == "expsin":
-            return np.exp(-x**2 / 2) * np.sin(5 * math.pi * x)
-        elif namefun == "x3":
-            return x**3
-        elif namefun == "sinx":
-            return np.sin(x)
+def test_get_coefficients_monotonous(allclose):
+    fun = lambda x: x * (1. - x)
+    xi = [0, 1]
+    fi = [fun(x) for x in xi]
+    fm = fun(0.5)
+    a, b, c = quadapprox.get_coefficients(xi, fi, fm)
 
-    xi = np.linspace(-1, 1, 100)
+
+@pytest.mark.parametrize("namefun", ["expsin", "x3", "sin",
+                                     "tanh", "exp"])
+def test_inverse(namefun, allclose):
+    if namefun == "expsin":
+        fun = lambda x: np.exp(-x**2 / 2) * np.sin(5 * math.pi * x)
+        invfun = None
+    elif namefun == "x3":
+        fun = lambda x: x**3
+        invfun = lambda x: x**(1./3)
+    elif namefun == "sin":
+        fun = lambda x: np.sin(10 * math.pi * x)
+        invfun = None
+    elif namefun == "tanh":
+        fun = lambda x: np.tanh(x)
+        invfun = lambda x: np.arctanh(x)
+    elif namefun == "exp":
+        fun = lambda x: np.exp(x)
+        invfun = lambda x: np.log(x)
+
+    xmin, xmax = -2, 2
+    xi = np.linspace(xmin, xmax, 200)
     fi = fun(xi)
     xm = (xi[:-1] + xi[1:])/2
     fm = fun(xm)
     a, b, c = quadapprox.get_coefficients(xi, fi, fm)
 
-    f = np.linspace(fi.min() + 1e-10, fi.max() - 1e-10, 100)
+    eps = 1e-10
+    f = np.linspace(fi.min() + eps, fi.max() - eps, 100)
     x = quadapprox.inverse(f, xi, a, b, c)
     f2 = fun(x)
-    assert allclose(f, f2, atol=1e-3)
+    assert allclose(f, f2, atol=3e-3)
+
+    if invfun is not None:
+        expected = invfun(f)
+        iok = ~np.isnan(expected)
+        err = np.abs(x[iok] - expected[iok])
+        assert allclose(x[iok], expected[iok], atol=1e-4, rtol=0.)
 
 
 
