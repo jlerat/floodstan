@@ -36,13 +36,13 @@ def test_process_stan_diagnostic():
 
 def test_report(allclose):
     stationid = "201001"
-    marginal_name = "GEV"
+    marginal = marginals.factory("GEV")
     y = get_ams(stationid)
     N = len(y)
     stan_nchains = 5
 
     # Configure stan data and initialisation
-    sv = sample.StanSamplingVariable(y, marginal_name,
+    sv = sample.StanSamplingVariable(marginal, y,
                                      ninits=stan_nchains)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
@@ -67,11 +67,11 @@ def test_report(allclose):
 
     # Run report without obs
     rep, _ = report.ams_report(sv.marginal, params) #, design_aris=[100])
-    assert rep.shape == (12, 12)
+    assert rep.shape == (12, 13)
 
     # Run report with obs
     years = np.arange(1973, 2022)
     obs = {year: y[year] for year in years}
     rep, _ = report.ams_report(sv.marginal, params, obs)
-    assert rep.shape == (12 + 2 * len(obs), 12)
+    assert rep.shape == (12 + 2 * len(obs), 13)
 

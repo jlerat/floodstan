@@ -134,9 +134,12 @@ def inverse(f, xi, a, b, c):
         idx.append(isin[0])
         xtmp.append(xr1[isin])
 
+    xr = np.full(f.shape, fill_value=np.nan)
+    if len(idx) == 0:
+        return xr
+
     idx = np.concatenate(idx)
     xtmp = np.concatenate(xtmp)
 
-    xr = np.full(f.shape, fill_value=np.nan)
     xr[idx] = xtmp
     return xr

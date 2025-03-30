@@ -433,7 +433,7 @@ class FloodFreqDistribution():
     @params.setter
     def params(self, value):
         if len(value) != 3:
-            errmess = "Expected 3 parameters, got {len(theta)}."
+            errmess = f"Expected 3 parameters, got {len(value)}."
             raise ValueError(errmess)
 
         if isinstance(value, dict):
