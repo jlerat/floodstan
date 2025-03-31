@@ -10,7 +10,12 @@ from hydrodiy.plot import putils
 
 import importlib
 
+from floodstan import marginals
 from floodstan import quadapprox
+from floodstan.report import DESIGN_ARIS
+from floodstan.report import _prepare_design_aris
+
+from test_sample_univariate import get_stationids, get_ams
 
 SEED = 5446
 
@@ -125,3 +130,25 @@ def test_inverse(namefun, allclose):
 
 
 
+@pytest.mark.parametrize("distname",
+                         marginals.MARGINAL_NAMES)
+@pytest.mark.parametrize("stationid",
+                         get_stationids())
+def test_approx_cdf(distname, stationid, allclose):
+    streamflow = get_ams(stationid)
+    marginal = marginals.factory(distname)
+    marginal.params_guess(streamflow)
+
+    design_aris, design_cdf, _, post_pred_cdf = \
+        _prepare_design_aris(DESIGN_ARIS, 0.)
+
+    xi = np.unique(marginal.ppf(post_pred_cdf))
+    xm = (xi[1:] + xi[:-1]) / 2
+    fi = marginal.cdf(xi)
+    fm = marginal.cdf(xm)
+
+    a, b, c = quadapprox.get_coefficients(xi, fi, fm)
+    q = quadapprox.inverse(design_cdf, xi, a, b, c)
+    expected = marginal.ppf(design_cdf)
+    emax = np.abs(expected - q).max()
+    assert allclose(q, expected, atol=5e-3, rtol=0)

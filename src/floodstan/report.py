@@ -1,6 +1,5 @@
 import re
 import numpy as np
-from scipy.special import logit, expit
 import pandas as pd
 
 from floodstan.marginals import PARAMETERS
@@ -11,7 +10,17 @@ from floodstan.freqplots import reduced_variate_to_cdf
 
 QUANTILES = [0.05, 0.25, 0.5, 0.75, 0.95]
 DESIGN_ARIS = [2, 5, 10, 20, 50, 100, 200, 500, 1000]
-N_POSTPRED_APPROX = 1000
+
+# This number of approximation nodes ensures
+# an accuracy of quantile function lower than 5e-3
+# (see test_quadapprox.test_approx_cdf)
+N_POSTPRED_APPROX = 2000
+
+# Amount of logit transformed cdf range extension
+# to cover posterior predictive distribution
+# approximation range
+CDF_APPROX_MIN = 0.3
+CDF_APPROX_MAX = 1 - 1e-10
 
 
 def _prepare_design_aris(design_aris, truncated_probability):
@@ -28,9 +37,10 @@ def _prepare_design_aris(design_aris, truncated_probability):
 
     # Approx nodes to compute posterior predictive distribution
     # .. regular spacing
-    c0 = expit(logit(design_cdf.min()) / 2)
-    c1 = expit(logit(design_cdf.max()) * 2)
+    c0 = CDF_APPROX_MIN
+    c1 = CDF_APPROX_MAX
     post_pred_cdf = np.linspace(c0, c1, N_POSTPRED_APPROX // 2)
+
     # .. Gumbel spacing
     x0 = cdf_to_reduced_variate(c0, "gumbel")
     x1 = cdf_to_reduced_variate(c1, "gumbel")
@@ -191,13 +201,20 @@ def ams_report(marginal, params=None, observed=None,
     marginal.logscale = means.loc[params_columns["logscale"]]
     if marginal.has_shape:
         marginal.shape1 = means.loc[params_columns["shape1"]]
-    xi = marginal.ppf(post_pred_cdf)
+
+    xi = np.unique(marginal.ppf(post_pred_cdf))
     xm = (xi[:-1] + xi[1:]) / 2
+
+    # .. compute quantile distribution using mean params
+    #    of design floods
+    design_meanp = marginal.ppf(design_cdf)
+
+    # .. initialise parameter vectors
     nxi = len(xi) + 1
     a_coefs = np.zeros(nxi)
     b_coefs = np.zeros(nxi)
     c_coefs = np.zeros(nxi)
-    nparams = len(params)
+    nparams_ok = 0.
 
     # Loop through parameters
     for iparams, (_, p) in enumerate(params.iterrows()):
@@ -210,14 +227,17 @@ def ams_report(marginal, params=None, observed=None,
         except ValueError:
             continue
 
+        nparams_ok += 1
+
         # .. get quadratic aprox coefficient to compute predictive
         #    posterior distribution
         fi = marginal.cdf(xi)
         fm = marginal.cdf(xm)
         a, b, c = quadapprox.get_coefficients(xi, fi, fm)
-        a_coefs += a / nparams
-        b_coefs += b / nparams
-        c_coefs += c / nparams
+
+        a_coefs += a
+        b_coefs += b
+        c_coefs += c
 
         # .. compute design streamflow
         toset[iparams, :ndesign] = marginal.ppf(design_cdf)
@@ -231,8 +251,13 @@ def ams_report(marginal, params=None, observed=None,
             aris = 1. / (1. - cdf)
             toset[iparams, ndesign + nobs: ndesign + 2 * nobs] = aris
 
-
+    # Set values in report
     report_df.loc[:, columns] = toset
+
+    # Standardize mean coefs
+    a_coefs = a_coefs / nparams_ok
+    b_coefs = b_coefs / nparams_ok
+    c_coefs = c_coefs / nparams_ok
 
     # Build stat report
     # .. compute stat
@@ -260,13 +285,16 @@ def ams_report(marginal, params=None, observed=None,
     report_stat.columns = [cn.upper() for cn in report_stat.columns]
 
     # .. compute posterior predictive distribution
-    #    of design floods
     design_post = quadapprox.inverse(design_cdf, xi, a_coefs, b_coefs, c_coefs)
-    cn = "POSTERIOR_PREDICTIVE"
-    report_stat.loc[:, cn] = np.nan
-    for ari, q in zip(design_aris, design_post):
+
+    cnp = "POSTERIOR_PREDICTIVE"
+    cnm = "MEAN_PARAMETERS"
+    for cn in [cnp, cnm]:
+        report_stat.loc[:, cn] = np.nan
+
+    for ari, qp, qm in zip(design_aris, design_post, design_meanp):
         idx = f"DESIGN_ARI{ari}"
-        report_stat.loc[idx, cn] = q
+        report_stat.loc[idx, cnp] = qp
+        report_stat.loc[idx, cnm] = qm
 
     return report_stat, report_df
-
