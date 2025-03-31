@@ -40,8 +40,8 @@ LOGSCALE_UPPER = 20
 LOGSCALE_PRIOR_LOC_DEFAULT = 0.
 LOGSCALE_PRIOR_SCALE_DEFAULT = 1e3
 
-SHAPE1_LOWER = -3.0
-SHAPE1_UPPER = 3.0
+SHAPE1_LOWER = -2.0
+SHAPE1_UPPER = 2.0
 SHAPE1_PRIOR_LOC_DEFAULT = 0.
 SHAPE1_PRIOR_SCALE_DEFAULT = 0.2
 
@@ -562,7 +562,7 @@ class FloodFreqDistribution():
         theta0 = theta0[:2] if not self.has_shape else theta0
         opt = minimize(self.neglogpost, theta0,
                        args=(dcens, low_censor, ncens),
-                       options=options, method="BFGS")
+                       options=options, method="Nelder-Mead")
 
         self.locn = opt.x[0]
         self.logscale = opt.x[1]
@@ -580,6 +580,7 @@ class FloodFreqDistribution():
         # D = det(H)
         # See https://james-brennan.github.io/posts/laplace_approximation/
         # cov = np.linalg.inv(opt.hess_inv)
+        # Does not work for LP3 due to boundary pb. Needs BFGS optim
 
         return -opt.fun, opt.x, dcens, ncens
 
