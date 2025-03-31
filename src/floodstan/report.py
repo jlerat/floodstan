@@ -16,9 +16,7 @@ DESIGN_ARIS = [2, 5, 10, 20, 50, 100, 200, 500, 1000]
 # (see test_quadapprox.test_approx_cdf)
 N_POSTPRED_APPROX = 2000
 
-# Amount of logit transformed cdf range extension
-# to cover posterior predictive distribution
-# approximation range
+# CDF range covered in posterior predictive approx
 CDF_APPROX_MIN = 0.3
 CDF_APPROX_MAX = 1 - 1e-10
 
@@ -39,6 +37,15 @@ def _prepare_design_aris(design_aris, truncated_probability):
     # .. regular spacing
     c0 = CDF_APPROX_MIN
     c1 = CDF_APPROX_MAX
+
+    if design_cdf.min() < c0:
+        errmess = f"Expected design cdf > {c0:3.3e}."
+        raise ValueError(errmess)
+
+    if design_cdf.max() > c1:
+        errmess = f"Expected design cdf < {c1:3.3e}."
+        raise ValueError(errmess)
+
     post_pred_cdf = np.linspace(c0, c1, N_POSTPRED_APPROX // 2)
 
     # .. Gumbel spacing
@@ -126,7 +133,8 @@ def process_stan_diagnostic(diag):
 def ams_report(marginal, params=None, observed=None,
                truncated_probability=0,
                design_aris=DESIGN_ARIS,
-               obs_prefix="OBS"):
+               obs_prefix="OBS",
+               posterior_predictive=True):
     """ Generate report variables.
 
     Parameters
@@ -144,6 +152,9 @@ def ams_report(marginal, params=None, observed=None,
         List of design flood ari to be computed.
     obs_prefix : str
         Prefix appended before observed variables.
+    posterior_predictive : bool
+        Compute quantiles from posterior predictive
+        distribution.
 
     Returns
     -------
@@ -157,6 +168,8 @@ def ams_report(marginal, params=None, observed=None,
     design_aris, design_cdf, design_columns, post_pred_cdf = \
         _prepare_design_aris(design_aris, truncated_probability)
 
+    has_obs = observed is not None
+
     # Use marginal params if no params provided
     if params is None:
         params = pd.DataFrame([marginal.params])
@@ -165,7 +178,7 @@ def ams_report(marginal, params=None, observed=None,
     params_columns = _detect_params_columns(params)
 
     # Prepare obs
-    if observed is not None:
+    if has_obs:
         obs_idx = list(observed.keys())
         obs_values = np.array([observed[k] for k in obs_idx])
         obs_columns_aep = [f"{obs_prefix}{o}_AEP[%]" for o in obs_idx]
@@ -187,7 +200,7 @@ def ams_report(marginal, params=None, observed=None,
     ndesign = len(design_columns)
     nset = ndesign
     columns = design_columns
-    if observed is not None:
+    if has_obs:
         nobs = len(obs_columns_aep)
         nset += 2*nobs
         columns += obs_columns_aep + obs_columns_ari
@@ -208,6 +221,12 @@ def ams_report(marginal, params=None, observed=None,
     # .. compute quantile distribution using mean params
     #    of design floods
     design_meanp = marginal.ppf(design_cdf)
+
+    if has_obs:
+        cdf = marginal.cdf(obs_values)
+        cdf = truncated_probability + (1 - truncated_probability) * cdf
+        obs_aep_meanp = (1 - cdf) * 100
+        obs_ari_meanp = 1 / (1 - cdf)
 
     # .. initialise parameter vectors
     nxi = len(xi) + 1
@@ -231,13 +250,14 @@ def ams_report(marginal, params=None, observed=None,
 
         # .. get quadratic aprox coefficient to compute predictive
         #    posterior distribution
-        fi = marginal.cdf(xi)
-        fm = marginal.cdf(xm)
-        a, b, c = quadapprox.get_coefficients(xi, fi, fm)
+        if posterior_predictive:
+            fi = marginal.cdf(xi)
+            fm = marginal.cdf(xm)
+            a, b, c = quadapprox.get_coefficients(xi, fi, fm)
 
-        a_coefs += a
-        b_coefs += b
-        c_coefs += c
+            a_coefs += a
+            b_coefs += b
+            c_coefs += c
 
         # .. compute design streamflow
         toset[iparams, :ndesign] = marginal.ppf(design_cdf)
@@ -254,10 +274,11 @@ def ams_report(marginal, params=None, observed=None,
     # Set values in report
     report_df.loc[:, columns] = toset
 
-    # Standardize mean coefs
-    a_coefs = a_coefs / nparams_ok
-    b_coefs = b_coefs / nparams_ok
-    c_coefs = c_coefs / nparams_ok
+    # Standardize coefs of posterior predictive
+    if posterior_predictive:
+        a_coefs = a_coefs / nparams_ok
+        b_coefs = b_coefs / nparams_ok
+        c_coefs = c_coefs / nparams_ok
 
     # Build stat report
     # .. compute stat
@@ -285,10 +306,21 @@ def ams_report(marginal, params=None, observed=None,
     report_stat.columns = [cn.upper() for cn in report_stat.columns]
 
     # .. compute posterior predictive distribution
-    design_post = quadapprox.inverse(design_cdf, xi, a_coefs, b_coefs, c_coefs)
+    if posterior_predictive:
+        # Design quantiles
+        design_post = quadapprox.inverse(design_cdf, xi, a_coefs, b_coefs, c_coefs)
+
+        # Obs AEP
+        if has_obs:
+            cdf = quadapprox.forward(obs_values, xi, a_coefs, b_coefs, c_coefs)
+            cdf = truncated_probability + (1 - truncated_probability) * cdf
+            obs_aep_post = (1 - cdf) * 100
+            obs_ari_post = 1 / (1 - cdf)
+    else:
+        design_post = np.nan * np.zeros_like(design_cdf)
 
     cnp = "POSTERIOR_PREDICTIVE"
-    cnm = "MEAN_PARAMETERS"
+    cnm = "EXPECTED_PARAMETERS"
     for cn in [cnp, cnm]:
         report_stat.loc[:, cn] = np.nan
 
@@ -296,5 +328,17 @@ def ams_report(marginal, params=None, observed=None,
         idx = f"DESIGN_ARI{ari}"
         report_stat.loc[idx, cnp] = qp
         report_stat.loc[idx, cnm] = qm
+
+    if has_obs:
+        report_stat.loc[obs_columns_aep, cnm] = obs_aep_meanp
+        report_stat.loc[obs_columns_ari, cnm] = obs_ari_meanp
+
+        if posterior_predictive:
+            report_stat.loc[obs_columns_aep, cnp] = obs_aep_post
+            report_stat.loc[obs_columns_ari, cnp] = obs_ari_post
+
+    # .. add expected parameters
+    idx = [f"y{n}" for n in PARAMETERS]
+    report_stat.loc[idx, cnm] = means.loc[idx]
 
     return report_stat, report_df
