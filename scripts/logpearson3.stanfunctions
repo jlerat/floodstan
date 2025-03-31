@@ -2,6 +2,10 @@ real sign(real x) {
     return x > 0 ? 1 : (x < 0 ? -1 : 0);
 }
 
+real trans(real x) {
+    return (x + sqrt(1e-10 + x*x)) / 2;
+}
+
 real logpearson3_lpdf(vector y, real m, real s, real g) {
     int N = rows(y);
 
@@ -29,9 +33,9 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
 
         for(i in 1:N) {
             ly = log(y[i]);
-            u = beta * (ly - tau);
-            if(u < 0) 
-                reject("u[", i, "] (", u, ") < 0 with m=", m, " s=", s, " g=", g);
+            u = trans(beta * (ly - tau));
+            //if(u < 0) 
+            //    reject("u[", i, "] (", u, ") < 0 with m=", m, " s=", s, " g=", g);
 
             lpdf_sum += gamma_lpdf(u | alpha, 1.);
             lpdf_sum += log_beta - ly;

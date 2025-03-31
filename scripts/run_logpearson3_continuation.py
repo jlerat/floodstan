@@ -51,6 +51,7 @@ stationids = tsu.get_stationids()
 stationid = stationids[0]
 
 distname = "LogPearson3"
+marginal = marginals.factory(distname)
 
 stan_nwarm = 5000
 stan_nsamples = 5000
@@ -72,7 +73,7 @@ for f in fout.glob("*.*"):
 # @Logging
 # ----------------------------------------------------------------------
 basename = Path(__file__).stem
-LOGGER = sample.get_logger(stan_logger=True)
+LOGGER = sample.get_logger(stan_logger=False)
 LOGGER.info(f"Censoring : {censoring}")
 
 # ----------------------------------------------------------------------
@@ -80,7 +81,7 @@ LOGGER.info(f"Censoring : {censoring}")
 # ----------------------------------------------------------------------
 y = tsu.get_ams(stationid)
 censor = y.median() if censoring else np.nanmin(y) - 1e-3
-sv = sample.StanSamplingVariable(y, distname, censor)
+sv = sample.StanSamplingVariable(marginal, y, censor)
 stan_data = sv.to_dict()
 stan_inits = sv.initial_parameters
 
@@ -88,7 +89,7 @@ stan_inits = sv.initial_parameters
 # @Process
 # ----------------------------------------------------------------------
 
-LOGGER.info("Run stan")
+LOGGER.info("Load model")
 stan_file = froot / "scripts" / "logpearson3_run.stan"
 model = CmdStanModel(stan_file=stan_file)
 print(model)
@@ -102,18 +103,20 @@ kwargs["iter_sampling"] = stan_nsamples // stan_nchains
 kwargs["show_progress"] = False
 kwargs["output_dir"] = fout
 #kwargs["adapt_delta"] = 0.95
+
+LOGGER.info("Sampling")
 fit = model.sample(data=stan_data, **kwargs)
 
-# process
+LOGGER.info("Processing")
 smp = fit.draws_pd().squeeze()
 diag = report.process_stan_diagnostic(fit.diagnose())
 for n in ["divergence", "ebfmi", "effsamplesz", "rhat"]:
     LOGGER.info(f"Diag {n} : {diag[n]}")
 
-
 aris = np.array([2, 5, 10, 20, 50, 100, 500, 1000])
 rep, _ = report.ams_report(sv.marginal, smp, design_aris=aris)
 
+LOGGER.info("Plotting")
 plt.close("all")
 fig, ax = plt.subplots()
 ptype = "gumbel"

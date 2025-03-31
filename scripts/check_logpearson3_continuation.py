@@ -95,7 +95,7 @@ for stationid in stationids:
         if np.random.uniform(0, 1) < 0.1:
             dist.shape1 = 1e-20
 
-        sv = sample.StanSamplingVariable(yboot, dist.name)
+        sv = sample.StanSamplingVariable(dist, yboot)
         stan_data = sv.to_dict()
         stan_data["ylocn"] = dist.locn
         stan_data["ylogscale"] = dist.logscale
