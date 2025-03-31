@@ -308,8 +308,8 @@ def ams_report(marginal, params=None, observed=None,
     # .. compute posterior predictive distribution
     if posterior_predictive:
         # Design quantiles
-        design_post = quadapprox.inverse(design_cdf, xi, a_coefs, b_coefs, c_coefs)
-
+        design_post = quadapprox.inverse(design_cdf, xi,
+                                         a_coefs, b_coefs, c_coefs)
         # Obs AEP
         if has_obs:
             cdf = quadapprox.forward(obs_values, xi, a_coefs, b_coefs, c_coefs)
