@@ -135,7 +135,8 @@ def test_stan_sampling_variable(distname, allclose):
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
 def test_univariate_censored_sampling(distname, censoring, allclose):
-    pytest.skip("WIP!!!")
+    if distname == "LogPearson3":
+        pytest.skip()
 
     stationids = get_stationids()
     stationid = stationids[0]
@@ -205,15 +206,6 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
     smp = univariate_censored_sampling(**kw)
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
-
-    from termplot import splot
-    splot(imp.locn, imp.logscale)
-    splot(df.ylocn, df.ylogscale)
-    import pdb; pdb.set_trace()
-
-
-    import pdb; pdb.set_trace()
-
 
     # Test diag
     assert diag["treedepth"] == "satisfactory"

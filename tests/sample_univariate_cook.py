@@ -162,8 +162,6 @@ def univariate_sampling_cook(marginal_name, stationid, debug,
         # Get sample data
         df = smp.draws_pd()
         res = report.process_stan_diagnostic(smp.diagnose())
-        import pdb; pdb.set_trace()
-
 
         # Clean
         for f in fout.glob("*.*"):

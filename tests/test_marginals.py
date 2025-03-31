@@ -126,7 +126,7 @@ def test_prior_properties(param_name):
     prior.set_uninformative()
     rv = prior.rv
     assert prior.loc == 0
-    assert prior.scale == 1e100
+    assert prior.scale == 1e10
     assert prior._a == -1.
     assert prior._b == 1.
 

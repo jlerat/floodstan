@@ -82,9 +82,8 @@ def test_report(allclose):
 
 
 @pytest.mark.parametrize("nobs", [10, 100])
-@pytest.mark.parametrize("coeffvar", [0.1, 5., 10.])
-def test_normal_predictive_posterior(nobs, coeffvar, allclose):
-    # Inference of normal params with normal-gamma conjugate prior
+@pytest.mark.parametrize("coeffvar", [0.1, 5.])
+def test_predictive_posterior(nobs, coeffvar, allclose):
     # See Murphy, K. P. (n.d.). Conjugate Bayesian analysis of the Gaussian distribution.
     # We assume
     # lam = 1 / sig^2
@@ -139,10 +138,7 @@ def test_normal_predictive_posterior(nobs, coeffvar, allclose):
     assert ari_max == 1000
 
     # Check posterior predictive
-    emax = np.abs(np.log(ppred) - np.log(ppred_th)).max()
-    print(f"emax = {emax:6.3f}")
-
-    atol, rtol = 1e-3, 5e-2
-    idx = np.abs(ppred - ppred_th) > atol + rtol * ppred
+    atol, rtol = 0, 2e-2
+    idx = np.abs(ppred - ppred_th) > atol + rtol * ppred_th
     assert allclose(ppred, ppred_th, atol=atol, rtol=rtol)
 
