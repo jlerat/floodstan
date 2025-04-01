@@ -1,4 +1,5 @@
 import re
+from collections import OrderedDict
 import numpy as np
 import pandas as pd
 
@@ -59,7 +60,7 @@ def _prepare_design_aris(design_aris, truncated_probability):
 
 
 def _detect_params_columns(params):
-    params_columns = {}
+    params_columns = OrderedDict()
     for pname in PARAMETERS:
         cc = [cn for cn in params.columns if re.search(f"{pname}$", cn)]
 
@@ -71,6 +72,7 @@ def _detect_params_columns(params):
             raise ValueError(errmess)
 
         params_columns[pname] = cc[0]
+
     return params_columns
 
 
@@ -338,7 +340,7 @@ def ams_report(marginal, params=None, observed=None,
             report_stat.loc[obs_columns_ari, cnp] = obs_ari_post
 
     # .. add expected parameters
-    idx = [f"y{n}" for n in PARAMETERS]
+    idx = [n for k, n in params_columns.items()]
     report_stat.loc[idx, cnm] = means.loc[idx]
 
     return report_stat, report_df
