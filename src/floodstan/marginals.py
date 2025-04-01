@@ -1194,7 +1194,7 @@ class Gamma(FloodFreqDistribution):
         super(Gamma, self).__init__("Gamma", False)
 
         # Only positive locn param allowed
-        self.locn_lower = 1e-10
+        self.locn_prior.lower = 1e-10
 
     @property
     def support(self):

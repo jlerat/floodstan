@@ -403,11 +403,11 @@ class StanSamplingVariable():
         self._initial_cdfs = cdfs
 
     def set_priors(self):
-        start = self.guess_parameters
-
         # Special set for LogPearson3 due to
-        # fitting difficulties
+        # fitting difficulties otherwise
+        # use prior from marginal
         if self.marginal.name == "LogPearson3":
+            start = self.guess_parameters
             self.marginal.locn_prior.loc = start["locn"]
             self.marginal.logscale_prior.loc = start["logscale"]
             self.marginal.shape1_prior.loc = start["shape1"]
