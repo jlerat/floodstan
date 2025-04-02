@@ -40,8 +40,11 @@ LOGSCALE_UPPER = 20
 LOGSCALE_PRIOR_LOC_DEFAULT = 0.
 LOGSCALE_PRIOR_SCALE_DEFAULT = 1e3
 
-SHAPE1_LOWER = -2.0
-SHAPE1_UPPER = 2.0
+# 1.95 avoids the value of 2 which
+# reduces gamma distribution used in LP3
+# to exponential (a = 4/g^2)
+SHAPE1_LOWER = -1.95
+SHAPE1_UPPER = 1.95
 SHAPE1_PRIOR_LOC_DEFAULT = 0.
 SHAPE1_PRIOR_SCALE_DEFAULT = 0.2
 

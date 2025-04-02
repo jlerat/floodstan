@@ -135,8 +135,8 @@ def test_stan_sampling_variable(distname, allclose):
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
 def test_univariate_censored_sampling(distname, censoring, allclose):
-    if distname == "LogPearson3":
-        pytest.skip()
+    #if distname == "LogPearson3":
+    #    pytest.skip()
 
     stationids = get_stationids()
     stationid = stationids[0]

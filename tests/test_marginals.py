@@ -61,8 +61,8 @@ def test_floodfreqdist(allclose):
         dist[pn] = 1
         assert getattr(dist, pn) == 1
 
-        dist[pn] = 2
-        assert dist[pn] == 2
+        dist[pn] = -1
+        assert getattr(dist, pn) == -1
 
     dist.logshape = -1
 
@@ -111,9 +111,11 @@ def test_prior_properties(param_name):
     assert np.all(s > prior.lower)
     assert np.all(s < prior.upper)
 
-    p = np.linspace(-2, 2, 10)
-    assert np.all(np.isfinite(prior.logpdf(p)))
-    assert np.all(np.isfinite(prior.logcdf(p)))
+    x0 = getattr(marginals, f"{param_name.upper()}_LOWER") + 1e-3
+    x1 = getattr(marginals, f"{param_name.upper()}_UPPER") - 1e-3
+    x = np.linspace(x0, x1, 10)
+    assert np.all(np.isfinite(prior.logpdf(x)))
+    assert np.all(np.isfinite(prior.logcdf(x)))
 
     prior.lower = 10.
     prior.upper = -10.
