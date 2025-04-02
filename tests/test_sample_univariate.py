@@ -150,18 +150,18 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
     #y = marginal.rvs(500)
 
     # Fix bounds
-    boot = sample.bootstrap(marginal, y, nboot=1000)
-    imp, _, neff = sample.importance_sampling(marginal,
-                                              y, boot, censor,
-                                              nsamples=1000)
-    for n in marginals.PARAMETERS:
-        prior = getattr(marginal, f"{n}_prior")
-        se = imp.loc[:, n]
-        low, up = se.min(), se.max()
-        delta = (up - low) / 20.
-        prior.lower = low - delta
-        prior.upper = up + delta
-        prior.informative = True
+    #boot = sample.bootstrap(marginal, y, nboot=1000)
+    #imp, _, neff = sample.importance_sampling(marginal,
+    #                                          y, boot, censor,
+    #                                          nsamples=1000)
+    #for n in marginals.PARAMETERS:
+    #    prior = getattr(marginal, f"{n}_prior")
+    #    se = imp.loc[:, n]
+    #    low, up = se.min(), se.max()
+    #    delta = (up - low) / 20.
+    #    prior.lower = low - delta
+    #    prior.upper = up + delta
+    #    prior.informative = True
 
     # Set STAN
     stan_nwarm = 10000
