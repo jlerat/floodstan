@@ -90,10 +90,13 @@ def _check_prior(values):
 
 
 def are_marginal_params_valid(marginal, locn, logscale, shape1, data, censor):
-    marginal.locn = locn
-    marginal.logscale = logscale
-    if marginal.has_shape:
-        marginal.shape1 = shape1
+    try:
+        marginal.locn = locn
+        marginal.logscale = logscale
+        if marginal.has_shape:
+            marginal.shape1 = shape1
+    except:
+        return None, None
 
     cdf = marginal.cdf(data)
     cdf[data < censor] = np.nan
