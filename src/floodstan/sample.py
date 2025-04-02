@@ -95,7 +95,7 @@ def are_marginal_params_valid(marginal, locn, logscale, shape1, data, censor):
         marginal.logscale = logscale
         if marginal.has_shape:
             marginal.shape1 = shape1
-    except:
+    except Exception:
         return None, None
 
     cdf = marginal.cdf(data)
