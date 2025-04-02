@@ -3,7 +3,8 @@ real sign(real x) {
 }
 
 real trans(real x) {
-    return (x + sqrt(1e-10 + x*x)) / 2;
+    real eps = 1e-30;
+    return (x + abs(x)) / 2 + eps * eps / 2 / (eps + abs(x));
 }
 
 real logpearson3_lpdf(vector y, real m, real s, real g) {
@@ -33,9 +34,8 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
 
         for(i in 1:N) {
             ly = log(y[i]);
-            u = trans(beta * (ly - tau));
-            //if(u < 0) 
-            //    reject("u[", i, "] (", u, ") < 0 with m=", m, " s=", s, " g=", g);
+            if(u <= 0) 
+                reject("u[", i, "] (", u, ") < 0 with m=", m, " s=", s, " g=", g);
 
             lpdf_sum += gamma_lpdf(u | alpha, 1.);
             lpdf_sum += log_beta - ly;
@@ -117,6 +117,7 @@ real logpearson3_cdf(real y, real m, real s, real g){
     array[Napprox+1] real bm;
 
     // Compute log cdf depending on skew
+    //real x = beta * (log(y) - tau);
     real x = beta * (log(y) - tau);
 
     if(abs_g < n2p_trans) {

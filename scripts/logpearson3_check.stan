@@ -32,6 +32,18 @@ generated quantities {
   vector[1] yv;
   real yi;
 
+  vector[100] u = linspaced_vector(100, -1e-10, 1e-10);
+  vector[100] tu;
+  vector[100] lpdf1;
+  vector[100] lpdf2;
+
+  for(i in 1:100){
+      tu[i] = trans(u[i]); 
+      lpdf1[i] = gamma_lpdf(tu[i] | 1.01, 1.);
+      lpdf2[i] = gamma_lpdf(tu[i] | 1.1, 1.);
+  }
+
+
   for(i in 1:N) {
       yi = y[i];
       yv[1] = yi;

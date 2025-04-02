@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.stats import gamma
 import matplotlib.pyplot as plt
 
 from hydrodiy.io import csv, iutils
@@ -67,7 +68,7 @@ for f in fout.glob("*.*"):
 # @Logging
 # ----------------------------------------------------------------------
 basename = Path(__file__).stem
-LOGGER = sample.get_logger(stan_logger=False)
+LOGGER = sample.get_logger(stan_logger=True)
 
 # ----------------------------------------------------------------------
 # @Get data
@@ -75,7 +76,7 @@ LOGGER = sample.get_logger(stan_logger=False)
 # ----------------------------------------------------------------------
 # @Process
 # ----------------------------------------------------------------------
-dist = marginals.factory("LogPearson3")
+marginal = marginals.factory("LogPearson3")
 
 stan_file = froot / "scripts" / "logpearson3_check.stan"
 model = CmdStanModel(stan_file=stan_file)
@@ -89,17 +90,17 @@ for stationid in stationids:
         # Bootstrap fit
         rng = np.random.default_rng(SEED)
         yboot = rng.choice(y.values, len(y))
-        dist.params_guess(yboot)
+        marginal.params_guess(yboot)
 
         # Test 0 shape for edge cases
         if np.random.uniform(0, 1) < 0.1:
-            dist.shape1 = 1e-20
+            marginal.shape1 = 1e-20
 
-        sv = sample.StanSamplingVariable(dist, yboot)
+        sv = sample.StanSamplingVariable(marginal, yboot)
         stan_data = sv.to_dict()
-        stan_data["ylocn"] = dist.locn
-        stan_data["ylogscale"] = dist.logscale
-        stan_data["yshape1"] = dist.shape1
+        stan_data["ylocn"] = marginal.locn
+        stan_data["ylogscale"] = marginal.logscale
+        stan_data["yshape1"] = marginal.shape1
 
         kwargs = {}
         kwargs["chains"] = 1
@@ -113,26 +114,42 @@ for stationid in stationids:
         smp = fit.draws_pd().squeeze()
 
         # Test
-        errmess = str(dist)
+        errmess = f"Error using {marginal}."
+
+        u = smp.filter(regex="^u").values
+        tu = smp.filter(regex="tu").values
+        assert np.all(tu > 0), errmess
+        assert np.allclose(tu[u<0], 0.), errmess
+
+        a1 = 1.01
+        exp1 = gamma.logpdf(u, a1)
+        lp1 = smp.filter(regex="lpdf1").values
+        assert np.allclose(lp1[u>0], exp1[u>0]), errmess
+
+        a2 = 1.1
+        exp2 = gamma.logpdf(u, a2)
+        lp2 = smp.filter(regex="lpdf2").values
+        assert np.allclose(lp2[u>0], exp2[u>0]), errmess
+
         tau = smp.filter(regex="tau_copy").values
-        assert np.allclose(tau, dist.tau, atol=1e-5), errmess
+        assert np.allclose(tau, marginal.tau, atol=1e-5), errmess
 
         beta = smp.filter(regex="beta_copy").values
-        assert np.allclose(beta, dist.beta, atol=1e-5), errmess
+        assert np.allclose(beta, marginal.beta, atol=1e-5), errmess
 
         alpha = smp.filter(regex="alpha_copy").values
-        assert np.allclose(alpha, dist.alpha, atol=1e-5), errmess
+        assert np.allclose(alpha, marginal.alpha, atol=1e-5), errmess
 
         luncens = smp.filter(regex="luncens").values
-        expected = dist.logpdf(yboot)
+        expected = marginal.logpdf(yboot)
         assert np.allclose(luncens, expected, atol=1e-5), errmess
 
         cens = smp.filter(regex="^cens").values
-        expected = dist.cdf(yboot)
+        expected = marginal.cdf(yboot)
         assert np.allclose(cens, expected, atol=1e-5), errmess
 
         lcens = smp.filter(regex="^lcens").values
-        expected = dist.logcdf(yboot)
+        expected = marginal.logcdf(yboot)
         assert np.allclose(lcens, expected, atol=1e-5), errmess
 
 
