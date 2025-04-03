@@ -36,6 +36,8 @@ np.random.seed(SEED)
 
 FTESTS = Path(__file__).resolve().parent
 
+LOGGER = sample.get_logger(stan_logger=False)
+
 # --- Utils functions ----------------------------
 def get_stationids(skip=5):
     fs = FTESTS / "data"

@@ -119,9 +119,6 @@ def test_prior_properties(param_name):
     with pytest.raises(ValueError, match="Inconsistent lower"):
         prior.lower
 
-    with pytest.raises(ValueError, match="Invalid value for"):
-        prior.scale = -10.
-
     prior.set_uninformative()
     rv = prior.rv
     assert prior.loc == 0

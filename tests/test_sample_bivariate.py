@@ -32,6 +32,8 @@ FTESTS = Path(__file__).resolve().parent
 
 STATIONIDS = get_stationids()
 
+LOGGER = sample.get_logger(stan_logger=False)
+
 
 @pytest.mark.parametrize("distname",
                          marginals.MARGINAL_NAMES)
