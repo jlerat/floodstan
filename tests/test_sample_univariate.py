@@ -145,12 +145,11 @@ def test_stan_sampling_variable(distname, allclose):
 @pytest.mark.parametrize("distname",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
-def test_univariate_censored_sampling(distname, censoring, allclose):
+@pytest.mark.parametrize("stationid",
+                         [get_stationids()[0], "hard"])
+def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
     #if distname == "LogPearson3":
     #    pytest.skip()
-
-    stationids = get_stationids()
-    stationid = stationids[0]
 
     y = get_ams(stationid)
     censor = y.median() if censoring else np.nanmin(y) - 1.
@@ -159,20 +158,6 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
 
     #marginal.params_guess(y)
     #y = marginal.rvs(500)
-
-    # Fix bounds
-    boot = sample.bootstrap(marginal, y, nboot=1000)
-    imp, _, neff = sample.importance_sampling(marginal,
-                                              y, boot, censor,
-                                              nsamples=1000)
-    for n in marginals.PARAMETERS:
-        prior = getattr(marginal, f"{n}_prior")
-        se = imp.loc[:, n]
-        low, up = se.min(), se.max()
-        delta = (up - low) / 10.
-        prior.lower = low - delta
-        prior.upper = up + delta
-        prior.informative = True
 
     # Set STAN
     stan_nwarm = 10000
@@ -226,6 +211,7 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
               output_dir=fout,
               inits=stan_inits,
               chains=stan_nchains,
+              parallel_chains=stan_nchains,
               iter_warmup=stan_nwarm)
 
     # Sample

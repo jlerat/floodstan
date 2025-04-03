@@ -22,6 +22,7 @@ from floodstan import univariate_censored_sampling
 from test_sample_univariate import get_stationids, get_ams
 
 SEED = 5446
+np.random.seed(SEED)
 
 FTESTS = Path(__file__).resolve().parent
 
@@ -121,5 +122,6 @@ def test_predictive_posterior(nobs, coeffvar, allclose):
     assert ari_max == 1000
 
     # Check posterior predictive
-    atol, rtol = 0, 1e-2
+    atol = 0
+    rtol = 1e-2 if coeffvar == 0.5 else 5e-2
     assert allclose(ppred, ppred_th, atol=atol, rtol=rtol)

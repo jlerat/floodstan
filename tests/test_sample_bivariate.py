@@ -85,7 +85,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
 
     stan_nwarm = 10000
     stan_nsamples = 5000
-    stan_nchains = 5
+    stan_nchains = 10
 
     stationid = STATIONIDS[0]
     y = get_ams(stationid)
