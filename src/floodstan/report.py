@@ -20,6 +20,7 @@ N_POSTPRED_APPROX = 2000
 # CDF range covered in posterior predictive approx
 CDF_APPROX_MIN = 0.3
 CDF_APPROX_MAX = 1 - 1e-10
+LOGIT_MAX = 200
 
 
 def _prepare_design_aris(design_aris, truncated_probability):
@@ -248,18 +249,17 @@ def ams_report(marginal, params=None, observed=None,
         except ValueError:
             continue
 
-        nparams_ok += 1
-
         # .. get quadratic aprox coefficient to compute predictive
         #    posterior distribution
         if posterior_predictive:
             fi = marginal.cdf(xi)
             fm = marginal.cdf(xm)
             a, b, c = quadapprox.get_coefficients(xi, fi, fm)
-
             a_coefs += a
             b_coefs += b
             c_coefs += c
+
+            nparams_ok += 1
 
         # .. compute design streamflow
         toset[iparams, :ndesign] = marginal.ppf(design_cdf)

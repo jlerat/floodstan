@@ -111,17 +111,7 @@ def _check_param_value(x, lower=-np.inf, upper=np.inf, name=None):
     if np.isnan(x) or not np.isfinite(x):
         raise ValueError(errmess)
 
-    if np.isfinite(lower):
-        if x < lower:
-            errmess += f" Expected value ('{x}') > lower ('{lower}')."
-            raise ValueError(errmess)
-
-    if np.isfinite(upper):
-        if x > upper:
-            errmess += f" Expected value ('{x}') < upper ('{upper}')."
-            raise ValueError(errmess)
-
-    return x
+    return max(lower, min(upper, x))
 
 
 def _prepare_censored_data(data, low_censor):

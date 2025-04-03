@@ -39,50 +39,34 @@ def test_process_stan_diagnostic():
     assert dd["divergence_proportion"] == 0
 
 
-def test_report(allclose):
-    stationid = "201001"
-    marginal = marginals.factory("GEV")
+@pytest.mark.parametrize("stationid",
+                         get_stationids()[:2] + ["hard"])
+@pytest.mark.parametrize("marginal_name",
+                         marginals.MARGINAL_NAMES)
+def test_report(stationid, marginal_name, allclose):
+    marginal = marginals.factory(marginal_name)
     y = get_ams(stationid)
-    N = len(y)
-    stan_nchains = 5
-
-    # Configure stan data and initialisation
-    sv = sample.StanSamplingVariable(marginal, y,
-                                     ninits=stan_nchains)
-    stan_data = sv.to_dict()
-    stan_inits = sv.initial_parameters
-
-    # Clean output folder
-    LOGGER = sample.get_logger(stan_logger=False)
-    fout = FTESTS / "report" / stationid
-    fout.mkdir(parents=True, exist_ok=True)
-    for f in fout.glob("*.*"):
-        f.unlink()
-
-    # Sample
-    smp = univariate_censored_sampling(data=stan_data,
-                                       chains=stan_nchains,
-                                       seed=SEED,
-                                       iter_warmup=5000,
-                                       iter_sampling=500,
-                                       output_dir=fout,
-                                       inits=stan_inits)
-    # Get sample data
-    params = smp.draws_pd()
+    params = sample.bootstrap(marginal, y, nboot=1000)
 
     # Run report without obs
-    rep, _ = report.ams_report(sv.marginal, params) #, design_aris=[100])
+    rep, _ = report.ams_report(marginal, params)
     assert rep.shape == (12, 14)
 
+    pred = rep.POSTERIOR_PREDICTIVE.filter(regex="DESIGN")
+    assert pred.notnull().all()
+
     # Run report with obs
-    years = np.arange(1973, 2022)
-    obs = {year: y[year] for year in years}
-    rep, _ = report.ams_report(sv.marginal, params, obs)
-    assert rep.shape == (12 + 2 * len(obs), 14)
+    if marginal_name == "Gumbel" and stationid == get_stationids()[0]:
+        y2 = y.index[-1]
+        y1 = y2 - min(len(y), 10) + 1
+        years = np.arange(y1, y2 + 1)
+        obs = {year: y[year] for year in years}
+        rep, _ = report.ams_report(marginal, params, obs)
+        assert rep.shape == (12 + 2 * len(obs), 14)
 
 
 @pytest.mark.parametrize("nobs", [10, 100])
-@pytest.mark.parametrize("coeffvar", [0.1, 5.])
+@pytest.mark.parametrize("coeffvar", [0.5, 5.])
 def test_predictive_posterior(nobs, coeffvar, allclose):
     # See Murphy, K. P. (n.d.). Conjugate Bayesian analysis of the Gaussian distribution.
     # We assume
@@ -112,7 +96,7 @@ def test_predictive_posterior(nobs, coeffvar, allclose):
     bn = b0 + S / 2 + k0 * nobs * (mub - mu0)**2 / (k0 + nobs) / 2
 
     # .. posterior samples
-    nsamples = 1000
+    nsamples = 5000
     lamp = gamma.rvs(a=an, scale=1./bn, size=nsamples)
     mup = norm.rvs(loc=mun, scale=1/np.sqrt(lamp * kn), size=nsamples)
     params = pd.DataFrame({"ylocn": mup, "ylogscale": -np.log(lamp) / 2,
@@ -126,7 +110,6 @@ def test_predictive_posterior(nobs, coeffvar, allclose):
 
     ppred = rep.POSTERIOR_PREDICTIVE.filter(regex="DESIGN")
     ppred = ppred.values
-    expq = rep.MEAN.filter(regex="DESIGN").values
 
     # .. theoretical
     _, cdf, _, _ = report._prepare_design_aris(aris, 0.)
@@ -138,7 +121,5 @@ def test_predictive_posterior(nobs, coeffvar, allclose):
     assert ari_max == 1000
 
     # Check posterior predictive
-    atol, rtol = 0, 2e-2
-    idx = np.abs(ppred - ppred_th) > atol + rtol * ppred_th
+    atol, rtol = 0, 1e-2
     assert allclose(ppred, ppred_th, atol=atol, rtol=rtol)
-

@@ -26,7 +26,8 @@ from floodstan import copulas
 from floodstan import report
 from floodstan import load_stan_model
 from floodstan import univariate_censored_sampling
-from floodstan import load_stan_model
+
+from floodstan import stan_test_marginal
 
 from tqdm import tqdm
 
@@ -48,12 +49,20 @@ def get_stationids(skip=5):
             continue
         stationids.append(sid)
 
-    return stationids
+    return stationids + ["hard"]
+
 
 def get_ams(stationid):
-    fs = FTESTS / "data" / f"{stationid}_AMS.csv"
-    df = pd.read_csv(fs, skiprows=15, index_col=0)
-    return df.iloc[:, 0]
+    if stationid == "hard":
+        fd = FTESTS / "data" / "LogPearson3_divergence_test.csv"
+        y = pd.read_csv(fd).squeeze()
+        y.index = np.arange(1990, 1990 + len(y))
+        return y
+    else:
+        fs = FTESTS / "data" / f"{stationid}_AMS.csv"
+        df = pd.read_csv(fs, skiprows=15, index_col=0)
+        return df.iloc[:, 0]
+
 
 def get_info():
     fs = FTESTS / "data" / "stations.csv"
@@ -150,18 +159,18 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
     #y = marginal.rvs(500)
 
     # Fix bounds
-    #boot = sample.bootstrap(marginal, y, nboot=1000)
-    #imp, _, neff = sample.importance_sampling(marginal,
-    #                                          y, boot, censor,
-    #                                          nsamples=1000)
-    #for n in marginals.PARAMETERS:
-    #    prior = getattr(marginal, f"{n}_prior")
-    #    se = imp.loc[:, n]
-    #    low, up = se.min(), se.max()
-    #    delta = (up - low) / 20.
-    #    prior.lower = low - delta
-    #    prior.upper = up + delta
-    #    prior.informative = True
+    boot = sample.bootstrap(marginal, y, nboot=1000)
+    imp, _, neff = sample.importance_sampling(marginal,
+                                              y, boot, censor,
+                                              nsamples=1000)
+    for n in marginals.PARAMETERS:
+        prior = getattr(marginal, f"{n}_prior")
+        se = imp.loc[:, n]
+        low, up = se.min(), se.max()
+        delta = (up - low) / 10.
+        prior.lower = low - delta
+        prior.upper = up + delta
+        prior.informative = True
 
     # Set STAN
     stan_nwarm = 10000
@@ -172,13 +181,27 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
                                      ninits=stan_nchains)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
-    stan_inits3 = stan_inits[:3]
 
+    # Test initial parameters are legit
     m = sv.marginal
     for p in stan_inits:
         m.params = p
-        assert np.all(np.isfinite(m.logpdf(y)))
-        assert np.all(np.isfinite(m.logcdf(y)))
+        lp = m.logpdf(y)
+        assert np.all(np.isfinite(lp))
+
+        lc = m.logcdf(y)
+        assert np.all(np.isfinite(lc))
+
+        stan_data["ylocn"] = m.locn
+        stan_data["ylogscale"] = m.logscale
+        stan_data["yshape1"] = m.shape1
+        smp = stan_test_marginal(data=stan_data)
+
+        lps = smp.filter(regex="luncens").values
+        assert allclose(lp, lps, atol=1e-5)
+
+        lcs = smp.filter(regex="^lcens").values
+        assert allclose(lc, lcs, atol=1e-5)
 
     # Clean output folder
     fout = FTESTS / "sampling" / "univariate"
@@ -188,10 +211,11 @@ def test_univariate_censored_sampling(distname, censoring, allclose):
 
     # Wrong number of inits
     msg = "Expected 1 or"
+    stan_inits3 = stan_inits[:3]
     with pytest.raises(ValueError, match=msg):
         smp = univariate_censored_sampling(data=stan_data,
-                                       inits=stan_inits3,
-                                       output_dir=fout)
+                                           inits=stan_inits3,
+                                           output_dir=fout)
 
     # Sample arguments
     kw = dict(data=stan_data,

@@ -35,27 +35,16 @@ FTESTS = Path(__file__).resolve().parent
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
 def test_importance_sampling(stationid, distname, censoring):
-    if stationid == "hard":
-        fd = FTESTS / "data" / "LogPearson3_divergence_test.csv"
-        y = pd.read_csv(fd).squeeze()
-    else:
-        y = get_ams(stationid)
-
+    y = get_ams(stationid)
     censor = y.median() if censoring else -100.
     marginal = marginals.factory(distname)
 
     # First sample
     nsamples = 5000
 
-    # .. use lh
+    # .. use lh as prior
     params = sample.bootstrap(marginal, y, nboot=2000)
-
-    # .. use laplace
-    #f, theta, _, _, cov = marginal.maximum_posterior_estimate(y, censor)
-    #params = np.random.multivariate_normal(mean=theta, cov=cov, size=nsamples)
-    #if not marginal.has_shape:
-    #    params = np.column_stack([params, np.zeros(len(params))])
-
+    # .. importance sampling
     smp, lps, neff = sample.importance_sampling(marginal, y, params,
                                            censor, nsamples)
     assert neff > 1000

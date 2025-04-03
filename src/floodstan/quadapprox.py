@@ -109,37 +109,42 @@ def inverse(f, xi, a, b, c):
         xr0 = np.nan_to_num(q / a, nan=np.inf)
         xr1 = np.nan_to_num(c_root / q, nan=np.inf)
 
-    # Eliminate linear extrapolation
-    xr0[:, [0, -1]] = np.inf
-    xr1[:, [0, -1]] = np.inf
-
     # Check roots are within interpolation bands
     x0, x1 = xi[:-1], xi[1:]
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        ur0 = (xr0 - x0) / (x1 - x0)
+    xtmp = np.nan * np.zeros_like(xr0)
+    cond = np.zeros_like(xr0).astype(bool)
+    for xr in [xr0, xr1]:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ur = (xr - x0) / (x1 - x0)
 
-    isin = np.where((ur0 >= 0) & (ur0 <= 1))
-    idx, xtmp = [], []
-    if len(isin[0]) > 0:
-        idx.append(isin[0])
-        xtmp.append(xr0[isin])
+        # Checking if root is in interpolation band.
+        # If not, it's not a valid root.
+        c = (ur >= 0) & (ur <= 1)
+        cond[c] = True
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        ur1 = (xr1 - x0) / (x1 - x0)
+        # here we overwrite previous roots to
+        # keep the second one only. Could be improved
+        xtmp[c] = xr[c]
 
-    isin = np.where((ur1 >= 0) & (ur1 <= 1))
-    if len(isin[0]) > 0:
-        idx.append(isin[0])
-        xtmp.append(xr1[isin])
+    # Eliminate extrapolation if possible
+    multiple = cond.sum(axis=1) > 1
+    noextrapol = np.any(cond[:, 1:-1], axis=1)
+    if np.any(noextrapol):
+        remove_is_safe = multiple & noextrapol
+        if remove_is_safe.sum() > 0:
+            # we exclude extrapolated roots when
+            # there is an non-extrapolated alternative
+            cond[remove_is_safe, 0] = False
+            cond[remove_is_safe, -1] = False
 
+    isin = np.where(cond)
+    ival = isin[0]
     xr = np.full(f.shape, fill_value=np.nan)
-    if len(idx) == 0:
+
+    if len(ival) == 0:
+        # No roots found
         return xr
 
-    idx = np.concatenate(idx)
-    xtmp = np.concatenate(xtmp)
-
-    xr[idx] = xtmp
+    xr[ival] = xtmp[isin]
     return xr
