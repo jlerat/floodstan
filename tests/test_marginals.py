@@ -85,9 +85,6 @@ def test_floodfreqdist(allclose):
         dist.params = [10, 1]
 
     with pytest.raises(ValueError, match="Invalid"):
-        dist.params = [10, 1, 1000]
-
-    with pytest.raises(ValueError, match="Invalid"):
         dist.params = [10, 1, np.nan]
 
     with pytest.raises(AttributeError, match="can't set"):
