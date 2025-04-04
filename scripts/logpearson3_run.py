@@ -52,9 +52,6 @@ stationids = tsu.get_stationids()
 distname = "LogPearson3"
 marginal = marginals.factory(distname)
 
-marginal.shape1_prior.lower = -1.9
-marginal.shape1_prior.upper = 1.9
-
 stan_nwarm = 5000
 stan_nsamples = 5000
 stan_nchains = 5
@@ -94,7 +91,6 @@ for stationid in stationids:
 
     stan_file = froot / "scripts" / "logpearson3_run.stan"
     model = CmdStanModel(stan_file=stan_file)
-    print(model)
 
     # sample
     kwargs = {}
@@ -147,7 +143,5 @@ for stationid in stationids:
 
     fig.suptitle(f"Station {stationid}")
     fig.savefig(fout / f"{stationid}_ffa.png")
-
-    sys.exit()
 
 LOGGER.info("Process completed")

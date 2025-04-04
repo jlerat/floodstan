@@ -68,7 +68,7 @@ for f in fout.glob("*.*"):
 # @Logging
 # ----------------------------------------------------------------------
 basename = Path(__file__).stem
-LOGGER = sample.get_logger(stan_logger=True)
+LOGGER = sample.get_logger(stan_logger=False)
 
 # ----------------------------------------------------------------------
 # @Get data
@@ -93,7 +93,7 @@ for stationid in stationids:
         marginal.params_guess(yboot)
 
         # Test 0 shape for edge cases
-        if np.random.uniform(0, 1) < 0.1:
+        if np.random.uniform(0, 1) < 0.2:
             marginal.shape1 = 1e-20
 
         sv = sample.StanSamplingVariable(marginal, yboot)
