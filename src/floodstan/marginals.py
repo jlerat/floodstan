@@ -168,9 +168,9 @@ def lh_moments(data, eta=0, compute_lam4=True):
 
         # Compute components of moments
         d = data_sorted[i-1]
-        v1 += Cim1e0*d
-        v2 += (Cim1e1-Cim1e0*Cnmi1)*d
-        v3 += (Cim1e2-2*Cim1e1*Cnmi1+Cim1e0*Cnmi2)*d
+        v1 += Cim1e0 * d
+        v2 += (Cim1e1 - Cim1e0 * Cnmi1) * d
+        v3 += (Cim1e2 - 2 * Cim1e1 * Cnmi1 + Cim1e0 * Cnmi2) * d
 
         if compute_lam4:
             v4 += (_comb(i - 1, eta + 3) - 3 * Cim1e2 * Cnmi1
@@ -1112,12 +1112,12 @@ class GeneralizedLogistic(FloodFreqDistribution):
                 z = (x-tau)/alpha
                 if abs(kappa) > kt:
                     u = 1 - kappa * z
-                    z = np.where(u > 1e-100, -1.0/kappa*np.log(u), np.nan)
+                    z = np.where(u > 1e-100, -1. / kappa * np.log(u), np.nan)
 
                 if name == "pdf":
-                    return 1./alpha*np.exp(-(1-kappa)*z)/(1+np.exp(-z))**2
+                    return 1. / alpha * np.exp(-(1 - kappa) * z) / (1 + np.exp(-z))**2
                 else:
-                    return 1./(1+np.exp(-z))
+                    return 1. / (1 + np.exp(-z))
 
             return fun
 
@@ -1169,11 +1169,16 @@ class GeneralizedLogistic(FloodFreqDistribution):
 
         # Get L moments
         lam1, lam2, lam3, _ = lh_moments(data, eta, compute_lam4=False)
-        tau3 = lam3/lam2
 
-        kappa = -tau3
-        alpha = lam2*math.sin(kappa*math.pi)/kappa/math.pi
-        tau = lam1-alpha*(1/kappa-math.pi/math.sin(kappa*math.pi))
+        if abs(lam3) < 1e-10:
+            kappa = 1e-10
+            alpha = lam2
+            tau = lam1
+        else:
+            tau3 = lam3 / lam2
+            kappa = -tau3
+            alpha = lam2 * math.sin(kappa * math.pi) / kappa / math.pi
+            tau = lam1 - alpha * (1. / kappa - math.pi / math.sin(kappa * math.pi))
 
         self.shape1 = kappa
         self.logscale = math.log(alpha)
