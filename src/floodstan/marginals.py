@@ -1115,7 +1115,8 @@ class GeneralizedLogistic(FloodFreqDistribution):
                     z = np.where(u > 1e-100, -1. / kappa * np.log(u), np.nan)
 
                 if name == "pdf":
-                    return 1. / alpha * np.exp(-(1 - kappa) * z) / (1 + np.exp(-z))**2
+                    return 1. / alpha * np.exp(-(1 - kappa) * z) \
+                        / (1 + np.exp(-z))**2
                 else:
                     return 1. / (1 + np.exp(-z))
 
@@ -1178,7 +1179,8 @@ class GeneralizedLogistic(FloodFreqDistribution):
             tau3 = lam3 / lam2
             kappa = -tau3
             alpha = lam2 * math.sin(kappa * math.pi) / kappa / math.pi
-            tau = lam1 - alpha * (1. / kappa - math.pi / math.sin(kappa * math.pi))
+            tau = lam1 - alpha * (1. / kappa - math.pi
+                                  / math.sin(kappa * math.pi))
 
         self.shape1 = kappa
         self.logscale = math.log(alpha)
