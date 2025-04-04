@@ -381,10 +381,10 @@ class StanSamplingVariable():
             locn0, logscale0, shape10 = params0
             for i in range(ninits - len(inits)):
                 eps = np.random.uniform(-1, 1, size=3) * 1e-5
+
                 locn = locn0 + eps[0]
                 logscale = logscale0 + eps[1]
                 shape1 = shape10 + eps[2]
-
                 pp, cdf = are_marginal_params_valid(dist, locn, logscale,
                                                     shape1, data, censor)
                 if pp is not None:

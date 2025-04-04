@@ -628,7 +628,7 @@ class GEV(FloodFreqDistribution):
 
     @property
     def support(self):
-        x0 = self.locn+self.scale/self.shape1
+        x0 = self.locn + self.scale / self.shape1
         if self.shape1 < 0:
             return x0, np.inf
         else:
@@ -1031,7 +1031,7 @@ class GeneralizedPareto(FloodFreqDistribution):
         if kappa < 0:
             return tau, np.inf
         else:
-            return tau, tau+alpha/kappa
+            return tau, tau + alpha / kappa
 
     def get_scipy_params(self):
         return {"c": -self.shape1, "loc": self.locn, "scale": self.scale}
@@ -1094,7 +1094,7 @@ class GeneralizedLogistic(FloodFreqDistribution):
         tau, alpha, kappa = self.locn, self.scale, self.shape1
         kt = self.kappa_transition
         if kappa < -kt:
-            return tau+alpha/kappa, np.inf
+            return tau + alpha / kappa, np.inf
         elif kappa > kt:
             return -np.inf, tau+alpha/kappa
         else:
