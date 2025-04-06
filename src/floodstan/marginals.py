@@ -120,7 +120,7 @@ def _prepare_censored_data(data, low_censor):
     dnocens = data[data >= low_censor]
     if len(dnocens) < 5:
         errmess = "Expected at least 5 uncensored values, "\
-                  + f"got {len(dcens)}."
+                  + f"got {len(dnocens)}."
         raise ValueError(errmess)
     return data, dnocens, len(data) - len(dnocens)
 
