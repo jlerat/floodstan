@@ -406,14 +406,21 @@ class StanSamplingVariable():
         self._initial_cdfs = cdfs
 
     def set_priors(self):
-        # Special set for LogPearson3 due to
-        # fitting difficulties otherwise
-        # use prior from marginal
-        if self.marginal.name == "LogPearson3":
-            start = self.guess_parameters
-            self.marginal.locn_prior.loc = start["locn"]
-            self.marginal.logscale_prior.loc = start["logscale"]
-            self.marginal.shape1_prior.loc = start["shape1"]
+        # Use importance sampling to define shape prior location
+        #if self.marginal.has_shape:
+        #    try:
+        #        nsamples = 1000
+        #        boot = bootstrap(self.marginal, self.data, nboot=nsamples)
+        #        params, lp, neff = importance_sampling(self.marginal, self.data, boot,
+        #                                     censor=self.censor,
+        #                                     nsamples=nsamples)
+        #        if neff > 100:
+        #            self.marginal.locn_prior.loc = params.locn.mean()
+        #            self.marginal.logscale_prior.loc = params.logshape.mean()
+        #            self.marginal.shape1_prior.loc = params.shape1.mean()
+        #    except Exception:
+        #        pass
+        pass
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
