@@ -99,4 +99,6 @@ model {
      target += Ncases[2, 1] * marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
 }
 
-
+generated quantities {
+    real censor_cdf = marginal_cdf(ycensor | ymarginal, ylocn, yscale, yshape1);
+}

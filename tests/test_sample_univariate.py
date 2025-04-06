@@ -148,9 +148,6 @@ def test_stan_sampling_variable(distname, allclose):
 @pytest.mark.parametrize("stationid",
                          get_stationids()[:2] + ["hard"])
 def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
-    if distname in ["LogPearson3", "GeneralizedPareto", "GeneralizedLogistic"]:
-        pytest.skip()
-
     y = get_ams(stationid)
     censor = y.median() if censoring else np.nanmin(y) - 1.
 
@@ -184,11 +181,15 @@ def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
         stan_data["yshape1"] = m.shape1
         smp = stan_test_marginal(data=stan_data)
 
+        # .. testing stan is matching py like in test_stan_functions.py
         lps = smp.filter(regex="luncens").values
         assert allclose(lp, lps, atol=1e-5)
 
         lcs = smp.filter(regex="^lcens").values
         assert allclose(lc, lcs, atol=1e-5)
+
+    #if distname in ["LogPearson3", "GeneralizedPareto", "GeneralizedLogistic"]:
+    #    pytest.skip(f"Not testing sampling for {distname} yet.")
 
     # Clean output folder
     fout = FTESTS / "sampling" / "univariate"
@@ -218,9 +219,16 @@ def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
 
+    x = df.loc[0, ["ylocn", "ylogscale", "yshape1"]]
+    lp = df.loc[0, "lp__"]
+    m = sv.marginal
+    mlp, mlp_x, _, _ = m.maximum_posterior_estimate(y, censor)
+    import pdb; pdb.set_trace()
+
+
+
     # Test diag
-    #assert diag["treedepth"] == "satisfactory"
-    #assert diag["ebfmi"] == "satisfactory"
+    assert diag["effsamplesz"] == "satisfactory"
     assert diag["rhat"] == "satisfactory"
 
     # Test divergence

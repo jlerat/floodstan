@@ -122,11 +122,6 @@ real logpearson3_cdf(real y, real m, real s, real g){
     return cdf;
 }
 
-real logpearson3_lcdf(real y, real m, real s, real g) {
-    return log(logpearson3_cdf(y | m, s, g));
-}
-
-
 
 // -------------- Generalized Pareto -------------
 real genpareto_lpdf(vector y, real tau, real alpha, real kappa) {
@@ -135,7 +130,19 @@ real genpareto_lpdf(vector y, real tau, real alpha, real kappa) {
 
     vector[N] z = (y - tau) / alpha;
     if(abs(kappa) > kappa_transition){
-        z = -1. / kappa * log(1 - kappa * z);
+        // Check y are all in support
+        real ymin = min(y);
+        real ymax = max(y);
+
+        //if(kappa > 0 && ((ymin < tau) || (ymax > tau + alpha / kappa)))
+        //    reject("ymin (", ymin, ") < tau or ymax (", ymax, ") > tau+alpha/kappa",
+        //           " with tau=", tau, " alpha=", alpha, " kappa=", kappa);
+
+        //else if(kappa < 0 && (ymax > tau))
+        //    reject("ymax (", ymax, ") > tau with tau=", tau, 
+        //           " alpha=", alpha, " kappa=", kappa);
+
+        z = -1. / kappa * log1m(kappa * z);
     }
 
     return -(1. - kappa) * sum(z) - N * log(alpha);
@@ -146,9 +153,39 @@ real genpareto_cdf(real y, real tau, real alpha, real kappa) {
 
     real z = (y - tau) / alpha;
     if(abs(kappa) > kappa_transition){
-        z = -1. / kappa * log(1 - kappa * z);
+
+        //if(kappa > 0 && ((y < tau) || (y > tau + alpha / kappa)))
+        //    reject("y (", y, ") < tau or y (", y, ") > tau+alpha/kappa",
+        //           " with tau=", tau, 
+        //           " alpha=", alpha, " kappa=", kappa);
+
+        //else if(kappa < 0 && (y < tau))
+        //    reject("y (", y, ") < tau with tau=", tau, 
+        //           " alpha=", alpha, " kappa=", kappa);
+ 
+        z = -1. / kappa * log1m(kappa * z);
     }
     return 1. - exp(-z);    
+}
+
+real genpareto_lcdf(real y, real tau, real alpha, real kappa) {
+    real kappa_transition = 1e-6; 
+
+    real z = (y - tau) / alpha;
+    if(abs(kappa) > kappa_transition){
+
+        //if(kappa > 0 && ((y < tau) || (y > tau + alpha / kappa)))
+        //    reject("y (", y, ") < tau or y (", y, ") > tau+alpha/kappa",
+        //           " with tau=", tau, 
+        //           " alpha=", alpha, " kappa=", kappa);
+
+        //else if(kappa < 0 && (y < tau))
+        //    reject("y (", y, ") < tau with tau=", tau, 
+        //           " alpha=", alpha, " kappa=", kappa);
+ 
+        z = -1. / kappa * log1m(kappa * z);
+    }
+    return log1m_exp(-z);
 }
 
 // -------------- Generalized Logistic -------------
@@ -158,7 +195,13 @@ real genlogistic_lpdf(vector y, real tau, real alpha, real kappa) {
 
     vector[N] z = (y - tau) / alpha;
     if(abs(kappa) > kappa_transition){
-        z = -1. / kappa * log(1. - kappa * z);
+        real y0 = kappa < 0 ? min(y) : max(y);
+        real yt = tau + alpha / kappa;
+        if(kappa * (y0 - yt) > 0)
+            reject("y0 (", y0, ") incompatible with yt (", yt, ") with tau=", tau, 
+                   " alpha=", alpha, " kappa=", kappa);
+ 
+        z = -1. / kappa * log1m(kappa * z);
     }
     return -(1. - kappa) * sum(z) - 2. * sum(log(1 + exp(-z))) - N * log(alpha);
 }
@@ -168,10 +211,31 @@ real genlogistic_cdf(real y, real tau, real alpha, real kappa) {
 
     real z = (y - tau) / alpha;
     if(abs(kappa) > kappa_transition){
-        z = -1. / kappa * log(1. - kappa * z);
+        real yt = tau + alpha / kappa;
+        if(kappa * (y - yt) > 0)
+            reject("y (", y, ") incompatible with yt (", yt, ") with tau=", tau, 
+                   " alpha=", alpha, " kappa=", kappa);
+
+        z = -1. / kappa * log1m(kappa * z);
     }
     return 1. / (1. + exp(-z));    
 }
+
+real genlogistic_lcdf(real y, real tau, real alpha, real kappa) {
+    real kappa_transition = 1e-6; 
+
+    real z = (y - tau) / alpha;
+    if(abs(kappa) > kappa_transition){
+        real yt = tau + alpha / kappa;
+        if(kappa * (y - yt) > 0)
+            reject("y (", y, ") incompatible with yt (", yt, ") with tau=", tau, 
+                   " alpha=", alpha, " kappa=", kappa);
+
+        z = -1. / kappa * log1m(kappa * z);
+    }
+    return -log1p_exp(-z);
+}
+
 
 // ------- Marginal functions -----------------------------
 // 1=Gumbel, 2=LogNormal, 3=GEV, 4=LogPearson3, 5=Normal, 6=Generalized pareto
@@ -253,16 +317,16 @@ real marginal_lcdf(real x, int marginal, real locn, real scale, real shape1)
         return gev_lcdf(x | locn, scale, shape1);
     }
     else if(marginal==4){
-        return logpearson3_lcdf(x | locn, scale, shape1);
+        return log(logpearson3_cdf(x | locn, scale, shape1));
     }
     else if(marginal==5){
         return normal_lcdf(x | locn, scale);
     }
     else if(marginal==6){
-        return log(genpareto_cdf(x | locn, scale, shape1));
+        return genpareto_lcdf(x | locn, scale, shape1);
     }
     else if(marginal==7){
-        return log(genlogistic_cdf(x | locn, scale, shape1));
+        return genlogistic_lcdf(x | locn, scale, shape1);
     }
     else if(marginal==8){
         return gamma_lcdf(x | locn/scale, 1.0/scale);

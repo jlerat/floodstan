@@ -38,7 +38,7 @@ FTESTS = Path(__file__).resolve().parent
 def test_marginals_vs_stan(marginal_name, stationid, allclose):
     stationids = get_stationids()
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
-    nboot = 50
+    nboot = 200
     y = get_ams(stationid)
     N = len(y)
     marginal = marginals.factory(marginal_name)
@@ -49,14 +49,18 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         yboot = rng.choice(y.values, N)
         marginal.params_guess(yboot)
 
+        censor = np.percentile(yboot, 20)
+        dnocens = yboot[yboot >= censor]
+        ncens = (yboot < censor).sum()
+
         # Test 0 shape for edge cases
-        if marginal_name in ["GEV", "LogPearson3"]:
+        if marginal.has_shape:
             if np.random.uniform(0, 1) < 0.1:
                 marginal.shape1 = 1e-20
 
         y0, y1 = marginal.support
 
-        sv = sample.StanSamplingVariable(marginal, yboot)
+        sv = sample.StanSamplingVariable(marginal, yboot, censor)
         stan_data = sv.to_dict()
         stan_data["ylocn"] = marginal.locn
         stan_data["ylogscale"] = marginal.logscale
@@ -86,6 +90,25 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         lcens = smp.filter(regex="^lcens").values
         expected = marginal.logcdf(yboot)
         assert allclose(lcens, expected, atol=1e-5)
+
+        lpr = 0.
+        for pn in marginals.PARAMETERS:
+            lp = smp.filter(regex=f"logprior_{pn}")
+            prior = getattr(marginal, f"{pn}_prior")
+            expected = prior.logpdf(getattr(marginal, pn))
+            assert allclose(lp, expected, atol=1e-5)
+            lpr += lp.squeeze()
+
+        ll = smp.filter(regex="loglikelihood").values[0]
+        expected = marginal.logpdf(dnocens).sum()
+        expected += ncens * marginal.logcdf(censor)
+        assert allclose(ll, expected, atol=1e-5)
+
+        lp = smp.filter(regex="logposterior").values[0]
+        expected = -marginal.neglogpost(marginal.params, dnocens,
+                                       censor, ncens)
+        assert allclose(lp, expected, atol=1e-5)
+
 
 
 @pytest.mark.parametrize("copula",
