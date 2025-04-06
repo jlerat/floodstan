@@ -235,5 +235,5 @@ def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
     prc = diag["divergence_proportion"]
     hard = ["LogPearson3"]
     thresh = 50 if distname in hard else 20
-    print(prc)
+    print(f"\n{stationid}-{distname}-{censorng} : Divergence proportion = {prc}\n")
     assert prc < thresh

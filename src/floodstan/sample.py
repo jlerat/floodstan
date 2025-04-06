@@ -344,8 +344,8 @@ class StanSamplingVariable():
         marginal = self.marginal
         data = self.data
         mlp, params0, dnocens, ncens = \
-                marginal.maximum_posterior_estimate(data,
-                                                    low_censor=censor)
+            marginal.maximum_posterior_estimate(data,
+                                                low_censor=censor)
         locn0, logscale0 = params0[:2]
         shape10 = params0[2] if marginal.has_shape else 0.
 
@@ -363,9 +363,9 @@ class StanSamplingVariable():
                 and niter < MAX_INIT_PARAM_SEARCH:
             niter += 1
             eps = np.random.normal(size=3)
-            locn = locn0 +  eps[0] * sig_locn
-            logscale = logscale0 +  eps[2] * sig_logscale
-            shape1 = shape10 +  eps[2] * sig_shape1
+            locn = locn0 + eps[0] * sig_locn
+            logscale = logscale0 + eps[2] * sig_logscale
+            shape1 = shape10 + eps[2] * sig_shape1
             pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
                                                 shape1, data, censor)
             if pp is not None:
@@ -401,22 +401,21 @@ class StanSamplingVariable():
         self._initial_cdfs = cdfs
 
     def set_priors(self):
-        pass
-        # # Use importance sampling to define shape prior location
-        # if self.marginal.has_shape:
-        #     try:
-        #         nsamples = 1000
-        #         boot = bootstrap(self.marginal, self.data, nboot=nsamples)
-        #         params, lp, neff = importance_sampling(self.marginal,
-        #                                                self.data, boot,
-        #                                                censor=self.censor,
-        #                                                nsamples=nsamples)
-        #         if neff > 100:
-        #             self.marginal.locn_prior.loc = params.locn.mean()
-        #             self.marginal.logscale_prior.loc = params.logscale.mean()
-        #             self.marginal.shape1_prior.loc = params.shape1.mean()
-        #     except Exception:
-        #         pass
+        # Use importance sampling to define shape prior location
+        if self.marginal.name == "LogPearson3":
+            try:
+                nsamples = 1000
+                boot = bootstrap(self.marginal, self.data, nboot=nsamples)
+                params, lp, neff = importance_sampling(self.marginal,
+                                                       self.data, boot,
+                                                       censor=self.censor,
+                                                       nsamples=nsamples)
+                if neff > 100:
+                    self.marginal.locn_prior.loc = params.locn.mean()
+                    self.marginal.logscale_prior.loc = params.logscale.mean()
+                    self.marginal.shape1_prior.loc = params.shape1.mean()
+            except Exception:
+                pass
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
