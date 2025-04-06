@@ -117,12 +117,12 @@ def _check_param_value(x, lower=-np.inf, upper=np.inf, name=None):
 def _prepare_censored_data(data, low_censor):
     data = np.array(data)
     low_censor = -1e10 if low_censor is None else float(low_censor)
-    dcens = data[data > low_censor]
-    if len(dcens) < 5:
+    dnocens = data[data >= low_censor]
+    if len(dnocens) < 5:
         errmess = "Expected at least 5 uncensored values, "\
                   + f"got {len(dcens)}."
         raise ValueError(errmess)
-    return data, dcens, len(data)-len(dcens)
+    return data, dnocens, len(data) - len(dnocens)
 
 
 def lh_moments(data, eta=0, compute_lam4=True):
@@ -501,7 +501,7 @@ class FloodFreqDistribution():
         errmsg = f"Method rvs not implemented for class {self.name}."
         raise NotImplementedError(errmsg)
 
-    def neglogpost(self, theta, data_censored, low_censor, ncens):
+    def neglogpost(self, theta, data_not_censored, low_censor, ncens):
         try:
             self.locn = theta[0]
             self.logscale = theta[1]
@@ -512,14 +512,13 @@ class FloodFreqDistribution():
 
         # Negative log-prior
         nlp = -self.locn_prior.logpdf(theta[0])
-        nlp += -self.logscale_prior.logpdf(theta[1])
-        if self.has_shape:
-            nlp += -self.shape1_prior.logpdf(theta[2])
+        nlp -= self.logscale_prior.logpdf(theta[1])
+        nlp -= self.shape1_prior.logpdf(theta[2])
 
         # Negative log-likelihood
-        nlp += -self.logpdf(data_censored).sum()
+        nlp -= self.logpdf(data_not_censored).sum()
         if ncens > 0:
-            nlp -= self.logcdf(low_censor)*ncens
+            nlp -= self.logcdf(low_censor) * ncens
 
         if not np.isfinite(nlp) or np.isnan(nlp):
             return np.inf
@@ -529,14 +528,14 @@ class FloodFreqDistribution():
     def maximum_posterior_estimate(self, data, low_censor=None,
                                    nexplore=1000):
         # Prepare data
-        data, dcens, ncens = _prepare_censored_data(data, low_censor)
+        data, dnocens, ncens = _prepare_censored_data(data, low_censor)
 
         # Initial parameter exploration
         # random perturb guesses parameters in
         # arcsinh space (log for large values and lin for small values)
         self.params_guess(data)
         theta0 = self.params
-        nlp_min = self.neglogpost(theta0, dcens, low_censor, ncens)
+        nlp_min = self.neglogpost(theta0, dnocens, low_censor, ncens)
 
         # .. loop throught explored parameter and check loglike
         nval = len(data)
@@ -545,7 +544,7 @@ class FloodFreqDistribution():
             kk = np.random.choice(k, nval, replace=True)
             self.params_guess(data[kk])
             theta = self.params
-            nlp = self.neglogpost(theta, dcens, low_censor, ncens)
+            nlp = self.neglogpost(theta, dnocens, low_censor, ncens)
             if nlp < nlp_min and np.isfinite(nlp) and not np.isnan(nlp):
                 theta0 = theta
                 nlp_min = nlp
@@ -554,7 +553,7 @@ class FloodFreqDistribution():
         options = dict(maxiter=10000)
         theta0 = theta0[:2] if not self.has_shape else theta0
         opt = minimize(self.neglogpost, theta0,
-                       args=(dcens, low_censor, ncens),
+                       args=(dnocens, low_censor, ncens),
                        options=options, method="Nelder-Mead")
 
         self.locn = opt.x[0]
@@ -572,10 +571,11 @@ class FloodFreqDistribution():
         # d = theta - theta0
         # D = det(H)
         # See https://james-brennan.github.io/posts/laplace_approximation/
+        # if we use BFGS optim, we can get:
         # cov = np.linalg.inv(opt.hess_inv)
-        # Does not work for LP3 due to boundary pb. Needs BFGS optim
+        # however, this does NOT work for LP3 due to boundary pb.
 
-        return -opt.fun, opt.x, dcens, ncens
+        return -opt.fun, opt.x, dnocens, ncens
 
 
 class Normal(FloodFreqDistribution):
@@ -755,7 +755,7 @@ class LogPearson3(FloodFreqDistribution):
         super(LogPearson3, self).__init__("LogPearson3")
 
         # Slightly wider prior due to fitting difficulties
-        self.shape1_prior.scale = 0.5
+        self.shape1_prior.scale = 1.
 
     def get_scipy_params(self):
         return {"skew": self.shape1, "loc": self.locn, "scale": self.scale}
