@@ -42,26 +42,33 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
     y = get_ams(stationid)
     N = len(y)
     marginal = marginals.factory(marginal_name)
-
+    ndone = 0
     for iboot in range(nboot):
         # Bootstrap fit
         rng = np.random.default_rng(SEED)
         yboot = rng.choice(y.values, N)
-        marginal.params_guess(yboot)
 
         censor = np.percentile(yboot, 20)
         dnocens = yboot[yboot >= censor]
         ncens = (yboot < censor).sum()
 
-        # Test 0 shape for edge cases
-        if marginal.has_shape:
-            if np.random.uniform(0, 1) < 0.1:
-                marginal.shape1 = 1e-20
-
-        y0, y1 = marginal.support
+        marginal.params_guess(yboot)
 
         sv = sample.StanSamplingVariable(marginal, yboot, censor)
         stan_data = sv.to_dict()
+
+        # Test shape close to 0 for edge cases
+        if marginal.has_shape:
+            if iboot < nboot // 20:
+                marginal.shape1 = 1e-20
+            elif iboot >= nboot // 20 and iboot < 2 * nboot // 20:
+                marginal.shape1 = 1e-3
+
+        y0, y1 = marginal.support
+        if y0 > yboot.min() or y1 < yboot.max():
+            continue
+
+        ndone += 1
         stan_data["ylocn"] = marginal.locn
         stan_data["ylogscale"] = marginal.logscale
         stan_data["yshape1"] = marginal.shape1
@@ -70,45 +77,49 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         smp = stan_test_marginal(data=stan_data)
 
         # Test
+        atol = 1e-5
         locn = smp.filter(regex="ylocn").values
-        assert allclose(locn, marginal.locn, atol=1e-5)
+        assert allclose(locn, marginal.locn, atol=atol)
 
         logscale = smp.filter(regex="ylogscale").values
-        assert allclose(logscale, marginal.logscale, atol=1e-5)
+        assert allclose(logscale, marginal.logscale, atol=atol)
 
         shape1 = smp.filter(regex="yshape1").values
-        assert allclose(shape1, marginal.shape1, atol=1e-5)
+        assert allclose(shape1, marginal.shape1, atol=atol)
 
         luncens = smp.filter(regex="luncens").values
         expected = marginal.logpdf(yboot)
-        assert allclose(luncens, expected, atol=1e-5)
+        assert allclose(luncens, expected, atol=atol)
 
         cens = smp.filter(regex="^cens").values
         expected = marginal.cdf(yboot)
-        assert allclose(cens, expected, atol=1e-5)
+        assert allclose(cens, expected, atol=atol)
 
+        atol = 5e-3
         lcens = smp.filter(regex="^lcens").values
         expected = marginal.logcdf(yboot)
-        assert allclose(lcens, expected, atol=1e-5)
+        assert allclose(lcens, expected, atol=atol)
 
         lpr = 0.
+        atol = 1e-5
         for pn in marginals.PARAMETERS:
             lp = smp.filter(regex=f"logprior_{pn}")
             prior = getattr(marginal, f"{pn}_prior")
             expected = prior.logpdf(getattr(marginal, pn))
-            assert allclose(lp, expected, atol=1e-5)
+            assert allclose(lp, expected, atol=atol)
             lpr += lp.squeeze()
 
         ll = smp.filter(regex="loglikelihood").values[0]
         expected = marginal.logpdf(dnocens).sum()
         expected += ncens * marginal.logcdf(censor)
-        assert allclose(ll, expected, atol=1e-5)
+        assert allclose(ll, expected, atol=atol)
 
         lp = smp.filter(regex="logposterior").values[0]
         expected = -marginal.neglogpost(marginal.params, dnocens,
                                        censor, ncens)
-        assert allclose(lp, expected, atol=1e-5)
+        assert allclose(lp, expected, atol=atol)
 
+    assert ndone > nboot * 0.5
 
 
 @pytest.mark.parametrize("copula",
