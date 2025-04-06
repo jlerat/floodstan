@@ -341,36 +341,32 @@ class StanSamplingVariable():
 
     def set_initial_parameters(self):
         censor = self.censor
-        data, dcens, ncens = _prepare_censored_data(self.data, censor)
-        dist = self.marginal
-
-        # Default parameters
-        dist.params_guess(dcens)
-        params0 = dist.params
+        marginal = self.marginal
+        data = self.data
+        mlp, params0, dnocens, ncens = \
+                marginal.maximum_posterior_estimate(data,
+                                                    low_censor=censor)
+        locn0, logscale0 = params0[:2]
+        shape10 = params0[2] if marginal.has_shape else 0.
 
         # Create a parameter from bootstrap guess
         # parameters for each chain
         ninits = self.ninits
         niter = 0
         inits, cdfs = [], []
-        nval = len(data)
-        k = np.where(~np.isnan(data))[0]
+
+        sig_locn = min(10., marginal.locn_prior.scale)
+        sig_logscale = min(1., marginal.logscale_prior.scale)
+        sig_shape1 = min(1., marginal.shape1_prior.scale)
 
         while len(inits) < ninits \
                 and niter < MAX_INIT_PARAM_SEARCH:
             niter += 1
-            kk = np.random.choice(k, nval, replace=True)
-            dboot = data[kk]
-
-            # Errors can occur here as params guess
-            # is not necessarily conform with prior
-            try:
-                dist.params_guess(dboot)
-            except ValueError:
-                continue
-
-            locn, logscale, shape1 = dist.params
-            pp, cdf = are_marginal_params_valid(dist, locn, logscale,
+            eps = np.random.normal(size=3)
+            locn = locn0 +  eps[0] * sig_locn
+            logscale = logscale0 +  eps[2] * sig_logscale
+            shape1 = shape10 +  eps[2] * sig_shape1
+            pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
                                                 shape1, data, censor)
             if pp is not None:
                 inits.append(pp)
@@ -378,14 +374,13 @@ class StanSamplingVariable():
 
         # Fill up inits with params0 with small random noise
         if len(inits) < ninits:
-            locn0, logscale0, shape10 = params0
             for i in range(ninits - len(inits)):
                 eps = np.random.uniform(-1, 1, size=3) * 1e-5
-
                 locn = locn0 + eps[0]
                 logscale = logscale0 + eps[1]
                 shape1 = shape10 + eps[2]
-                pp, cdf = are_marginal_params_valid(dist, locn, logscale,
+
+                pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
                                                     shape1, data, censor)
                 if pp is not None:
                     inits.append(pp)
@@ -406,7 +401,8 @@ class StanSamplingVariable():
         self._initial_cdfs = cdfs
 
     def set_priors(self):
-        # Use importance sampling to define shape prior location
+        pass
+        # # Use importance sampling to define shape prior location
         # if self.marginal.has_shape:
         #     try:
         #         nsamples = 1000
@@ -417,11 +413,10 @@ class StanSamplingVariable():
         #                                                nsamples=nsamples)
         #         if neff > 100:
         #             self.marginal.locn_prior.loc = params.locn.mean()
-        #             self.marginal.logscale_prior.loc = params.logshape.mean()
+        #             self.marginal.logscale_prior.loc = params.logscale.mean()
         #             self.marginal.shape1_prior.loc = params.shape1.mean()
         #     except Exception:
         #         pass
-        pass
 
     def to_dict(self):
         """ Export stan data to be used by stan program """

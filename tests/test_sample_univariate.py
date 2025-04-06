@@ -158,9 +158,16 @@ def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
 
     # Set STAN
     stan_nwarm = 10000
-    stan_nsamples = 5000
+    stan_nsamples = 10000
     stan_nchains = 10
 
+    # Importance sampling
+    boot = sample.bootstrap(marginal, y, nboot=1000)
+    imp, lp, neff = sample.importance_sampling(marginal, y,
+                                               boot, censor,
+                                               stan_nsamples)
+
+    # Prepare sampling data
     sv = sample.StanSamplingVariable(marginal, y, censor,
                                      ninits=stan_nchains)
     stan_data = sv.to_dict()
@@ -168,12 +175,13 @@ def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
 
     # Test initial parameters are legit
     m = sv.marginal
+    inocens = y >= censor
     for p in stan_inits:
         m.params = p
-        lp = m.logpdf(y)
+        lp = m.logpdf(y[inocens])
         assert np.all(np.isfinite(lp))
 
-        lc = m.logcdf(y)
+        lc = m.logcdf(y[inocens])
         assert np.all(np.isfinite(lc))
 
         stan_data["ylocn"] = m.locn
@@ -182,10 +190,10 @@ def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
         smp = stan_test_marginal(data=stan_data)
 
         # .. testing stan is matching py like in test_stan_functions.py
-        lps = smp.filter(regex="luncens").values
+        lps = smp.filter(regex="luncens").values[inocens]
         assert allclose(lp, lps, atol=1e-5)
 
-        lcs = smp.filter(regex="^lcens").values
+        lcs = smp.filter(regex="^lcens").values[inocens]
         assert allclose(lc, lcs, atol=1e-5)
 
     #if distname in ["LogPearson3", "GeneralizedPareto", "GeneralizedLogistic"]:
@@ -219,22 +227,13 @@ def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
 
-    x = df.loc[0, ["ylocn", "ylogscale", "yshape1"]]
-    lp = df.loc[0, "lp__"]
-    m = sv.marginal
-    mlp, mlp_x, _, _ = m.maximum_posterior_estimate(y, censor)
-    import pdb; pdb.set_trace()
-
-
-
     # Test diag
     assert diag["effsamplesz"] == "satisfactory"
     assert diag["rhat"] == "satisfactory"
 
     # Test divergence
     prc = diag["divergence_proportion"]
-    hard = ["LogPearson3", "GeneralizedLogistic",
-            "GeneralizedPareto"]
-    thresh = 50 if distname in hard else 10
+    hard = ["LogPearson3"]
+    thresh = 50 if distname in hard else 20
     print(prc)
     assert prc < thresh

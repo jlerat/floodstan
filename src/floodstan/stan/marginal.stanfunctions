@@ -146,8 +146,8 @@ real genpareto_lpdf(vector y, real tau, real alpha, real kappa) {
             reject("ymin (", ymin, ") < tau or ymax (", ymax, ") > tau+alpha/kappa",
                    " with tau=", tau, " alpha=", alpha, " kappa=", kappa);
 
-        else if(kappa < 0 && (ymax > tau))
-            reject("ymax (", ymax, ") > tau with tau=", tau, 
+        else if(kappa < 0 && (ymin < tau))
+            reject("ymin (", ymin, ") < tau with tau=", tau, 
                    " alpha=", alpha, " kappa=", kappa);
 
         z = -1. / kappa * log1m(kappa * z);

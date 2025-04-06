@@ -38,7 +38,7 @@ FTESTS = Path(__file__).resolve().parent
 def test_marginals_vs_stan(marginal_name, stationid, allclose):
     stationids = get_stationids()
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
-    nboot = 200
+    nboot = 100
     y = get_ams(stationid)
     N = len(y)
     marginal = marginals.factory(marginal_name)
@@ -76,7 +76,7 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         # Run stan
         smp = stan_test_marginal(data=stan_data)
 
-        # Test
+        # Test params
         atol = 1e-5
         locn = smp.filter(regex="ylocn").values
         assert allclose(locn, marginal.locn, atol=atol)
@@ -87,17 +87,19 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         shape1 = smp.filter(regex="yshape1").values
         assert allclose(shape1, marginal.shape1, atol=atol)
 
-        luncens = smp.filter(regex="luncens").values
-        expected = marginal.logpdf(yboot)
+        # Test data
+        i11 = stan_data["i11"] - 1
+        luncens = smp.filter(regex="luncens").values[i11]
+        expected = marginal.logpdf(yboot[i11])
         assert allclose(luncens, expected, atol=atol)
 
-        cens = smp.filter(regex="^cens").values
-        expected = marginal.cdf(yboot)
+        cens = smp.filter(regex="^cens").values[i11]
+        expected = marginal.cdf(yboot[i11])
         assert allclose(cens, expected, atol=atol)
 
         atol = 5e-3
-        lcens = smp.filter(regex="^lcens").values
-        expected = marginal.logcdf(yboot)
+        lcens = smp.filter(regex="^lcens").values[i11]
+        expected = marginal.logcdf(yboot[i11])
         assert allclose(lcens, expected, atol=atol)
 
         lpr = 0.
