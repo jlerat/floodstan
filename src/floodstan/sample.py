@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 import logging
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -206,7 +207,8 @@ class StanSamplingVariable():
                  data=None,
                  censor=CENSOR_DEFAULT,
                  name="y",
-                 ninits=NCHAINS_DEFAULT):
+                 ninits=NCHAINS_DEFAULT,
+                 nimportance=1000):
         self.name = str(name)
         if len(self.name) != 1:
             errmess = "Expected one character for name."
@@ -228,6 +230,10 @@ class StanSamplingVariable():
         self._initial_parameters = []
         self._initial_cdfs = []
 
+        # Importance sampling
+        self.nimportance = nimportance
+        self._importance_parameters = []
+
         data_set = False
         if data is not None and censor is not None:
             self.set_data(data, censor)
@@ -235,6 +241,7 @@ class StanSamplingVariable():
 
         if data_set:
             self.set_guess_parameters()
+            self.run_importance()
             self.set_initial_parameters()
             self.set_priors()
 
@@ -249,6 +256,14 @@ class StanSamplingVariable():
             raise ValueError(errmess)
 
         return self._guess_parameters
+
+    @property
+    def importance_parameters(self):
+        if len(self._importance_parameters) == 0:
+            errmess = "Importance parameters have not been set."
+            raise ValueError(errmess)
+
+        return self._importance_parameters
 
     @property
     def initial_parameters(self):
@@ -339,83 +354,68 @@ class StanSamplingVariable():
                 "shape1": dist.shape1
                 }
 
-    def set_initial_parameters(self):
-        censor = self.censor
+    def run_importance(self):
         marginal = self.marginal
         data = self.data
-        mlp, params0, dnocens, ncens = \
-            marginal.maximum_posterior_estimate(data,
-                                                low_censor=censor)
-        locn0, logscale0 = params0[:2]
-        shape10 = params0[2] if marginal.has_shape else 0.
+        censor = self.censor
+        nsamples = self.nimportance
+        try:
+            boot = bootstrap(marginal, data, nboot=nsamples)
+            params, lps, neff = importance_sampling(marginal, data,
+                                                    boot, censor,
+                                                    nsamples)
+        except Exception:
+            params = None
 
-        # Create a parameter from bootstrap guess
-        # parameters for each chain
+        if params is None or neff < nsamples / 50:
+            wmess = "Importance sampling failed. Reverting to "\
+                    + "sampling around the guessed parameters."
+            warnings.warn(wmess)
+            p0 = np.array([self.guess_parameters[n]
+                           for n in PARAMETERS])
+            eps = np.random.normal(scale=2e-1, size=(nsamples, 3))
+            params = pd.DataFrame(p0[None, :] + eps, columns=PARAMETERS)
+            params.loc[:, "locn"] = p0[0] * (1 + eps[:, 0])
+
+        self._importance_parameters = params
+
+
+    def set_initial_parameters(self):
         ninits = self.ninits
         niter = 0
         inits, cdfs = [], []
+        marginal = self.marginal
+        data = self.data
+        censor = self.censor
+        params = self.importance_parameters
 
-        sig_locn = min(10., marginal.locn_prior.scale)
-        sig_logscale = min(1., marginal.logscale_prior.scale)
-        sig_shape1 = min(1., marginal.shape1_prior.scale)
-
-        while len(inits) < ninits \
-                and niter < MAX_INIT_PARAM_SEARCH:
+        while len(inits) < ninits:
             niter += 1
-            eps = np.random.normal(size=3)
-            locn = locn0 + eps[0] * sig_locn
-            logscale = logscale0 + eps[2] * sig_logscale
-            shape1 = shape10 + eps[2] * sig_shape1
+            locn, logscale, shape1 = params.iloc[niter]
             pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
                                                 shape1, data, censor)
             if pp is not None:
                 inits.append(pp)
                 cdfs.append(cdf)
 
-        # Fill up inits with params0 with small random noise
-        if len(inits) < ninits:
-            for i in range(ninits - len(inits)):
-                eps = np.random.uniform(-1, 1, size=3) * 1e-5
-                locn = locn0 + eps[0]
-                logscale = logscale0 + eps[1]
-                shape1 = shape10 + eps[2]
-
-                pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
-                                                    shape1, data, censor)
-                if pp is not None:
-                    inits.append(pp)
-                    cdfs.append(cdf)
-
         if len(inits) == 0:
             errmess = "Cannot find initial parameter "\
                       + f"for variable {self.name}."
             raise ValueError(errmess)
 
-        if len(inits) < ninits:
-            nok = len(inits)
-            for i in range(ninits - nok):
-                k = np.random.choice(np.arange(nok))
-                inits.append(inits[k])
-
         self._initial_parameters = inits
         self._initial_cdfs = cdfs
 
     def set_priors(self):
-        # Use importance sampling to define shape prior location
         if self.marginal.name == "LogPearson3":
-            try:
-                nsamples = 1000
-                boot = bootstrap(self.marginal, self.data, nboot=nsamples)
-                params, lp, neff = importance_sampling(self.marginal,
-                                                       self.data, boot,
-                                                       censor=self.censor,
-                                                       nsamples=nsamples)
-                if neff > 100:
-                    self.marginal.locn_prior.loc = params.locn.mean()
-                    self.marginal.logscale_prior.loc = params.logscale.mean()
-                    self.marginal.shape1_prior.loc = params.shape1.mean()
-            except Exception:
-                pass
+            # Use importance sampling to define priors
+            marginal = self.marginal
+            params = self.importance_parameters
+            for pn in PARAMETERS:
+                se = params.loc[:, pn]
+                prior = getattr(marginal, f"{pn}_prior")
+                prior.loc = se.mean()
+                prior.scale = se.std() * 5
 
     def to_dict(self):
         """ Export stan data to be used by stan program """

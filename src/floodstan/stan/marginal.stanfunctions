@@ -6,15 +6,6 @@
 // tau Bounds when kappa > 0 : [ymax-alpha/kapp, +infty[
 // tau Bounds when kappa < 0 : ]-infty, ycensor-alpha/kapp]
 
-int gev_is_in_support(real ymin, real ymax, real tau, real alpha, real kappa){
-    real yt = tau + alpha / kappa;
-    real y0 = kappa < 0 ? yt : negative_infinity();
-    real y1 = kappa < 0 ? positive_infinity() : yt;
-    real test = (ymin - y0) * (y1 - ymin);
-    test *= (ymax - y0) * (y1 - ymax);
-    return test > 0 ? 1 : 0;
-}
-
 real gev_lpdf(vector y, real tau, real alpha, real kappa){
     int N = rows(y);
     real logalpha = log(alpha);

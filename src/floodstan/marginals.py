@@ -513,7 +513,7 @@ class FloodFreqDistribution():
         # Negative log-prior
         nlp = -self.locn_prior.logpdf(theta[0])
         nlp -= self.logscale_prior.logpdf(theta[1])
-        if len(theta) > 2:
+        if self.has_shape:
             nlp -= self.shape1_prior.logpdf(theta[2])
 
         # Negative log-likelihood

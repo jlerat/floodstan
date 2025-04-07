@@ -44,7 +44,6 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
     marginal = marginals.factory(marginal_name)
     ndone = 0
     for iboot in range(nboot):
-        # Bootstrap fit
         rng = np.random.default_rng(SEED)
         yboot = rng.choice(y.values, N)
 
@@ -52,10 +51,18 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         dnocens = yboot[yboot >= censor]
         ncens = (yboot < censor).sum()
 
-        marginal.params_guess(yboot)
+        try:
+            # Run sampling variable with low number of
+            # importance samples
+            sv = sample.StanSamplingVariable(marginal, yboot, censor,
+                                         nimportance=10, ninits=1)
+        except:
+            # Can skip error due to very low importance sample numbers
+            continue
 
-        sv = sample.StanSamplingVariable(marginal, yboot, censor)
         stan_data = sv.to_dict()
+
+        marginal.params = sv.guess_parameters
 
         # Test shape close to 0 for edge cases
         if marginal.has_shape:

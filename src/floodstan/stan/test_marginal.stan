@@ -98,7 +98,9 @@ generated quantities {
   real logprior_shape1 = lp - log(p1 - p0);
 
   // Log-posterior
-  real logposterior = loglikelihood + logprior_locn + logprior_logscale + logprior_shape1;
+  real logposterior = loglikelihood + logprior_locn + logprior_logscale;
+  if(ymarginal == 3 || ymarginal == 4 || ymarginal == 6 || ymarginal == 7)
+     logposterior += logprior_shape1;
 }
 
 
