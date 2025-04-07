@@ -331,6 +331,16 @@ class TruncatedNormalParameterPrior():
     def clip(self, x):
         return min(self.upper, max(self.lower, x))
 
+    def clone(self):
+        prior = TruncatedNormalParameterPrior(self.param_name)
+        prior.upper = self.upper
+        prior.lower = self.lower
+        prior.loc = self.loc
+        prior.scale = self.scale
+        prior.uninformative = self.uninformative
+        return prior
+
+
 
 class FloodFreqDistribution():
     """ Base class for flood frequency distribution """
@@ -500,6 +510,17 @@ class FloodFreqDistribution():
     def rvs(self, size):
         errmsg = f"Method rvs not implemented for class {self.name}."
         raise NotImplementedError(errmsg)
+
+    def clone(self):
+        marginal = factory(self.name)
+        for pn in PARAMETERS:
+            # Set parameters
+            value = getattr(self, pn)
+            setattr(marginal, f"_{pn}", value)
+            # Set priors
+            sprior = getattr(self, f"{pn}_prior").clone()
+            setattr(marginal, f"_{pn}_prior", sprior)
+        return marginal
 
     def neglogpost(self, theta, data_not_censored, low_censor, ncens):
         try:
