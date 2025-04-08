@@ -208,7 +208,8 @@ class StanSamplingVariable():
                  censor=CENSOR_DEFAULT,
                  name="y",
                  ninits=NCHAINS_DEFAULT,
-                 nimportance=1000):
+                 prior_from_importance=False,
+                 nimportance=200):
         self.name = str(name)
         if len(self.name) != 1:
             errmess = "Expected one character for name."
@@ -223,7 +224,7 @@ class StanSamplingVariable():
         self._is_obs = None
         self._is_cens = None
 
-        self.marginal = marginal
+        self.marginal = marginal.clone()
 
         # Initial parameters
         self.ninits = ninits
@@ -231,6 +232,7 @@ class StanSamplingVariable():
         self._initial_cdfs = []
 
         # Importance sampling
+        self.prior_from_importance = prior_from_importance
         self.nimportance = nimportance
         self._importance_parameters = []
 
@@ -407,7 +409,7 @@ class StanSamplingVariable():
         self._initial_cdfs = cdfs
 
     def set_priors(self):
-        if self.marginal.name == "LogPearson3":
+        if self.prior_from_importance:
             # Use importance sampling to define priors
             marginal = self.marginal
             params = self.importance_parameters
@@ -415,7 +417,9 @@ class StanSamplingVariable():
                 se = params.loc[:, pn]
                 prior = getattr(marginal, f"{pn}_prior")
                 prior.loc = se.mean()
-                prior.scale = se.std() * 5
+                prior.scale = se.std() * 2
+                prior.lower = se.min()
+                prior.upper = se.max()
 
     def to_dict(self):
         """ Export stan data to be used by stan program """

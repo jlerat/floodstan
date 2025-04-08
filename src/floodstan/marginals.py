@@ -38,7 +38,7 @@ LOCN_PRIOR_SCALE_DEFAULT = 1e10
 LOGSCALE_LOWER = -20
 LOGSCALE_UPPER = 20
 LOGSCALE_PRIOR_LOC_DEFAULT = 0.
-LOGSCALE_PRIOR_SCALE_DEFAULT = 1e3
+LOGSCALE_PRIOR_SCALE_DEFAULT = 20
 
 # 1.95 avoids the value of 2 which
 # reduces gamma distribution used in LP3
@@ -236,7 +236,7 @@ class TruncatedNormalParameterPrior():
             self._upper = LOGSCALE_UPPER
             self._loc = LOGSCALE_PRIOR_LOC_DEFAULT
             self._scale = LOGSCALE_PRIOR_SCALE_DEFAULT
-            self.uninformative = True
+            self.uninformative = False
 
         elif param_name == "shape1":
             self._lower = SHAPE1_LOWER
@@ -252,7 +252,7 @@ class TruncatedNormalParameterPrior():
             raise ValueError(errmess)
 
     def __str__(self):
-        txt = f"{self.param_name} truncdated normal prior:\n"
+        txt = f"{self.param_name} truncated normal prior:\n"
         txt += f"{' '*2}lower = {self.lower:0.2f}\n"
         txt += f"{' '*2}upper = {self.upper:0.2f}\n"
         txt += f"{' '*2}loc   = {self.loc:0.2f}\n"
@@ -308,7 +308,7 @@ class TruncatedNormalParameterPrior():
         self.upper = UNINFORMATIVE_PRIOR_UPPER
         self.loc = UNINFORMATIVE_PRIOR_LOC
         self.scale = UNINFORMATIVE_PRIOR_SCALE
-        self.uninformative = False
+        self.uninformative = True
 
     @property
     def rv(self):
@@ -361,15 +361,20 @@ class FloodFreqDistribution():
         self._shape1_prior = TruncatedNormalParameterPrior("shape1")
 
     def __str__(self):
-        txt = f"{self.name} flood frequency distribution:\n"
+        txt = f"\n-- {self.name} flood frequency distribution --\n"
+        txt += "Parameter values:\n"
         txt += f"{' '*2}locn     = {self.locn:0.2f}\n"
         txt += f"{' '*2}logscale = {self.logscale:0.2f}\n"
-        txt += f"{' '*2}shape1   = {self.shape1:0.2f}\n"
+        txt += f"{' '*2}shape1   = {self.shape1:0.2f}\n\n"
+        txt += "Priors :\n"
+        txt += f"{' '*2}{self.locn_prior}\n"
+        txt += f"{' '*2}{self.logscale_prior}\n"
+        txt += f"{' '*2}{self.shape1_prior}\n"
         try:
             x0, x1 = self.support
-            txt += f"\n{' '*2}Support   = [{x0:0.3f}, {x1:0.3f}]\n"
+            txt += f"Support :\n{' '*2}[{x0:0.3f}, {x1:0.3f}]\n"
         except NotImplementedError:
-            txt += "\n"
+            pass
         return txt
 
     def __setitem__(self, key, value):
