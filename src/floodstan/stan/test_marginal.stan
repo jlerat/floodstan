@@ -66,7 +66,7 @@ generated quantities {
   vector[N] lcens;
   vector[1] tmp;
 
-  for(i in 1:N){
+  for(i in i11){
     tmp[1] = y[i];
     luncens[i] = marginal_lpdf(tmp | ymarginal, ylocn, yscale, yshape1);
     cens[i] = marginal_cdf(y[i] | ymarginal, ylocn, yscale, yshape1);

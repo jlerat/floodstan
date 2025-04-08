@@ -82,13 +82,13 @@ def get_info():
 
 # ------------------------------------------------
 
-@pytest.mark.parametrize("distname",
+@pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
-def test_stan_sampling_variable(distname, allclose):
+def test_stan_sampling_variable(marginal_name, allclose):
     y = get_ams("203010")
     censor = y.median()
 
-    marginal = marginals.factory(distname)
+    marginal = marginals.factory(marginal_name)
     sv = sample.StanSamplingVariable(marginal)
 
     msg = "Data has not been set."
@@ -104,7 +104,7 @@ def test_stan_sampling_variable(distname, allclose):
     assert allclose(sv.censor, censor)
     assert allclose(sv.data, y)
     assert sv.N == len(y)
-    assert sv.marginal_code == marginals.MARGINAL_NAMES[distname]
+    assert sv.marginal_code == marginals.MARGINAL_NAMES[marginal_name]
     nhigh, nlow = (y>=censor).sum(), (y<censor).sum()
     Ncases = [[nhigh, 0, 0], [nlow, 0, 0], [0, 0, 0]]
     assert allclose(sv.Ncases, Ncases)
@@ -142,16 +142,16 @@ def test_stan_sampling_variable(distname, allclose):
 
 
 
-@pytest.mark.parametrize("distname",
+@pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
 @pytest.mark.parametrize("stationid",
                          get_stationids()[:2] + ["hard"])
-def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
+def test_univariate_censored_sampling(stationid, marginal_name, censoring, allclose):
     y = get_ams(stationid)
     censor = y.median() if censoring else np.nanmin(y) - 1.
 
-    marginal = marginals.factory(distname)
+    marginal = marginals.factory(marginal_name)
 
     #marginal.params_guess(y)
     #y = marginal.rvs(500)
@@ -161,15 +161,13 @@ def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
     stan_nsamples = 10000
     stan_nchains = 10
 
-    # Importance sampling
-    boot = sample.bootstrap(marginal, y, nboot=1000)
-    imp, lp, neff = sample.importance_sampling(marginal, y,
-                                               boot, censor,
-                                               stan_nsamples)
+    # Prepare sampling data:ta
+    pfi = True if marginal_name in ["LogPearson3", "GeneralizedLogistic"]\
+        else False
 
-    # Prepare sampling data
     sv = sample.StanSamplingVariable(marginal, y, censor,
-                                     ninits=stan_nchains)
+                                     ninits=stan_nchains,
+                                     prior_from_importance=pfi)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
 
@@ -196,11 +194,12 @@ def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
         lcs = smp.filter(regex="^lcens").values[inocens]
         assert allclose(lc, lcs, atol=1e-5)
 
-    #if distname in ["LogPearson3", "GeneralizedPareto", "GeneralizedLogistic"]:
-    #    pytest.skip(f"Not testing sampling for {distname} yet.")
+    #if marginal_name in ["LogPearson3", "GeneralizedPareto", "GeneralizedLogistic"]:
+    #    pytest.skip(f"Not testing sampling for {marginal_name} yet.")
 
     # Clean output folder
-    fout = FTESTS / "sampling" / "univariate"
+    fname = f"univariate_{stationid}_{marginal_name}_{censoring}"
+    fout = FTESTS / "sampling" / fname
     fout.mkdir(parents=True, exist_ok=True)
     for f in fout.glob("*.*"):
         f.unlink()
@@ -227,6 +226,10 @@ def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
 
+    #for f in fout.glob("*.*"):
+    #    f.unlink()
+    #fout.rmdir()
+
     # Test diag
     assert diag["effsamplesz"] == "satisfactory"
     assert diag["rhat"] == "satisfactory"
@@ -234,6 +237,8 @@ def test_univariate_censored_sampling(stationid, distname, censoring, allclose):
     # Test divergence
     prc = diag["divergence_proportion"]
     hard = ["LogPearson3"]
-    thresh = 50 if distname in hard else 20
-    print(f"\n{stationid}-{distname}-{censorng} : Divergence proportion = {prc}\n")
+    thresh = 50 if marginal_name in hard else 20
+    print(f"\n{stationid}-{marginal_name}-{censoring} : Divergence proportion = {prc}\n")
     assert prc < thresh
+
+

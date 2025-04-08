@@ -99,6 +99,14 @@ def are_marginal_params_valid(marginal, locn, logscale, shape1, data, censor):
     except Exception:
         return None, None
 
+    # Check prior
+    for pn in PARAMETERS:
+        prior = getattr(marginal, f"{pn}_prior")
+        v = marginal[pn]
+        if v < prior.lower or v > prior.upper:
+            return None, None
+
+    # Check likelihood
     cdf = marginal.cdf(data)
     cdf[data < censor] = np.nan
     cdf_min = np.nanmin(cdf)
@@ -233,6 +241,12 @@ class StanSamplingVariable():
 
         # Importance sampling
         self.prior_from_importance = prior_from_importance
+        if prior_from_importance and nimportance < 1000:
+            wmess = "Use of importance prior with low number of samples"\
+                    + f" ({nimportance}) is risky. Raising to 1000."
+            warnings.warn(wmess)
+            nimportance = 1000
+
         self.nimportance = nimportance
         self._importance_parameters = []
 
@@ -244,8 +258,8 @@ class StanSamplingVariable():
         if data_set:
             self.set_guess_parameters()
             self.run_importance()
-            self.set_initial_parameters()
             self.set_priors()
+            self.set_initial_parameters()
 
     @property
     def N(self):
@@ -381,7 +395,6 @@ class StanSamplingVariable():
 
         self._importance_parameters = params
 
-
     def set_initial_parameters(self):
         ninits = self.ninits
         niter = 0
@@ -391,9 +404,9 @@ class StanSamplingVariable():
         censor = self.censor
         params = self.importance_parameters
 
-        while len(inits) < ninits:
-            niter += 1
+        while len(inits) < ninits and niter < len(params):
             locn, logscale, shape1 = params.iloc[niter]
+            niter += 1
             pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
                                                 shape1, data, censor)
             if pp is not None:

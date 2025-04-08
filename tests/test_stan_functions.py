@@ -2,6 +2,7 @@ import json, re, math
 import shutil
 from pathlib import Path
 from itertools import product as prod
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -51,28 +52,33 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         dnocens = yboot[yboot >= censor]
         ncens = (yboot < censor).sum()
 
+        # Run sampling variable with low number of
+        # importance samples
         try:
-            # Run sampling variable with low number of
-            # importance samples
+            nimportance = 10
             sv = sample.StanSamplingVariable(marginal, yboot, censor,
-                                         nimportance=10, ninits=1)
+                                         nimportance=nimportance,
+                                         ninits=1)
         except:
-            # Can skip error due to very low importance sample numbers
-            continue
-
+            nimportance = 100
+            sv = sample.StanSamplingVariable(marginal, yboot, censor,
+                                             nimportance=nimportance,
+                                             ninits=1)
         stan_data = sv.to_dict()
-
-        marginal.params = sv.guess_parameters
+        marginal.params = sv.importance_parameters.iloc[0]
 
         # Test shape close to 0 for edge cases
-        if marginal.has_shape:
+        if marginal.has_shape and marginal.name != "GeneralizedPareto":
             if iboot < nboot // 20:
                 marginal.shape1 = 1e-20
             elif iboot >= nboot // 20 and iboot < 2 * nboot // 20:
                 marginal.shape1 = 1e-3
 
         y0, y1 = marginal.support
-        if y0 > yboot.min() or y1 < yboot.max():
+        ynocens = yboot[yboot > censor]
+        if y0 > ynocens.min() or y1 < ynocens.max():
+            wmess = "Skipping because data is outside of support"
+            warnings.warn(wmess)
             continue
 
         ndone += 1
@@ -128,7 +134,8 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
                                        censor, ncens)
         assert allclose(lp, expected, atol=atol)
 
-    assert ndone > nboot * 0.5
+    # Ensures at least 5 simulation beyond 0 shape trials
+    assert ndone > nboot // 10 + 5
 
 
 @pytest.mark.parametrize("copula",

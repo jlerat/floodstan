@@ -341,7 +341,6 @@ class TruncatedNormalParameterPrior():
         return prior
 
 
-
 class FloodFreqDistribution():
     """ Base class for flood frequency distribution """
 
@@ -1091,7 +1090,7 @@ class GeneralizedPareto(FloodFreqDistribution):
         smin, smax = self.support
         tau, alpha, kappa = self.locn, self.scale, self.shape1
         if smax < dmax and kappa > 0:
-            self.shape1 = alpha/(dmax-tau)*0.99
+            self.shape1 = alpha / (dmax-tau) * 0.99
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 195. """
