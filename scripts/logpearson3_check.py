@@ -102,21 +102,18 @@ for stationid in stationids:
 
         # Run sampling variable with low number of
         # importance samples
-        nimportance = 20
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            sv = sample.StanSamplingVariable(marginal, yboot, censor,
-                                     nimportance=nimportance,
-                                     ninits=1)
+        nimportance = 0
+        sv = sample.StanSamplingVariable(marginal, yboot, censor,
+                                 nimportance=nimportance,
+                                 ninits=1)
         stan_data = sv.to_dict()
         marginal.params = sv.initial_parameters[0]
 
         # Test shape close to 0 for edge cases
-        if marginal.has_shape and marginal.name != "GeneralizedPareto":
-            if iboot < nboot // 20:
-                marginal.shape1 = 1e-20
-            elif iboot >= nboot // 20 and iboot < 2 * nboot // 20:
-                marginal.shape1 = 1e-3
+        if iboot < nboot // 20:
+            marginal.shape1 = 1e-20
+        elif iboot >= nboot // 20 and iboot < 2 * nboot // 20:
+            marginal.shape1 = 1e-3
 
         y0, y1 = marginal.support
         ynocens = yboot[yboot > censor]
