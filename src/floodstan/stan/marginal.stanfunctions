@@ -9,25 +9,27 @@
 real gev_lpdf(vector y, real tau, real alpha, real kappa){
     int N = rows(y);
     real logalpha = log(alpha);
-    vector[N] u = (y-tau)/alpha;
+    vector[N] u = (y - tau) / alpha;
     vector[N] v;
 
     // Threshold to transition from GEV to Gumbel
-    real GEV2Gumbel_transition = 1e-10;
+    real GEV2Gumbel_trans = 1e-10;
 
-    real y0 = tau+alpha/kappa;
-    if(kappa < 0) {
+    real y0 = tau + alpha / kappa;
+    if(kappa < GEV2Gumbel_trans) {
         real ymin = min(y);
         if(ymin < y0)
-            reject("min(y) (", ymin, ") is lower than y0 (", y0, ").");
+            reject("[gev_lpdf] min(y) (", ymin, ") is lower than y0 (", y0, 
+                   ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
     }
-    else {
+    else if (kappa > GEV2Gumbel_trans){
         real ymax = max(y);
         if(ymax > y0)
-            reject("max(y) (", ymax, ") is greater than y0 (", y0, ").");
+            reject("[gev_lpdf] max(y) (", ymax, ") is greater than y0 (", y0,
+                   ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
     }
     
-    if(abs(kappa) > GEV2Gumbel_transition) {
+    if(abs(kappa) > GEV2Gumbel_trans) {
         // This is GEV log pdf
         v = -pow(1 - kappa * u, 1 / kappa);
         return -N * logalpha + sum(v + (1 / kappa - 1) * log(1 - kappa * u));
@@ -43,12 +45,20 @@ real gev_lcdf(real y, real tau, real alpha, real kappa){
     real v;
    
     // Threshold to transition from GEV to Gumbel
-    real GEV2Gumbel_transition = 1e-10;
+    real GEV2Gumbel_trans = 1e-10;
 
-    if(abs(kappa) > GEV2Gumbel_transition) {
-        // No parameter constraint here, already taken care of in lpdf
+    real y0 = tau + alpha / kappa;
+    if(kappa < -GEV2Gumbel_trans && y < y0) {
+       reject("[gev_lcdf] y (", y, ") is lower than y0 (", y0, 
+              ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
+    }
+    else if (kappa > GEV2Gumbel_trans && y > y0){
+       reject("[gev_lcdf] y (", y, ") is greater than y0 (", y0,
+              ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
+    }
+ 
+    if(abs(kappa) > GEV2Gumbel_trans) {
         return -pow(1. - kappa * u, 1. / kappa);
-
     } else {
         return -exp(-u);
     }
@@ -61,7 +71,7 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
     int N = rows(y);
 
     // transition from Pearson3 to Normal
-    real n2p_trans = 1e-5;
+    real n2p_trans = 1e-2;
 
     real abs_g = abs(g);
     real sign_g = sign(g);
@@ -91,7 +101,7 @@ real logpearson3_cdf(real y, real m, real s, real g){
     real cdf;
     
     // transition from Pearson3 to Normal
-    real n2p_trans = 1e-5;
+    real n2p_trans = 1e-2;
 
     // Original LogPearson3 parameterisation
     real alpha = 4. / g / g;
@@ -103,21 +113,20 @@ real logpearson3_cdf(real y, real m, real s, real g){
     real sign_g = sign(g);
 
     // Compute log cdf depending on skew
-    real x = sign_g * (log(y) - tau);
+    real u = sign_g * (log(y) - tau);
     
-    if(x < 0 && abs_g > n2p_trans) 
-        reject("x (", x, ") < 0 with m=", m, " s=", s, " g=", g);
+    if(u < 0 && abs_g > n2p_trans) 
+        reject("u (", u, ") < 0 with m=", m, " s=", s, " g=", g);
 
     if(abs_g < n2p_trans) {
         return lognormal_cdf(y | m, s);
     }
     else {
-        cdf = gamma_cdf(x | alpha, abs_beta);
+        cdf = gamma_cdf(u | alpha, abs_beta);
     } 
 
-    // In this case, cdf = 1-cdf, or 
     if(beta < 0)
-        cdf = 1-cdf;
+        cdf = 1 - cdf;
     
     return cdf;
 }
@@ -134,11 +143,12 @@ real genpareto_lpdf(vector y, real tau, real alpha, real kappa) {
         real ymin = min(y);
         real ymax = max(y);
         if(kappa > 0 && ((ymin < tau) || (ymax > tau + alpha / kappa)))
-            reject("ymin (", ymin, ") < tau or ymax (", ymax, ") > tau+alpha/kappa",
+            reject("[genpareto_lpdf] ymin (", ymin, ") < tau or ymax (",  ymax, 
+                   ") > tau+alpha/kappa",
                    " with tau=", tau, " alpha=", alpha, " kappa=", kappa);
 
         else if(kappa < 0 && (ymin < tau))
-            reject("ymin (", ymin, ") < tau with tau=", tau, 
+            reject("[genpareto_lpdf] ymin (", ymin, ") < tau with tau=", tau, 
                    " alpha=", alpha, " kappa=", kappa);
 
         z = -1. / kappa * log1m(kappa * z);
@@ -172,12 +182,12 @@ real genpareto_lcdf(real y, real tau, real alpha, real kappa) {
     real z = (y - tau) / alpha;
     if(abs(kappa) > kappa_transition){
         if(kappa > 0 && ((y < tau) || (y > tau + alpha / kappa)))
-            reject("y (", y, ") < tau or y (", y, ") > tau+alpha/kappa",
+            reject("[gen_pareto_lcdf] y (", y, ") < tau or y (", y, ") > tau+alpha/kappa",
                    " with tau=", tau, 
                    " alpha=", alpha, " kappa=", kappa);
 
         else if(kappa < 0 && (y < tau))
-            reject("y (", y, ") < tau with tau=", tau, 
+            reject("[gen_pareto lcdf] y (", y, ") < tau with tau=", tau, 
                    " alpha=", alpha, " kappa=", kappa);
  
         z = -1. / kappa * log1m(kappa * z);
