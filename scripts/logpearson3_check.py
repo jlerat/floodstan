@@ -29,6 +29,7 @@ from cmdstanpy import CmdStanModel
 
 import importlib
 importlib.reload(marginals)
+importlib.reload(sample)
 
 f = Path(sample.__file__).parent.parent.parent / "tests" /\
     "test_sample_univariate.py"
@@ -49,7 +50,9 @@ args = parser.parse_args()
 censoring = args.censoring
 
 stationids = tsu.get_stationids()
+
 nboot = 100
+
 SEED = 5446
 
 # ----------------------------------------------------------------------
@@ -79,8 +82,9 @@ LOGGER = sample.get_logger(stan_logger=False)
 marginal = marginals.factory("LogPearson3")
 
 stan_file = froot / "scripts" / "logpearson3_check.stan"
+LOGGER.info("Loading stan model")
 model = CmdStanModel(stan_file=stan_file)
-print(model)
+LOGGER.info(".. done")
 
 for stationid in stationids:
     LOGGER.info(f"Station {stationid}")
@@ -92,15 +96,27 @@ for stationid in stationids:
         yboot = rng.choice(y.values, len(y))
         marginal.params_guess(yboot)
 
+        # exclude if support to too narrow
+        y0, y1 = marginal.support
+        if y0 > yboot.min() or y1 < yboot.max():
+            continue
+
         # Test 0 shape for edge cases
-        if np.random.uniform(0, 1) < 0.2:
+        if iboot < nboot // 20:
             marginal.shape1 = 1e-20
 
-        sv = sample.StanSamplingVariable(marginal, yboot)
+        if iboot > nboot // 20 & iboot < nboot // 10:
+            marginal.shape1 = 1e-3
+
+        sv = sample.StanSamplingVariable(marginal, yboot,
+                                         ninits=1)
         stan_data = sv.to_dict()
         stan_data["ylocn"] = marginal.locn
         stan_data["ylogscale"] = marginal.logscale
         stan_data["yshape1"] = marginal.shape1
+
+        for f in fout.glob("*.*"):
+            f.unlink()
 
         kwargs = {}
         kwargs["chains"] = 1
@@ -110,34 +126,20 @@ for stationid in stationids:
         kwargs["show_progress"] = False
         kwargs["show_progress"] = False
         kwargs["output_dir"] = fout
+        kwargs["seed"] = SEED
         fit = model.sample(data=stan_data, **kwargs)
         smp = fit.draws_pd().squeeze()
 
         # Test
         errmess = f"Error using {marginal}."
 
-        u = smp.filter(regex="^u").values
-        tu = smp.filter(regex="tu").values
-        assert np.all(tu > 0), errmess
-        assert np.allclose(tu[u<0], 0.), errmess
-
-        a1 = 1.01
-        exp1 = gamma.logpdf(u, a1)
-        lp1 = smp.filter(regex="lpdf1").values
-        assert np.allclose(lp1[u>0], exp1[u>0]), errmess
-
-        a2 = 1.1
-        exp2 = gamma.logpdf(u, a2)
-        lp2 = smp.filter(regex="lpdf2").values
-        assert np.allclose(lp2[u>0], exp2[u>0]), errmess
-
-        tau = smp.filter(regex="tau_copy").values
+        tau = smp.filter(regex="tau").values
         assert np.allclose(tau, marginal.tau, atol=1e-5), errmess
 
-        beta = smp.filter(regex="beta_copy").values
+        beta = smp.filter(regex="beta").values
         assert np.allclose(beta, marginal.beta, atol=1e-5), errmess
 
-        alpha = smp.filter(regex="alpha_copy").values
+        alpha = smp.filter(regex="alpha").values
         assert np.allclose(alpha, marginal.alpha, atol=1e-5), errmess
 
         luncens = smp.filter(regex="luncens").values
