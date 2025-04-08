@@ -54,18 +54,14 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
 
         # Run sampling variable with low number of
         # importance samples
-        try:
-            nimportance = 10
+        nimportance = 20
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
             sv = sample.StanSamplingVariable(marginal, yboot, censor,
-                                         nimportance=nimportance,
-                                         ninits=1)
-        except:
-            nimportance = 100
-            sv = sample.StanSamplingVariable(marginal, yboot, censor,
-                                             nimportance=nimportance,
-                                             ninits=1)
+                                     nimportance=nimportance,
+                                     ninits=1)
         stan_data = sv.to_dict()
-        marginal.params = sv.importance_parameters.iloc[0]
+        marginal.params = sv.initial_parameters[0]
 
         # Test shape close to 0 for edge cases
         if marginal.has_shape and marginal.name != "GeneralizedPareto":

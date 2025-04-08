@@ -1083,14 +1083,15 @@ class GeneralizedPareto(FloodFreqDistribution):
         # .. Correct if lh moments is failing
         smin, smax = self.support
         dmin, dmax = data.min(), data.max()
+        delta = dmax - dmin
         tau, alpha = self.locn, self.scale
         if smin > dmin:
-            self.locn = dmin-1e-3
+            self.locn = dmin - 0.1 * delta
 
         smin, smax = self.support
         tau, alpha, kappa = self.locn, self.scale, self.shape1
         if smax < dmax and kappa > 0:
-            self.shape1 = alpha / (dmax-tau) * 0.99
+            self.shape1 = alpha / (dmax - tau) * 0.8
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 195. """

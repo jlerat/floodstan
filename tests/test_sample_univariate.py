@@ -87,17 +87,7 @@ def get_info():
 def test_stan_sampling_variable(marginal_name, allclose):
     y = get_ams("203010")
     censor = y.median()
-
     marginal = marginals.factory(marginal_name)
-    sv = sample.StanSamplingVariable(marginal)
-
-    msg = "Data has not been set."
-    with pytest.raises(ValueError, match=msg):
-        d = sv.data
-
-    msg = "Expected data"
-    with pytest.raises(ValueError, match=msg):
-        sv.set_data(y.values[:, None], censor)
 
     sv = sample.StanSamplingVariable(marginal, y, censor)
 
@@ -120,17 +110,9 @@ def test_stan_sampling_variable(marginal_name, allclose):
     for key in keys:
         assert key in dd
 
-    # Rapid setting
-    sv = sample.StanSamplingVariable(y)
-
-    msg = "Initial parameters"
-    with pytest.raises(ValueError, match=msg):
-        ip = sv.initial_parameters
-
+    # Initial values
     sv = sample.StanSamplingVariable(marginal, y)
     d = sv.data
-
-    # Initial values
     inits = sv.initial_parameters
     for init in inits:
         for pn in ["locn", "logscale", "shape1"]:

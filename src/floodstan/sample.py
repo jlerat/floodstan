@@ -212,7 +212,7 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
 class StanSamplingVariable():
     def __init__(self,
                  marginal,
-                 data=None,
+                 data,
                  censor=CENSOR_DEFAULT,
                  name="y",
                  ninits=NCHAINS_DEFAULT,
@@ -250,16 +250,11 @@ class StanSamplingVariable():
         self.nimportance = nimportance
         self._importance_parameters = []
 
-        data_set = False
-        if data is not None and censor is not None:
-            self.set_data(data, censor)
-            data_set = True
-
-        if data_set:
-            self.set_guess_parameters()
-            self.run_importance()
-            self.set_priors()
-            self.set_initial_parameters()
+        self.set_data(data, censor)
+        self.set_guess_parameters()
+        self.run_importance()
+        self.set_priors()
+        self.set_initial_parameters()
 
     @property
     def N(self):
@@ -380,7 +375,7 @@ class StanSamplingVariable():
             params, lps, neff = importance_sampling(marginal, data,
                                                     boot, censor,
                                                     nsamples)
-        except Exception:
+        except Exception as err:
             params = None
 
         if params is None or neff < nsamples / 50:
