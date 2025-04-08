@@ -6,7 +6,7 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
     int N = rows(y);
 
     // transition from Pearson3 to Normal
-    real n2p_trans = 1e-5;
+    real n2p_trans = 1e-6;
 
     real abs_g = abs(g);
     real sign_g = sign(g);
@@ -109,13 +109,13 @@ real logpearson3_cdf(real y, real m, real s, real g){
     real cdf;
     
     // transition from Pearson3 to Normal
-    real n2p_trans = 1e-5;
+    real n2p_trans = 1e-6;
     
     // Threshold to transition from pearson to approx
-    // for cdf computation. This a high threshold
+    // for cdf computation. This is a high threshold
     // due to very slow computation of gamma function 
     // for high x and alpha in Stan. 
-    real approx_trans = 0.5; 
+    real approx_trans = 0.1; 
 
     // Original LogPearson3 parameterisation
     real alpha = 4. / g / g;
@@ -126,14 +126,13 @@ real logpearson3_cdf(real y, real m, real s, real g){
     real abs_g = abs(g);
     real sign_g = sign(g);
 
-    // Compute log cdf depending on skew
     // Important: here, the definition of x includes abs_beta
     // contrary to what is done for logpearson3_logpdf.
     // This is done because Temme's approximation does not have a 
     // scaling parameters, and hence scaling must be included 
-    // in the x variable. Consquently, the stan function is
+    // in the x variable. Consequently, the stan function is
     // used with a scale parameter set to 1.
-    real x = abs_beta * (log(y) - tau);
+    real x = beta * (log(y) - tau);
     
     if(x < 0 && abs_g > n2p_trans) 
         reject("[logpearson3_cdf] x (", x, ") < 0 with m=", m, 
@@ -149,17 +148,10 @@ real logpearson3_cdf(real y, real m, real s, real g){
     else {
         // Stan gamma is very slow. Use Temme's approximation
         cdf = gamma_cdf_temme(x, alpha);
-   } 
+    } 
 
     if(beta < 0)
         cdf = 1 - cdf;
     
     return cdf;
 }
-
-real logpearson3_lcdf(real y, real m, real s, real g) {
-    return log(logpearson3_cdf(y | m, s, g));
-}
-
-
-
