@@ -230,16 +230,16 @@ real genpareto_lpdf(vector y, real tau, real alpha, real kappa) {
 
     if(abs(kappa) > kappa_transition){
         // Check y are all in support
-        real ymin = min(y);
-        real ymax = max(y);
-        if(kappa > 0 && (ymin < tau || ymax > tau + alpha / kappa))
-            reject("[genpareto_lpdf] ymin (", ymin, ") < tau or ymax (",  ymax, 
-                   ") > tau+alpha/kappa",
-                   " with tau=", tau, " alpha=", alpha, " kappa=", kappa);
+        //real ymin = min(y);
+        //real ymax = max(y);
+        //if(kappa > 0 && (ymin < tau || ymax > tau + alpha / kappa))
+        //    reject("[genpareto_lpdf] ymin (", ymin, ") < tau or ymax (",  ymax, 
+        //           ") > tau+alpha/kappa",
+        //           " with tau=", tau, " alpha=", alpha, " kappa=", kappa);
 
-        else if(kappa < 0 && ymin < tau)
-            reject("[genpareto_lpdf] ymin (", ymin, ") < tau with tau=", tau, 
-                   " alpha=", alpha, " kappa=", kappa);
+        //else if(kappa < 0 && ymin < tau)
+        //    reject("[genpareto_lpdf] ymin (", ymin, ") < tau with tau=", tau, 
+        //           " alpha=", alpha, " kappa=", kappa);
 
         z = -1. / kappa * log1m(kappa * z);
     }
@@ -253,14 +253,14 @@ real genpareto_cdf(real y, real tau, real alpha, real kappa) {
     real z = (y - tau) / alpha;
 
     if(abs(kappa) > kappa_transition){
-        if(kappa > 0 && ((y < tau) || (y > tau + alpha / kappa)))
-            reject("y (", y, ") < tau or y (", y, ") > tau+alpha/kappa",
-                   " with tau=", tau, 
-                   " alpha=", alpha, " kappa=", kappa);
+        //if(kappa > 0 && ((y < tau) || (y > tau + alpha / kappa)))
+        //    reject("y (", y, ") < tau or y (", y, ") > tau+alpha/kappa",
+        //           " with tau=", tau, 
+        //           " alpha=", alpha, " kappa=", kappa);
 
-        else if(kappa < 0 && (y < tau))
-            reject("y (", y, ") < tau with tau=", tau, 
-                   " alpha=", alpha, " kappa=", kappa);
+        //else if(kappa < 0 && (y < tau))
+        //    reject("y (", y, ") < tau with tau=", tau, 
+        //           " alpha=", alpha, " kappa=", kappa);
  
         z = -1. / kappa * log1m(kappa * z);
     }
@@ -272,14 +272,14 @@ real genpareto_lcdf(real y, real tau, real alpha, real kappa) {
 
     real z = (y - tau) / alpha;
     if(abs(kappa) > kappa_transition){
-        if(kappa > 0 && ((y < tau) || (y > tau + alpha / kappa)))
-            reject("[gen_pareto_lcdf] y (", y, ") < tau or y (", y,
-                   ") > tau+alpha/kappa with tau=", tau, 
-                   " alpha=", alpha, " kappa=", kappa);
+        //if(kappa > 0 && ((y < tau) || (y > tau + alpha / kappa)))
+        //    reject("[gen_pareto_lcdf] y (", y, ") < tau or y (", y,
+        //           ") > tau+alpha/kappa with tau=", tau, 
+        //           " alpha=", alpha, " kappa=", kappa);
 
-        else if(kappa < 0 && (y < tau))
-            reject("[gen_pareto lcdf] y (", y, ") < tau with tau=", tau, 
-                   " alpha=", alpha, " kappa=", kappa);
+        //else if(kappa < 0 && (y < tau))
+        //    reject("[gen_pareto lcdf] y (", y, ") < tau with tau=", tau, 
+        //           " alpha=", alpha, " kappa=", kappa);
  
         z = -1. / kappa * log1m(kappa * z);
     }
@@ -295,9 +295,9 @@ real genlogistic_lpdf(vector y, real tau, real alpha, real kappa) {
     if(abs(kappa) > kappa_transition){
         real y0 = kappa < 0 ? min(y) : max(y);
         real yt = tau + alpha / kappa;
-        if(kappa * (y0 - yt) > 0)
-            reject("[genlogistic_lpdf] y0 (", y0, ") incompatible with yt (", 
-                   yt, ") if tau=", tau, " alpha=", alpha, " kappa=", kappa);
+        //if(kappa * (y0 - yt) > 0)
+        //    reject("[genlogistic_lpdf] y0 (", y0, ") incompatible with yt (", 
+        //           yt, ") if tau=", tau, " alpha=", alpha, " kappa=", kappa);
  
         z = -1. / kappa * log1m(kappa * z);
     }
@@ -325,9 +325,9 @@ real genlogistic_lcdf(real y, real tau, real alpha, real kappa) {
     real z = (y - tau) / alpha;
     if(abs(kappa) > kappa_transition){
         real yt = tau + alpha / kappa;
-        if(kappa * (y - yt) > 0)
-            reject("y (", y, ") incompatible with yt (", yt, ") with tau=", tau, 
-                   " alpha=", alpha, " kappa=", kappa);
+        //if(kappa * (y - yt) > 0)
+        //    reject("y (", y, ") incompatible with yt (", yt, ") with tau=", tau, 
+        //           " alpha=", alpha, " kappa=", kappa);
 
         z = -1. / kappa * log1m(kappa * z);
     }

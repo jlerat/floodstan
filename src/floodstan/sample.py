@@ -370,21 +370,25 @@ class StanSamplingVariable():
         data = self.data
         censor = self.censor
         nsamples = self.nimportance
-        try:
-            boot = bootstrap(marginal, data, nboot=nsamples)
-            params, lps, neff = importance_sampling(marginal, data,
-                                                    boot, censor,
-                                                    nsamples)
-        except Exception as err:
-            params = None
+        params = None
+        if nsamples > 0:
+            try:
+                boot = bootstrap(marginal, data, nboot=nsamples)
+                params, lps, neff = importance_sampling(marginal, data,
+                                                        boot, censor,
+                                                        nsamples)
+                if neff < min(10, nsamples / 50):
+                    params = None
 
-        if params is None or neff < nsamples / 50:
-            wmess = "Importance sampling failed. Reverting to "\
-                    + "sampling around the guessed parameters."
-            warnings.warn(wmess)
+            except Exception:
+                wmess = "Importance sampling failed."
+                warnings.warn(wmess)
+                params = None
+
+        if params is None:
             p0 = np.array([self.guess_parameters[n]
                            for n in PARAMETERS])
-            eps = np.random.normal(scale=2e-1, size=(nsamples, 3))
+            eps = np.random.normal(scale=2e-1, size=(500, 3))
             params = pd.DataFrame(p0[None, :] + eps, columns=PARAMETERS)
             params.loc[:, "locn"] = p0[0] * (1 + eps[:, 0])
 

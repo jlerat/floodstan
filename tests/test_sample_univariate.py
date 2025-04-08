@@ -149,6 +149,7 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
 
     sv = sample.StanSamplingVariable(marginal, y, censor,
                                      ninits=stan_nchains,
+                                     nimportance=0,
                                      prior_from_importance=pfi)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
