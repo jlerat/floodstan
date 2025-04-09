@@ -33,6 +33,7 @@ CENSOR_DEFAULT = -1e10
 STAN_VARIABLE_INITIAL_CDF_MIN = 1e-8
 
 MAX_INIT_PARAM_SEARCH = 50
+NIMPORTANCE_SAMPLE_FOR_PRIOR = 5000
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
@@ -243,9 +244,10 @@ class StanSamplingVariable():
         self.prior_from_importance = prior_from_importance
         if prior_from_importance and nimportance < 1000:
             wmess = "Use of importance prior with low number of samples"\
-                    + f" ({nimportance}) is risky. Raising to 1000."
+                    + f" ({nimportance}) is risky."\
+                    + f" Raising to {NIMPORTANCE_SAMPLE_FOR_PRIOR}."
             warnings.warn(wmess)
-            nimportance = 1000
+            nimportance = NIMPORTANCE_SAMPLE_FOR_PRIOR
 
         self.nimportance = nimportance
         self._sampled_parameters = []
@@ -435,8 +437,8 @@ class StanSamplingVariable():
                 prior = getattr(marginal, f"{pn}_prior")
                 prior.loc = se.mean()
                 prior.scale = se.std() * 2
-                prior.lower = se.min()
-                prior.upper = se.max()
+                prior.lower = se.quantile(0.001)
+                prior.upper = se.quantile(0.999)
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
