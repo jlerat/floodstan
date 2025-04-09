@@ -115,7 +115,7 @@ real logpearson3_cdf(real y, real m, real s, real g){
     // for cdf computation. This is a high threshold
     // due to very slow computation of gamma function 
     // for high x and alpha in Stan. 
-    real approx_trans = 0.1; 
+    real approx_trans = 1.; 
 
     // Original LogPearson3 parameterisation
     real alpha = 4. / g / g;
@@ -146,7 +146,8 @@ real logpearson3_cdf(real y, real m, real s, real g){
         cdf = gamma_cdf(x | alpha, 1.);
     }    
     else {
-        // Stan gamma is very slow. Use Temme's approximation
+        // Stan gamma is very slow and inaccurate. 
+        // Use Temme's approximation
         cdf = gamma_cdf_temme(x, alpha);
     } 
 

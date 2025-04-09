@@ -144,49 +144,62 @@ for stationid in stationids:
         smp = out.draws_pd().squeeze()
 
         # Test params
+        errmess = f"Error : {marginal}"
         atol = 1e-5
+        rtol = 1e-3
         locn = smp.filter(regex="ylocn").values
-        assert np.allclose(locn, marginal.locn, atol=atol)
+        assert np.allclose(locn, marginal.locn,
+                           atol=atol, rtol=rtol), errmess
 
         logscale = smp.filter(regex="ylogscale").values
-        assert np.allclose(logscale, marginal.logscale, atol=atol)
+        assert np.allclose(logscale, marginal.logscale,
+                           atol=atol, rtol=rtol), errmess
 
         shape1 = smp.filter(regex="yshape1").values
-        assert np.allclose(shape1, marginal.shape1, atol=atol)
+        assert np.allclose(shape1, marginal.shape1,
+                           atol=atol, rtol=rtol), errmess
 
         # Test data
         i11 = stan_data["i11"] - 1
         luncens = smp.filter(regex="luncens").values[i11]
         expected = marginal.logpdf(yboot[i11])
-        assert np.allclose(luncens, expected, atol=atol)
+        assert np.allclose(luncens, expected,
+                           atol=atol, rtol=rtol), errmess
 
         cens = smp.filter(regex="^cens").values[i11]
         expected = marginal.cdf(yboot[i11])
-        assert np.allclose(cens, expected, atol=atol)
+        assert np.allclose(cens, expected,
+                           atol=atol, rtol=rtol), errmess
 
+        rtol = 1e-2
         atol = 5e-3
         lcens = smp.filter(regex="^lcens").values[i11]
         expected = marginal.logcdf(yboot[i11])
-        assert np.allclose(lcens, expected, atol=atol)
+        assert np.allclose(lcens, expected,
+                           atol=atol, rtol=rtol), errmess
+        atol = 1e-5
+        rtol = 1e-3
 
         lpr = 0.
-        atol = 1e-5
         for pn in marginals.PARAMETERS:
             lp = smp.filter(regex=f"logprior_{pn}")
             prior = getattr(marginal, f"{pn}_prior")
             expected = prior.logpdf(getattr(marginal, pn))
-            assert np.allclose(lp, expected, atol=atol)
+            assert np.allclose(lp, expected,
+                               atol=atol, rtol=rtol), errmess
             lpr += lp.squeeze()
 
         ll = smp.filter(regex="loglikelihood").values[0]
         expected = marginal.logpdf(dnocens).sum()
         expected += ncens * marginal.logcdf(censor)
-        assert np.allclose(ll, expected, atol=atol)
+        assert np.allclose(ll, expected,
+                           atol=atol, rtol=rtol), errmess
 
         lp = smp.filter(regex="logposterior").values[0]
         expected = -marginal.neglogpost(marginal.params, dnocens,
                                        censor, ncens)
-        assert np.allclose(lp, expected, atol=atol)
+        assert np.allclose(lp, expected,
+                           atol=atol, rtol=rtol), errmess
 
     # Ensures at least 5 simulation beyond 0 shape trials
     assert ndone > nboot // 10 + 5

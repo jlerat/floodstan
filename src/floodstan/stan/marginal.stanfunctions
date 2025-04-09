@@ -180,7 +180,7 @@ real logpearson3_cdf(real y, real m, real s, real g){
     // for cdf computation. This is a high threshold
     // due to very slow computation of gamma function 
     // for high x and alpha in Stan. 
-    real approx_trans = 0.1; 
+    real approx_trans = 1.; 
 
     // Original LogPearson3 parameterisation
     real alpha = 4. / g / g;

@@ -62,5 +62,5 @@ model {
 
   // Case 21 : y censored 
   if(Ncases[2, 1] > 0)
-     target += Ncases[2,1] * logpearson3_lcdf(ycensor | ylocn, yscale, yshape1);
+     target += Ncases[2,1] * log(logpearson3_cdf(ycensor | ylocn, yscale, yshape1));
 }
