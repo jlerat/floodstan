@@ -28,6 +28,7 @@ from cmdstanpy import CmdStanModel
 
 import importlib
 importlib.reload(marginals)
+importlib.reload(sample)
 
 f = Path(sample.__file__).parent.parent.parent / "tests" /\
     "test_sample_univariate.py"
@@ -92,13 +93,14 @@ for stationid in stationids[:1]:
     LOGGER.info(f"Censoring thresh = {censor:0.1f}"\
                 +f" (p={censoring}%, ncens={ncens})", ntab=1)
 
-    sv = sample.StanSamplingVariable(marginal, y, censor)
+    sv = sample.StanSamplingVariable(marginal, y, censor,
+                                     prior_from_importance=True)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
 
-    #LOGGER.info("Report from importance sampling")
-    #rep_imp, _ = report.ams_report(sv.marginal, sv.importance_parameters,
-    #                               design_aris=aris)
+    LOGGER.info("Report from importance sampling")
+    rep_imp, _ = report.ams_report(sv.marginal, sv.sampled_parameters,
+                                   design_aris=aris)
 
     LOGGER.info("Stan sampling", ntab=1)
     kwargs = {}
@@ -129,10 +131,12 @@ for stationid in stationids[:1]:
 
     LOGGER.info("Plotting", ntab=1)
     plt.close("all")
-    fig, ax = plt.subplots(figsize=(10, 8),
-                           layout="constrained")
+    fig, axs = plt.subplots(ncols=2,
+                            figsize=(16, 8),
+                            layout="constrained")
     ptype = "gumbel"
     quantiles = rep.filter(regex="DESIGN", axis=0)
+    ax = axs[0]
     freqplots.plot_marginal_quantiles(ax, aris, quantiles, ptype,
                                       center_column="MEAN",
                                       q0_column="5%",
@@ -141,19 +145,21 @@ for stationid in stationids[:1]:
                                       alpha=0.3,
                                       facecolor="tab:blue",
                                       edgecolor="k")
-
-    #quantiles = rep_imp.filter(regex="DESIGN", axis=0)
-    #freqplots.plot_marginal_quantiles(ax, aris, quantiles, ptype,
-    #                                  center_column="MEAN",
-    #                                  q0_column="5%",
-    #                                  q1_column="95%",
-    #                                  label="LogPearson3 - importance",
-    #                                  alpha=0.3,
-    #                                  facecolor="tab:orange",
-    #                                  edgecolor="grey")
-
     freqplots.plot_data(ax, y, ptype)
+    retp = [5, 10, 100, 500]
+    aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
 
+    ax = axs[1]
+    quantiles = rep_imp.filter(regex="DESIGN", axis=0)
+    freqplots.plot_marginal_quantiles(ax, aris, quantiles, ptype,
+                                      center_column="MEAN",
+                                      q0_column="5%",
+                                      q1_column="95%",
+                                      label="LogPearson3 - importance",
+                                      alpha=0.3,
+                                      facecolor="tab:orange",
+                                      edgecolor="grey")
+    freqplots.plot_data(ax, y, ptype)
     retp = [5, 10, 100, 500]
     aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
 
