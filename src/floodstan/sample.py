@@ -33,7 +33,7 @@ CENSOR_DEFAULT = -1e10
 STAN_VARIABLE_INITIAL_CDF_MIN = 1e-8
 
 MAX_INIT_PARAM_SEARCH = 50
-NIMPORTANCE_SAMPLE_FOR_PRIOR = 5000
+NIMPORTANCE_SAMPLE_FOR_PRIOR = 1000
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
@@ -251,6 +251,7 @@ class StanSamplingVariable():
 
         self.nimportance = nimportance
         self._sampled_parameters = []
+        self._sampled_parameters_valid = []
 
         self.set_data(data, censor)
         self.set_guess_parameters()
@@ -267,7 +268,6 @@ class StanSamplingVariable():
         if len(self._guess_parameters) == 0:
             errmess = "Guess parameters have not been set."
             raise ValueError(errmess)
-
         return self._guess_parameters
 
     @property
@@ -275,15 +275,21 @@ class StanSamplingVariable():
         if len(self._sampled_parameters) == 0:
             errmess = "Importance parameters have not been set."
             raise ValueError(errmess)
-
         return self._sampled_parameters
+
+    @property
+    def sampled_parameters_valid(self):
+        if len(self._sampled_parameters_valid) == 0:
+            errmess = "Importance parameters have not been set."
+            raise ValueError(errmess)
+        return self._sampled_parameters_valid
+
 
     @property
     def initial_parameters(self):
         if len(self._initial_parameters) == 0:
             errmess = "Initial parameters have not been set."
             raise ValueError(errmess)
-
         return self._initial_parameters
 
     @property
@@ -380,7 +386,7 @@ class StanSamplingVariable():
                 params, lps, neff = importance_sampling(marginal, data,
                                                         boot, censor,
                                                         nsamples)
-                if neff < min(10, nsamples / 50):
+                if neff < min(100, nsamples / 10):
                     params = None
 
             except Exception:
@@ -389,7 +395,7 @@ class StanSamplingVariable():
                 params = None
 
         if params is None:
-            nparams = 500
+            nparams = NIMPORTANCE_SAMPLE_FOR_PRIOR
             p0 = np.array([self.guess_parameters[n]
                            for n in PARAMETERS])
             eps = np.random.normal(scale=2e-1, size=(nparams, 3))
@@ -400,6 +406,7 @@ class StanSamplingVariable():
                 p0[2] * np.random.uniform(0, 0.5, size=nparams)
 
         self._sampled_parameters = params
+        self._sampled_parameters_valid = -np.ones(len(params))
 
     def set_initial_parameters(self):
         ninits = self.ninits
@@ -412,12 +419,16 @@ class StanSamplingVariable():
 
         while len(inits) < ninits and niter < len(params):
             locn, logscale, shape1 = params.iloc[niter]
-            niter += 1
             pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
                                                 shape1, data, censor)
-            if pp is not None:
+            if pp is None:
+                self._sampled_parameters_valid[niter] = 0
+            else:
                 inits.append(pp)
                 cdfs.append(cdf)
+                self._sampled_parameters_valid[niter] = 1
+
+            niter += 1
 
         if len(inits) < ninits:
             errmess = "Cannot find initial parameter "\
