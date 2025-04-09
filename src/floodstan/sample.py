@@ -284,7 +284,6 @@ class StanSamplingVariable():
             raise ValueError(errmess)
         return self._sampled_parameters_valid
 
-
     @property
     def initial_parameters(self):
         if len(self._initial_parameters) == 0:
