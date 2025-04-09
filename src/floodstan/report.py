@@ -103,7 +103,7 @@ def process_stan_diagnostic(diag):
         "treedepth": "(T|t)reedepth",
         "divergence": "divergen(t|ce)",
         "ebfmi": "E-BFMI",
-        "effsamplesz": "Effective|effective draws",
+        "effsamplesz": "Effective|effective draws|effective sample",
         "rhat": "R-hat"
         }
 
