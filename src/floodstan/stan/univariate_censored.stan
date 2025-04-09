@@ -67,12 +67,9 @@ data {
 
 parameters {
   // Parameter for observed streamflow
-  //real<lower=locn_lower, upper=locn_upper> ylocn; 
-  //real<lower=logscale_lower, upper=logscale_upper> ylogscale;
-  //real<lower=shape1_lower, upper=shape1_upper> yshape1;
-  real ylocn; 
-  real ylogscale;
-  real yshape1;
+  real<lower=locn_lower, upper=locn_upper> ylocn; 
+  real<lower=logscale_lower, upper=logscale_upper> ylogscale;
+  real<lower=shape1_lower, upper=shape1_upper> yshape1;
 }  
 
 
