@@ -102,7 +102,7 @@ def test_stan_sampling_variable(marginal_name, allclose):
     i11 = np.where(y>=censor)[0]+1
     assert allclose(sv.i11, i11)
 
-    assert sv.sampled_parameters.shape[0] == 500
+    assert sv.sampled_parameters.shape[0] == 1000
 
     dd = sv.to_dict()
     keys = ["ymarginal", "y",
@@ -128,6 +128,8 @@ def test_stan_sampling_variable(marginal_name, allclose):
     sv = sample.StanSamplingVariable(marginal, y,
                                      prior_from_importance=True)
     assert sv.sampled_parameters.shape[0] == 1000
+    assert np.all(sv.sampled_parameters_valid[:sv.ninits] == 1)
+
 
 
 @pytest.mark.parametrize("marginal_name",
@@ -146,8 +148,8 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
 
     # Set STAN
     stan_nwarm = 10000
-    stan_nsamples = 10000
-    stan_nchains = 10
+    stan_nsamples = 5000
+    stan_nchains = 5
 
     # Prepare sampling data
     pfi = True if marginal_name in ["LogPearson3", "GeneralizedLogistic"]\

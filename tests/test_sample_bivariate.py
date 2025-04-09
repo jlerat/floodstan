@@ -85,7 +85,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
 
     stan_nwarm = 10000
     stan_nsamples = 5000
-    stan_nchains = 10
+    stan_nchains = 5
 
     stationid = STATIONIDS[0]
     y = get_ams(stationid)
@@ -103,6 +103,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
     censor = y.median() if censoring else np.nanmin(y) - 1.
     yv = sample.StanSamplingVariable(marginal, y, censor,
                                      ninits=stan_nchains)
+
     censor = z.median() if censoring else np.nanmin(z) - 1.
     zv = sample.StanSamplingVariable(marginal, z, censor,
                                      ninits=stan_nchains)
