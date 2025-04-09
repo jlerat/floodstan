@@ -102,6 +102,8 @@ def test_stan_sampling_variable(marginal_name, allclose):
     i11 = np.where(y>=censor)[0]+1
     assert allclose(sv.i11, i11)
 
+    assert sv.sampled_parameters.shape[0] == 500
+
     dd = sv.to_dict()
     keys = ["ymarginal", "y",
             "ycensor",
@@ -122,6 +124,10 @@ def test_stan_sampling_variable(marginal_name, allclose):
     assert len(cdfs) == len(inits)
     assert len(cdfs[0]) == len(sv.data)
 
+    # Importance sampling
+    sv = sample.StanSamplingVariable(marginal, y,
+                                     prior_from_importance=True)
+    assert sv.sampled_parameters.shape[0] == 1000
 
 
 @pytest.mark.parametrize("marginal_name",

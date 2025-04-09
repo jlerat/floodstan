@@ -8,7 +8,7 @@ from scipy.stats import gamma as gamma_dist
 from scipy.stats import truncnorm
 from scipy.stats import lognorm, norm, genpareto
 from scipy.optimize import brentq, minimize
-from scipy.special import gamma, gammaln, polygamma
+from scipy.special import gamma, gammaln, polygamma, erfc
 
 # Distribution names
 MARGINAL_NAMES = {
@@ -773,6 +773,73 @@ class GEV(FloodFreqDistribution):
         self.logscale = math.log(alpha)
         self.locn = tau
 
+# -- Functions needed for the approximation of incomplete gamma function
+#    when alpha is large (say>100) and computation of gamma(alpha) is
+#    leading to overflow
+#
+#    Temme, N. M. (1987). On the computation of the incomplete gamma
+#    functions for large values of the parameters.
+#    In Algorithms for approximation (pp. 479-489).
+#
+#    Temme, N. M. (1994). A set of algorithms for the incomplete gamma
+#    functions. Probability in the Engineering and Informational
+#    Sciences, 8(2), 291-307.
+
+
+def gamma_star(alpha):
+    # Approx of the function gamma star defined as
+    # Gs(a) = sqrt(a/2pi).exp(a).a^(-a).Gamma(a)
+
+    # Coefficients from Temme (1987)
+    ak = np.array([5.115471897484e-2, 4.990196893575e-1,
+                   9.404953102900e-1, 9.999999625957e-1])
+    bk = np.array([1.544892866413e-2, 4.241288251916e-1,
+                   8.571609363101e-1, 1.000000000000e+0])
+    num, den = 0, 0
+    for i in range(4):
+        num = num * alpha + ak[3-i]
+        den = den * alpha + bk[3-i]
+
+    return num/den
+
+
+def gamma_cdf_temme(x, alpha):
+    Napprox = 14
+    bm = np.zeros(Napprox + 1)
+    # Coefficients from Temme (1987)
+    fm = np.array([-3.33333333e-01,  8.33333333e-02, -1.48148148e-02,
+                   1.15740741e-03,  3.52733686e-04, -1.78755144e-04,
+                   3.91926318e-05, -2.18544851e-06, -1.85406221e-06,
+                   8.29671134e-07, -1.76659527e-07,  6.70785354e-09,
+                   1.02618098e-08, -4.38203602e-09,  9.14769958e-10])
+
+    # First term of the approximation
+    lam = x / alpha
+    eta = np.sqrt(2 * (lam - 1. - np.log(lam)))
+    eta = np.where(lam < 1, -eta, eta)
+    cdf0 = erfc(-eta * np.sqrt(alpha / 2.)) / 2.
+
+    # Approximation coefficients to compute the residuals
+    bm[Napprox] = fm[Napprox]
+    bm[Napprox - 1] = fm[Napprox - 1]
+    for i in range(1, Napprox):
+        mb = Napprox-i
+        f = fm[mb-1] if mb > 0 else 1.
+        bm[mb-1] = f + (mb + 1.) / alpha * bm[mb+1]
+
+    # Compute residual
+    S = 0
+    for ms in range(1, Napprox+1):
+        S += bm[ms-1] * np.power(eta, ms - 1.)
+
+    A = np.exp(-alpha * eta * eta / 2.) / np.sqrt(2. * math.pi * alpha)
+    GS = gamma_star(alpha)
+    R = A * S / GS
+
+    # Put it together
+    cdf = cdf0 - R
+    return np.where(np.isnan(cdf), 0, cdf)
+
 
 class LogPearson3(FloodFreqDistribution):
     """ Log Pearson III distribution class"""
@@ -816,12 +883,40 @@ class LogPearson3(FloodFreqDistribution):
         return pearson3.logpdf(lx, **kw) - lx
 
     def cdf(self, x):
-        kw = self.get_scipy_params()
-        return pearson3.cdf(np.log(x), **kw)
+        shape1 = self.shape1
+        if abs(shape1) < 1e-6:
+            return norm.cdf(np.log(x),
+                            loc=self.locn,
+                            scale=math.exp(self.logscale))
+        elif abs(shape1) < 0.5:
+            alpha = self.alpha
+            beta = self.beta
+            tau = self.tau
+            u = beta * (np.log(x) - tau)
+            cdf = gamma_cdf_temme(u, alpha)
+            return cdf if beta > 0 else 1 - cdf
+        else:
+            kw = self.get_scipy_params()
+            return pearson3.cdf(np.log(x), **kw)
 
     def logcdf(self, x):
-        kw = self.get_scipy_params()
-        return pearson3.logcdf(np.log(x), **kw)
+        shape1 = self.shape1
+        if abs(shape1) < 1e-6:
+            return norm.logcdf(np.log(x),
+                               loc=self.locn,
+                               scale=math.exp(self.logscale))
+        elif abs(shape1) < 0.5:
+            # Robust computation of Gamma function
+            alpha = self.alpha
+            beta = self.beta
+            tau = self.tau
+            u = beta * (np.log(x) - tau)
+            cdf = gamma_cdf_temme(u, alpha)
+            cdf = cdf if beta > 0 else 1 - cdf
+            return np.where(cdf > 0, np.log(cdf), -np.inf)
+        else:
+            kw = self.get_scipy_params()
+            return pearson3.logcdf(np.log(x), **kw)
 
     def ppf(self, q):
         kw = self.get_scipy_params()

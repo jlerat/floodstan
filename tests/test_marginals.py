@@ -260,7 +260,12 @@ def test_marginals_vs_nrivfloodfreq(marginal_name, stationid, allclose):
 
         cdf1 = dist1.cdf(streamflow)
         cdf2 = dist2.cdf(streamflow)
-        assert allclose(cdf1, cdf2)
+        atol = 5e-7
+        assert allclose(cdf1, cdf2, atol=atol)
+
+        lcdf1 = dist1.logcdf(streamflow)
+        lcdf2 = dist2.logcdf(streamflow)
+        assert allclose(lcdf1, lcdf2, atol=atol)
 
 
 @pytest.mark.parametrize("marginal_name",

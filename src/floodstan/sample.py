@@ -217,7 +217,7 @@ class StanSamplingVariable():
                  name="y",
                  ninits=NCHAINS_DEFAULT,
                  prior_from_importance=False,
-                 nimportance=200):
+                 nimportance=0):
         self.name = str(name)
         if len(self.name) != 1:
             errmess = "Expected one character for name."
@@ -248,11 +248,11 @@ class StanSamplingVariable():
             nimportance = 1000
 
         self.nimportance = nimportance
-        self._importance_parameters = []
+        self._sampled_parameters = []
 
         self.set_data(data, censor)
         self.set_guess_parameters()
-        self.run_importance()
+        self.set_sample_parameters()
         self.set_priors()
         self.set_initial_parameters()
 
@@ -269,12 +269,12 @@ class StanSamplingVariable():
         return self._guess_parameters
 
     @property
-    def importance_parameters(self):
-        if len(self._importance_parameters) == 0:
+    def sampled_parameters(self):
+        if len(self._sampled_parameters) == 0:
             errmess = "Importance parameters have not been set."
             raise ValueError(errmess)
 
-        return self._importance_parameters
+        return self._sampled_parameters
 
     @property
     def initial_parameters(self):
@@ -365,7 +365,7 @@ class StanSamplingVariable():
                 "shape1": dist.shape1
                 }
 
-    def run_importance(self):
+    def set_sample_parameters(self):
         marginal = self.marginal
         data = self.data
         censor = self.censor
@@ -373,6 +373,7 @@ class StanSamplingVariable():
         params = None
         if nsamples > 0:
             try:
+                # Use importance sampling
                 boot = bootstrap(marginal, data, nboot=nsamples)
                 params, lps, neff = importance_sampling(marginal, data,
                                                         boot, censor,
@@ -386,13 +387,17 @@ class StanSamplingVariable():
                 params = None
 
         if params is None:
+            nparams = 500
             p0 = np.array([self.guess_parameters[n]
                            for n in PARAMETERS])
-            eps = np.random.normal(scale=2e-1, size=(500, 3))
+            eps = np.random.normal(scale=2e-1, size=(nparams, 3))
             params = pd.DataFrame(p0[None, :] + eps, columns=PARAMETERS)
             params.loc[:, "locn"] = p0[0] * (1 + eps[:, 0])
+            # .. sample closer to 0 to avoid problems with suppoer
+            params.loc[:, "shape1"] = \
+                p0[2] * np.random.uniform(0, 0.5, size=nparams)
 
-        self._importance_parameters = params
+        self._sampled_parameters = params
 
     def set_initial_parameters(self):
         ninits = self.ninits
@@ -401,7 +406,7 @@ class StanSamplingVariable():
         marginal = self.marginal
         data = self.data
         censor = self.censor
-        params = self.importance_parameters
+        params = self.sampled_parameters
 
         while len(inits) < ninits and niter < len(params):
             locn, logscale, shape1 = params.iloc[niter]
@@ -412,7 +417,7 @@ class StanSamplingVariable():
                 inits.append(pp)
                 cdfs.append(cdf)
 
-        if len(inits) == 0:
+        if len(inits) < ninits:
             errmess = "Cannot find initial parameter "\
                       + f"for variable {self.name}."
             raise ValueError(errmess)
@@ -424,7 +429,7 @@ class StanSamplingVariable():
         if self.prior_from_importance:
             # Use importance sampling to define priors
             marginal = self.marginal
-            params = self.importance_parameters
+            params = self.sampled_parameters
             for pn in PARAMETERS:
                 se = params.loc[:, pn]
                 prior = getattr(marginal, f"{pn}_prior")
