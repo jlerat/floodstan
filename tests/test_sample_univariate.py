@@ -149,7 +149,7 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     stan_nsamples = 10000
     stan_nchains = 10
 
-    # Prepare sampling data:ta
+    # Prepare sampling data
     pfi = True if marginal_name in ["LogPearson3", "GeneralizedLogistic"]\
         else False
 
