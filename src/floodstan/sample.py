@@ -219,9 +219,9 @@ class StanSamplingVariable():
                  ninits=NCHAINS_DEFAULT,
                  prior_from_importance=False,
                  nimportance=0):
-        self.name = str(name)
-        if len(self.name) != 1:
-            errmess = "Expected one character for name."
+        self._name = str(name)
+        if len(self._name) != 1:
+            errmess = "Expected one character in name."
             raise ValueError(errmess)
 
         self._N = 0
@@ -258,6 +258,29 @@ class StanSamplingVariable():
         self.set_sample_parameters()
         self.set_priors()
         self.set_initial_parameters()
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, name):
+        name = str(name)
+        if len(name) != 1:
+            errmess = "Expected one character in name."
+            raise ValueError(errmess)
+        self._name = name
+
+        guess = self._guess_parameters
+        if len(guess) != 0:
+            self._guess_parameters = \
+                {f"{name}{k[1:]}": v for k, v in guess.items()}
+
+        inits = self._initial_parameters
+        if len(inits) != 0:
+            for i in range(len(inits)):
+                p = inits[i]
+                inits[i] = {f"{name}{k[1:]}": v for k, v in p.items()}
 
     @property
     def N(self):
@@ -366,10 +389,11 @@ class StanSamplingVariable():
         data, dcens, ncens = _prepare_censored_data(self.data, censor)
         dist = self.marginal
         dist.params_guess(dcens)
+        name = self.name
         self._guess_parameters = {
-                "locn": dist.locn,
-                "logscale": dist.logscale,
-                "shape1": dist.shape1
+                f"{name}locn": dist.locn,
+                f"{name}logscale": dist.logscale,
+                f"{name}shape1": dist.shape1
                 }
 
     def set_sample_parameters(self):
@@ -395,8 +419,9 @@ class StanSamplingVariable():
 
         if params is None:
             nparams = NIMPORTANCE_SAMPLE_FOR_PRIOR
-            p0 = np.array([self.guess_parameters[n]
-                           for n in PARAMETERS])
+            n = self.name
+            p0 = np.array([self.guess_parameters[f"{n}{pn}"]
+                           for pn in PARAMETERS])
             eps = np.random.normal(scale=2e-1, size=(nparams, 3))
             params = pd.DataFrame(p0[None, :] + eps, columns=PARAMETERS)
             params.loc[:, "locn"] = p0[0] * (1 + eps[:, 0])
@@ -581,10 +606,8 @@ class StanSamplingDataset():
             init = {}
             cdfs = []
             for ivs, vs in enumerate(self._stan_variables):
-                n = vs.name
                 for pn, value in vs.initial_parameters[i].items():
-                    ppn = f"{n}{pn}"
-                    init[ppn] = value
+                    init[pn] = value
 
                 cdfs.append(vs.initial_cdfs[ivs])
 
