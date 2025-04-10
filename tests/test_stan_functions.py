@@ -57,7 +57,8 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         sv = sample.StanSamplingVariable(marginal, yboot, censor,
                                          ninits=1)
         stan_data = sv.to_dict()
-        marginal.params = sv.initial_parameters[0]
+        marginal.params = {k[1:]: v for k, v in
+                           sv.initial_parameters[0].items()}
 
         # Test shape close to 0 for edge cases
         if marginal.has_shape:
