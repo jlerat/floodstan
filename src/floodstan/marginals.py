@@ -1316,7 +1316,9 @@ class Gamma(FloodFreqDistribution):
         super(Gamma, self).__init__("Gamma", False)
 
         # Only positive locn param allowed
-        self.locn_prior.lower = 1e-10
+        # (1e-4 to avoid being set to 0 when Stan uses
+        #  6 digits csv files)
+        self.locn_prior.lower = 1e-4
 
     @property
     def support(self):

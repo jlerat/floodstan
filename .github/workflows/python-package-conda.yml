@@ -86,8 +86,7 @@ jobs:
 
           cd $GITHUB_WORKSPACE
           echo "--- floodstan test : located in $PWD ---"
-          #pytest --durations=10 --ignore=src/hydrodiy --cov=floodstan --cov-report=xml --cov-report=html --cov-report=term-missing tests
-          pytest -sv -k "201001-False" tests/test_sample_univariate.py::test_univariate_censored_sampling
+          pytest --durations=10 --ignore=src/hydrodiy --cov=floodstan --cov-report=xml --cov-report=html --cov-report=term-missing tests
       
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
