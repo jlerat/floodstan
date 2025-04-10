@@ -15,19 +15,19 @@ real gev_lpdf(vector y, real tau, real alpha, real kappa){
     // Threshold to transition from GEV to Gumbel
     real GEV2Gumbel_trans = 1e-10;
 
-    real y0 = tau + alpha / kappa;
-    if(kappa < -GEV2Gumbel_trans) {
-        real ymin = min(y);
-        if(ymin < y0)
-            reject("[gev_lpdf] min(y) (", ymin, ") is lower than y0 (", y0, 
-                   ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
-    }
-    else if (kappa > GEV2Gumbel_trans){
-        real ymax = max(y);
-        if(ymax > y0)
-            reject("[gev_lpdf] max(y) (", ymax, ") is greater than y0 (", y0,
-                   ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
-    }
+    //real y0 = tau + alpha / kappa;
+    //if(kappa < -GEV2Gumbel_trans) {
+    //    real ymin = min(y);
+    //    if(ymin < y0)
+    //        reject("[gev_lpdf] min(y) (", ymin, ") is lower than y0 (", y0, 
+    //               ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
+    //}
+    //else if (kappa > GEV2Gumbel_trans){
+    //    real ymax = max(y);
+    //    if(ymax > y0)
+    //        reject("[gev_lpdf] max(y) (", ymax, ") is greater than y0 (", y0,
+    //               ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
+    //}
     
     if(abs(kappa) > GEV2Gumbel_trans) {
         // This is GEV log pdf
@@ -47,15 +47,15 @@ real gev_lcdf(real y, real tau, real alpha, real kappa){
     // Threshold to transition from GEV to Gumbel
     real GEV2Gumbel_trans = 1e-10;
 
-    real y0 = tau + alpha / kappa;
-    if(kappa < -GEV2Gumbel_trans && y < y0) {
-       reject("[gev_lcdf] y (", y, ") is lower than y0 (", y0, 
-              ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
-    }
-    else if (kappa > GEV2Gumbel_trans && y > y0){
-       reject("[gev_lcdf] y (", y, ") is greater than y0 (", y0,
-              ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
-    }
+    //real y0 = tau + alpha / kappa;
+    //if(kappa < -GEV2Gumbel_trans && y < y0) {
+    //   reject("[gev_lcdf] y (", y, ") is lower than y0 (", y0, 
+    //          ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
+    //}
+    //else if (kappa > GEV2Gumbel_trans && y > y0){
+    //   reject("[gev_lcdf] y (", y, ") is greater than y0 (", y0,
+    //          ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
+    //}
  
     if(abs(kappa) > GEV2Gumbel_trans) {
         return -pow(1. - kappa * u, 1. / kappa);
@@ -89,10 +89,10 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
         vector[N] ly = log(y);
         vector[N] u = sign_g * (ly - tau);
         real umin = min(u);
-        if(umin < 0) {
-            reject("[logpearson3_lpdf] umin (", umin, ") < 0 with m=", m, 
-                   " logs=", log(s), " g=", g);
-        }
+        //if(umin < 0) {
+        //    reject("[logpearson3_lpdf] umin (", umin, ") < 0 with m=", m, 
+        //           " logs=", log(s), " g=", g);
+        //}
 
         return gamma_lpdf(u | alpha, abs_beta) - sum(ly);
     }
@@ -111,6 +111,10 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
 //    Sciences, 8(2), 291-307.
 //
 real gamma_cdf_temme(real x, real alpha) {
+    if(x < 0) {
+        reject("x (", x, ") < 0 in gamma_cdf_temme.");
+    }
+
     // Approx of the function gamma star defined as
     // Gs(x) = sqrt(a/2pi).exp(a).a^(-a).Gamma(a)
     // from Temme (1987)
@@ -191,9 +195,9 @@ real logpearson3_cdf(real y, real m, real s, real g){
     // used with a scale parameter set to 1.
     real x = beta * (log(y) - tau);
     
-    if(x < 0 && abs_g > n2p_trans) 
-        reject("[logpearson3_cdf] x (", x, ") < 0 with m=", m, 
-               " logs=", log(s), " g=", g);
+    //if(x < 0 && abs_g > n2p_trans) 
+    //    reject("[logpearson3_cdf] x (", x, ") < 0 with m=", m, 
+    //           " logs=", log(s), " g=", g);
 
     if(abs_g < n2p_trans) {
         return lognormal_cdf(y | m, s);
@@ -239,7 +243,7 @@ real genpareto_lpdf(vector y, real tau, real alpha, real kappa) {
     return -(1. - kappa) * sum(z) - N * log(alpha);
 }
 
-real genpareto_z(real y, real tau, real alpha, real kappa) {
+real genpareto_lcdf(real y, real tau, real alpha, real kappa) {
     real kappa_transition = 1e-6; 
 
     real z = (y - tau) / alpha;
@@ -256,7 +260,7 @@ real genpareto_z(real y, real tau, real alpha, real kappa) {
  
         z = -1. / kappa * log1m(kappa * z);
     }
-    return z;
+    return log1m_exp(-z);
 }
 
 // -------------- Generalized Logistic -------------
@@ -277,7 +281,7 @@ real genlogistic_lpdf(vector y, real tau, real alpha, real kappa) {
     return -(1. - kappa) * sum(z) - 2. * sum(log1p_exp(-z)) - N * log(alpha);
 }
 
-real genlogistic_z(real y, real tau, real alpha, real kappa) {
+real genlogistic_lcdf(real y, real tau, real alpha, real kappa) {
     real kappa_transition = 1e-6; 
 
     real z = (y - tau) / alpha;
@@ -289,7 +293,7 @@ real genlogistic_z(real y, real tau, real alpha, real kappa) {
 
         z = -1. / kappa * log1m(kappa * z);
     }
-    return z;
+    return -log1p_exp(-z);
 }
 
 // ------- Marginal functions -----------------------------
@@ -349,10 +353,10 @@ real marginal_cdf(real x, int marginal, real locn, real scale, real shape1)
         return normal_cdf(x | locn, scale);
     }
     else if(marginal==6){
-        return  1. - exp(-genpareto_z(x, locn, scale, shape1));
+        return exp(genpareto_lcdf(x | locn, scale, shape1));
     }
     else if(marginal==7){
-        return 1. / (1. + exp(-genlogistic_z(x, locn, scale, shape1)));
+        return exp(genlogistic_lcdf(x | locn, scale, shape1));
     }
     else if(marginal==8){
         return gamma_cdf(x | locn/scale, 1.0/scale);
@@ -378,10 +382,10 @@ real marginal_lcdf(real x, int marginal, real locn, real scale, real shape1)
         return normal_lcdf(x | locn, scale);
     }
     else if(marginal==6){
-        return log1m_exp(-genpareto_z(x, locn, scale, shape1));
+        return genpareto_lcdf(x | locn, scale, shape1);
     }
     else if(marginal==7){
-        return -log1p_exp(-genlogistic_z(x, locn, scale, shape1));
+        return genlogistic_lcdf(x | locn, scale, shape1);
     }
     else if(marginal==8){
         return gamma_lcdf(x | locn/scale, 1.0/scale);
