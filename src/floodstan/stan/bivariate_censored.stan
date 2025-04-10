@@ -94,12 +94,13 @@ data {
 
 parameters {
   // Parameter for observed streamflow
-  real<lower=locn_lower, upper=locn_upper> ylocn; 
+  // .. no bounds for loc, see univariate_censored_sampling
+  real ylocn;
   real<lower=logscale_lower, upper=logscale_upper> ylogscale;
   real<lower=shape1_lower, upper=shape1_upper> yshape1;
 
   // Parameter for covariate
-  real<lower=locn_lower, upper=locn_upper> zlocn; 
+  real zlocn;
   real<lower=logscale_lower, upper=logscale_upper> zlogscale;
   real<lower=shape1_lower, upper=shape1_upper> zshape1;
 
