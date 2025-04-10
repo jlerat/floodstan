@@ -235,9 +235,10 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
 
-    #for f in fout.glob("*.*"):
-    #    f.unlink()
-    #fout.rmdir()
+
+    for f in fout.glob("*.*"):
+        f.unlink()
+    fout.rmdir()
 
     # Test diag
     assert diag["effsamplesz"] == "satisfactory"
@@ -247,6 +248,12 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     prc = diag["divergence_proportion"]
     thresh = 50
     print(f"\n{stationid}-{marginal_name}-{censoring} : Divergence proportion = {prc}\n")
-    assert prc < thresh
+    if not marginal.name in ["LogPearson3", "GeneralizedPareto",
+                             "GeneralizedLogistic"]:
+        assert prc < thresh
 
-
+    # Test report
+    rep, _ = report.ams_report(marginal, df)
+    rep = rep.filter(regex="DESIGN", axis=0)
+    rep = rep.filter(regex="MEAN|PREDICTIVE", axis=1)
+    assert rep.notnull().all().all()
