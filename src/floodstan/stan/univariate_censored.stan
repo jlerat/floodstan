@@ -56,10 +56,9 @@ data {
   real<lower=logscale_lower, upper=20> logscale_upper;
   vector[2] ylogscale_prior;
   
+  real<lower=-2.> shape1_lower;
+  real<lower=shape1_lower, upper=2.> shape1_upper;
   vector[2] yshape1_prior;
-  
-  real shape1_lower;
-  real<lower=shape1_lower> shape1_upper;
 
   // Censoring thresholds 
   real ycensor;
@@ -67,7 +66,11 @@ data {
 
 parameters {
   // Parameter for observed streamflow
-  real<lower=locn_lower, upper=locn_upper> ylocn; 
+  // .. no bounds for loc because stan uses a logit transform 
+  //    tends to overwflow if the bounds are large (uniformative)
+  real ylocn; 
+
+  // .. other parameters are bounded
   real<lower=logscale_lower, upper=logscale_upper> ylogscale;
   real<lower=shape1_lower, upper=shape1_upper> yshape1;
 }  
@@ -96,6 +99,3 @@ model {
      target += Ncases[2, 1] * marginal_lcdf(ycensor | ymarginal, ylocn, yscale, yshape1);
 }
 
-generated quantities {
-    real censor_cdf = marginal_cdf(ycensor | ymarginal, ylocn, yscale, yshape1);
-}
