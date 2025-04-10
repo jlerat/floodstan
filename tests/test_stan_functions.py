@@ -60,7 +60,7 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         marginal.params = sv.initial_parameters[0]
 
         # Test shape close to 0 for edge cases
-        if marginal.has_shape and marginal.name != "GeneralizedPareto":
+        if marginal.has_shape:
             if iboot < nboot // 20:
                 marginal.shape1 = 1e-20
             elif iboot >= nboot // 20 and iboot < 2 * nboot // 20:

@@ -39,6 +39,12 @@ FTESTS = Path(__file__).resolve().parent
 LOGGER = sample.get_logger(stan_logger=False)
 
 # --- Utils functions ----------------------------
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+
 def get_stationids(skip=5):
     fs = FTESTS / "data"
     stationids = []
@@ -117,8 +123,8 @@ def test_stan_sampling_variable(marginal_name, allclose):
     d = sv.data
     inits = sv.initial_parameters
     for init in inits:
-        for pn in ["locn", "logscale", "shape1"]:
-            assert pn in init
+        for pn in marginals.PARAMETERS:
+            assert f"y{pn}" in init
 
     cdfs = sv.initial_cdfs
     assert len(cdfs) == len(inits)
@@ -139,7 +145,10 @@ def test_stan_sampling_variable(marginal_name, allclose):
                          get_stationids()[:2] + ["hard"])
 def test_univariate_censored_sampling(stationid, marginal_name, censoring, allclose):
     y = get_ams(stationid)
-    censor = y.median() if censoring else np.nanmin(y) - 1.
+    censor = np.nanmin(y) - 1
+    if censoring:
+        pcens = 20 if stationid == "hard" else 50
+        censor = np.nanpercentile(y, pcens)
 
     marginal = marginals.factory(marginal_name)
 
@@ -152,12 +161,13 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     stan_nchains = 5
 
     # Prepare sampling data
-    pfi = True if marginal_name in ["LogPearson3", "GeneralizedLogistic"]\
-        else False
+    pfi = False
+    if marginal_name in ["LogPearson3", "GeneralizedLogistic",
+                         "GeneralizedPareto"]:
+        pfi = True
 
     sv = sample.StanSamplingVariable(marginal, y, censor,
                                      ninits=stan_nchains,
-                                     nimportance=0,
                                      prior_from_importance=pfi)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
@@ -166,7 +176,7 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     m = sv.marginal
     inocens = y >= censor
     for p in stan_inits:
-        m.params = p
+        m.params = {k[1:]: v for k, v  in p.items()}
         lp = m.logpdf(y[inocens])
         assert np.all(np.isfinite(lp))
 
@@ -194,6 +204,14 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     fout.mkdir(parents=True, exist_ok=True)
     for f in fout.glob("*.*"):
         f.unlink()
+
+    f = fout / f"stan_data.json"
+    with f.open("w") as fo:
+        json.dump(stan_data, fo, indent=4, cls=NumpyEncoder)
+
+    f = fout / f"stan_inits.json"
+    with f.open("w") as fo:
+        json.dump(stan_inits, fo, indent=4, cls=NumpyEncoder)
 
     # Wrong number of inits
     msg = "Expected 1 or"
@@ -227,8 +245,7 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
 
     # Test divergence
     prc = diag["divergence_proportion"]
-    hard = ["LogPearson3"]
-    thresh = 50 if marginal_name in hard else 20
+    thresh = 50
     print(f"\n{stationid}-{marginal_name}-{censoring} : Divergence proportion = {prc}\n")
     assert prc < thresh
 
