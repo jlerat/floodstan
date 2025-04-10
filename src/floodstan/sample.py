@@ -423,6 +423,8 @@ class StanSamplingVariable():
             if pp is None:
                 self._sampled_parameters_valid[niter] = 0
             else:
+                n = self.name
+                pp = {f"{n}{pn}": v for pn, v in pp.items()}
                 inits.append(pp)
                 cdfs.append(cdf)
                 self._sampled_parameters_valid[niter] = 1
@@ -439,16 +441,16 @@ class StanSamplingVariable():
 
     def set_priors(self):
         if self.prior_from_importance:
-            # Use importance sampling to define priors
+            # Use importance sampling to refine priors
             marginal = self.marginal
             params = self.sampled_parameters
             for pn in PARAMETERS:
                 se = params.loc[:, pn]
                 prior = getattr(marginal, f"{pn}_prior")
                 prior.loc = se.mean()
-                prior.scale = se.std() * 2
-                prior.lower = se.quantile(0.001)
-                prior.upper = se.quantile(0.999)
+                prior.scale = se.std() * 5
+                prior.lower = max(se.quantile(0.001), prior.lower)
+                prior.upper = min(se.quantile(0.999), prior.upper)
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
