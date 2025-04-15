@@ -224,6 +224,9 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
               parallel_chains=stan_nchains,
               iter_warmup=stan_nwarm)
 
+    if re.search("Generalized|Pearson", marginal.name):
+        kw["adapt_delta"] = 0.999 if censoring else 0.99
+
     # Sample
     smp = univariate_censored_sampling(**kw)
     df = smp.draws_pd()
