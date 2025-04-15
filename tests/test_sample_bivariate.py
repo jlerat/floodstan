@@ -196,3 +196,58 @@ def test_bivariate_sampling_problem(allclose):
     fout_stan.rmdir()
 
 
+@pytest.mark.parametrize("varname", ["y", "z"])
+def test_bivariate_sampling_not_enough_data(varname, allclose):
+    LOGGER = sample.get_logger(stan_logger=True)
+
+    marginal = marginals.factory("GEV")
+
+    stan_nwarm = 10000
+    stan_nsamples = 5000
+    stan_nchains = 5
+
+    stationid = STATIONIDS[0]
+    y = get_ams(stationid)
+
+    # Generate random covariate
+    scale = np.nanstd(y) / 5
+    z = y + np.random.normal(0, scale, size=len(y))
+
+    N = len(y)
+
+    z.iloc[-2] = np.nan # to add a missing data in z
+    df = pd.DataFrame({"y": y, "z": z}).sort_index()
+    y, z = df.y, df.z
+
+    censor = y.median()
+    yv = sample.StanSamplingVariable(marginal, y, censor,
+                                     ninits=stan_nchains)
+
+    censor = z.median()
+    zv = sample.StanSamplingVariable(marginal, z, censor,
+                                     ninits=stan_nchains)
+
+    sv = sample.StanSamplingDataset([yv, zv], "Gumbel")
+    stan_data = sv.to_dict()
+    stan_inits = sv.initial_parameters
+
+    # Leaves only 4 values not nan
+    if varname == "y":
+        inonan = np.where(~np.isnan(y))[0]
+        stan_data["y"][inonan[4:]] = np.nan
+    else:
+        inonan = np.where(~np.isnan(z))[0]
+        stan_data["z"][inonan[4:]] = np.nan
+
+
+    msg = "Error during sampling"
+    with pytest.raises(RuntimeError, match=msg):
+        smp = bivariate_censored_sampling(data=stan_data,
+                                      chains=stan_nchains,
+                                      seed=SEED,
+                                      iter_warmup=stan_nwarm,
+                                      iter_sampling=
+                                      stan_nsamples//stan_nchains,
+                                      inits=stan_inits,
+                                      show_progress=False)
+

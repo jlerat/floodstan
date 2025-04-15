@@ -213,13 +213,7 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     with f.open("w") as fo:
         json.dump(stan_inits, fo, indent=4, cls=NumpyEncoder)
 
-    # Wrong number of inits
-    msg = "Expected 1 or"
-    stan_inits3 = stan_inits[:3]
-    with pytest.raises(ValueError, match=msg):
-        smp = univariate_censored_sampling(data=stan_data,
-                                           inits=stan_inits3,
-                                           output_dir=fout)
+
     # Sample arguments
     kw = dict(data=stan_data,
               seed=SEED,
@@ -257,3 +251,65 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     rep = rep.filter(regex="DESIGN", axis=0)
     rep = rep.filter(regex="MEAN|PREDICTIVE", axis=1)
     assert rep.notnull().all().all()
+
+
+def test_univariate_censored_sampling_not_enough_data(allclose):
+    stationid = "201001"
+    y = get_ams(stationid).values
+    censor = np.nanmin(y) - 1
+    marginal = marginals.factory("GEV")
+
+    # Set STAN
+    stan_nwarm = 10000
+    stan_nsamples = 5000
+    stan_nchains = 5
+
+    # Prepare sampling data
+    sv = sample.StanSamplingVariable(marginal, y, censor,
+                                     ninits=stan_nchains)
+    stan_data = sv.to_dict()
+    stan_inits = sv.initial_parameters
+
+    # Leaves only 4 values not nan
+    inonan = np.where(~np.isnan(y))[0]
+    stan_data["y"][inonan[4:]] = np.nan
+
+    msg = "Error during sampling"
+    with pytest.raises(RuntimeError, match=msg):
+        smp = univariate_censored_sampling(data=stan_data,
+                                           seed=SEED,
+                                           iter_sampling=stan_nsamples // stan_nchains,
+                                           inits=stan_inits,
+                                           chains=stan_nchains,
+                                           parallel_chains=stan_nchains,
+                                           iter_warmup=stan_nwarm)
+
+
+def test_univariate_censored_sampling_not_enough_inits(allclose):
+    stationid = "201001"
+    y = get_ams(stationid).values
+    censor = np.nanmin(y) - 1
+    marginal = marginals.factory("GEV")
+
+    # Set STAN
+    stan_nwarm = 10000
+    stan_nsamples = 5000
+    stan_nchains = 5
+
+    # Prepare sampling data
+    sv = sample.StanSamplingVariable(marginal, y, censor,
+                                     ninits=stan_nchains)
+    stan_data = sv.to_dict()
+    stan_inits = sv.initial_parameters[:3]
+
+    msg = "Expected 1 or"
+    with pytest.raises(ValueError, match=msg):
+        smp = univariate_censored_sampling(data=stan_data,
+                                           seed=SEED,
+                                           iter_sampling=stan_nsamples // stan_nchains,
+                                           inits=stan_inits,
+                                           chains=stan_nchains,
+                                           parallel_chains=stan_nchains,
+                                           iter_warmup=stan_nwarm)
+
+

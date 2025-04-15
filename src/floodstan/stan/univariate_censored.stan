@@ -64,6 +64,11 @@ data {
   real ycensor;
 }
 
+transformed data {
+  // Imposes that at least 5 data points are observed
+  int<lower=5> Ny = Ncases[1, 1];
+}
+
 parameters {
   // Parameter for observed streamflow
   // .. no bounds for loc because stan uses a logit transform 
