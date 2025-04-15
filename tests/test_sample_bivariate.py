@@ -144,3 +144,55 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
         f.unlink()
 
     fout_stan.rmdir()
+
+
+def test_bivariate_sampling_problem(allclose):
+    LOGGER = sample.get_logger(stan_logger=True)
+
+    stan_nwarm = 10000
+    stan_nsamples = 5000
+    stan_nchains = 10
+
+    LOGGER = sample.get_logger(stan_logger=True)
+
+    fd = FTESTS / "data" / "bivariate_stan_data.json"
+    with fd.open("r") as fo:
+        stan_data = json.load(fo)
+
+    fi = FTESTS / "data" / "bivariate_stan_inits.json"
+    with fd.open("r") as fo:
+        stan_inits = json.load(fo)
+
+    fout_stan = FTESTS / "sampling" / "bivariate" / "problem"
+    fout_stan.mkdir(exist_ok=True, parents=True)
+    for f in fout_stan.glob("*.*"):
+        f.unlink()
+
+    smp = bivariate_censored_sampling(data=stan_data,
+                                      chains=stan_nchains,
+                                      seed=SEED,
+                                      iter_warmup=stan_nwarm,
+                                      iter_sampling=
+                                      stan_nsamples//stan_nchains,
+                                      output_dir=fout_stan,
+                                      inits=stan_inits,
+                                      show_progress=False)
+    df = smp.draws_pd()
+    diag = report.process_stan_diagnostic(smp.diagnose())
+
+    # Test diag
+    assert diag["treedepth"] == "satisfactory"
+    assert diag["ebfmi"] == "satisfactory"
+    assert diag["rhat"] == "satisfactory"
+
+    # Test divergence
+    prc = diag["divergence_proportion"]
+    assert prc < 20
+
+    # Clean folder
+    for f in fout_stan.glob("*.*"):
+        f.unlink()
+
+    fout_stan.rmdir()
+
+
