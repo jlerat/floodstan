@@ -110,6 +110,7 @@ def are_marginal_params_valid(marginal, locn, logscale, shape1, data, censor):
     # Check likelihood
     cdf = marginal.cdf(data)
     cdf[data < censor] = np.nan
+    cdf[np.isnan(data)] = np.nan
     cdf_min = np.nanmin(cdf)
     cdf_max = np.nanmax(cdf)
     cdf_censor = marginal.cdf(censor)
@@ -255,7 +256,7 @@ class StanSamplingVariable():
 
         self.set_data(data, censor)
         self.set_guess_parameters()
-        self.set_sample_parameters()
+        self.set_sampled_parameters()
         self.set_priors()
         self.set_initial_parameters()
 
@@ -396,7 +397,7 @@ class StanSamplingVariable():
                 f"{name}shape1": dist.shape1
                 }
 
-    def set_sample_parameters(self):
+    def set_sampled_parameters(self):
         marginal = self.marginal
         data = self.data
         censor = self.censor
@@ -427,7 +428,7 @@ class StanSamplingVariable():
             params.loc[:, "locn"] = p0[0] * (1 + eps[:, 0])
             # .. sample closer to 0 to avoid problems with suppoer
             params.loc[:, "shape1"] = \
-                p0[2] * np.random.uniform(0, 0.5, size=nparams)
+                p0[2] * np.random.uniform(0, 1.0, size=nparams)
 
         self._sampled_parameters = params
         self._sampled_parameters_valid = -np.ones(len(params))
@@ -605,7 +606,9 @@ class StanSamplingDataset():
         for i in range(ninits):
             init = {}
             cdfs = []
+            data = []
             for ivs, vs in enumerate(self._stan_variables):
+                data.append(vs.data)
                 for pn, value in vs.initial_parameters[i].items():
                     init[pn] = value
 
@@ -615,16 +618,17 @@ class StanSamplingDataset():
             notnan = ~np.any(np.isnan(cdfs), axis=1)
             cdfs = cdfs[notnan]
 
+            #rho0 = kendalltau(cdfs[:, 0], cdfs[:, 1]).statistic
+            iok = ~np.isnan(data[0]) & ~np.isnan(data[1])
+            rho0 = kendalltau(data[0][iok], data[1][iok]).statistic
+            rhos = np.random.normal(loc=rho0, scale=0.1,
+                                    size=MAX_INIT_PARAM_SEARCH)
+            rhos = rhos.clip(copula.rho_min + 0.05,
+                             copula.rho_max - 0.05)
             niter = 0
-            rho = np.nan
-            nval = len(cdfs)
-            k = np.arange(nval)
-
             while True and niter < MAX_INIT_PARAM_SEARCH:
+                rho = rhos[niter]
                 niter += 1
-                kk = np.random.choice(k, nval, replace=True)
-                rho = kendalltau(cdfs[kk, 0], cdfs[kk, 1]).statistic
-                rho = min(copula.rho_max, max(copula.rho_min, rho))
 
                 # Check likelihood
                 copula.rho = rho
