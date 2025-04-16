@@ -67,6 +67,8 @@ def test_stan_sampling_dataset(distname, allclose):
     assert pd.isnull(df.y.iloc[i31-1]).all()
     assert pd.notnull(df.z.iloc[i31-1]).all()
 
+    sa = dset.stan_sample_args
+
     # Initial values
     inits = dset.initial_parameters
     for init in inits:
@@ -111,6 +113,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
     sv = sample.StanSamplingDataset([yv, zv], copula)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
+    stan_sample_args = sv.stan_sample_args
 
     fout_stan = FTESTS / "sampling" / "bivariate" / f"{stationid}_{copula}"
     fout_stan.mkdir(exist_ok=True, parents=True)
@@ -125,7 +128,8 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
                                       stan_nsamples//stan_nchains,
                                       output_dir=fout_stan,
                                       inits=stan_inits,
-                                      show_progress=False)
+                                      show_progress=False,
+                                      **stan_sample_args)
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
 
@@ -136,6 +140,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
 
     # Test divergence
     prc = diag["divergence_proportion"]
+    print(f"\n{stationid}-{marginal_name}-{censoring} : Divergence proportion = {prc}\n")
     thresh = 30 if censoring else 5
     assert prc < thresh
 

@@ -90,8 +90,9 @@ def get_info():
 
 @pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
-def test_stan_sampling_variable(marginal_name, allclose):
-    y = get_ams("203010")
+@pytest.mark.parametrize("stationid", get_stationids())
+def test_stan_sampling_variable(stationid, marginal_name, allclose):
+    y = get_ams(stationid)
     censor = y.median()
     marginal = marginals.factory(marginal_name)
 
@@ -108,7 +109,7 @@ def test_stan_sampling_variable(marginal_name, allclose):
     i11 = np.where(y>=censor)[0]+1
     assert allclose(sv.i11, i11)
 
-    assert sv.sampled_parameters.shape[0] == 1000
+    assert sv.sampled_parameters.shape[0] == sample.NPARAMS_SAMPLED
 
     dd = sv.to_dict()
     keys = ["ymarginal", "y",
@@ -117,6 +118,10 @@ def test_stan_sampling_variable(marginal_name, allclose):
             "yshape1_prior"]
     for key in keys:
         assert key in dd
+
+    sa = sv.stan_sample_args
+    if marginal_name in sample.STAN_SAMPLE_ARGS:
+        assert sa == sample.STAN_SAMPLE_ARGS[marginal_name]
 
     # Initial values
     sv = sample.StanSamplingVariable(marginal, y)
@@ -161,16 +166,11 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     stan_nchains = 5
 
     # Prepare sampling data
-    pfi = False
-    if marginal_name in ["LogPearson3", "GeneralizedLogistic",
-                         "GeneralizedPareto"]:
-        pfi = True
-
     sv = sample.StanSamplingVariable(marginal, y, censor,
-                                     ninits=stan_nchains,
-                                     prior_from_importance=pfi)
+                                     ninits=stan_nchains)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
+    stan_args = sv.stan_sample_args
 
     # Test initial parameters are legit
     m = sv.marginal
@@ -195,24 +195,12 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
         lcs = smp.filter(regex="^lcens").values[inocens]
         assert allclose(lc, lcs, atol=1e-5)
 
-    #if marginal_name in ["LogPearson3", "GeneralizedPareto", "GeneralizedLogistic"]:
-    #    pytest.skip(f"Not testing sampling for {marginal_name} yet.")
-
     # Clean output folder
     fname = f"univariate_{stationid}_{marginal_name}_{censoring}"
     fout = FTESTS / "sampling" / fname
     fout.mkdir(parents=True, exist_ok=True)
     for f in fout.glob("*.*"):
         f.unlink()
-
-    f = fout / f"stan_data.json"
-    with f.open("w") as fo:
-        json.dump(stan_data, fo, indent=4, cls=NumpyEncoder)
-
-    f = fout / f"stan_inits.json"
-    with f.open("w") as fo:
-        json.dump(stan_inits, fo, indent=4, cls=NumpyEncoder)
-
 
     # Sample arguments
     kw = dict(data=stan_data,
@@ -223,9 +211,7 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
               chains=stan_nchains,
               parallel_chains=stan_nchains,
               iter_warmup=stan_nwarm)
-
-    if re.search("Generalized|Pearson", marginal.name):
-        kw["adapt_delta"] = 0.999 if censoring else 0.99
+    kw.update(stan_args)
 
     # Sample
     smp = univariate_censored_sampling(**kw)
@@ -243,10 +229,10 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
 
     # Test divergence
     prc = diag["divergence_proportion"]
-    thresh = 50
     print(f"\n{stationid}-{marginal_name}-{censoring} : Divergence proportion = {prc}\n")
     if not marginal.name in ["LogPearson3", "GeneralizedPareto",
                              "GeneralizedLogistic"]:
+        thresh = 50
         assert prc < thresh
 
     # Test report

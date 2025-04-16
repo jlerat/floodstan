@@ -32,8 +32,25 @@ CENSOR_DEFAULT = -1e10
 
 STAN_VARIABLE_INITIAL_CDF_MIN = 1e-8
 
-MAX_INIT_PARAM_SEARCH = 50
-NIMPORTANCE_SAMPLE_FOR_PRIOR = 1000
+# Configure prior from importance sampling
+MARGINALS_WHICH_USE_PRIOR_FROM_IMPORTANCE = [
+        "LogPearson3",
+        "GeneralizedLogistic",
+        "GeneralizedPareto"
+        ]
+NSAMPLE_MIN_FOR_IMPORTANCE_PRIOR = 1000
+
+# Maximum number of
+NPARAMS_SAMPLED = 1000
+
+
+# Special stan sampling arguments
+STAN_SAMPLE_ARGS = {
+        "LogPearson3": {"adapt_delta": 0.999},
+        "GeneralizedLogistic": {"adapt_delta": 0.999},
+        "GeneralizedPareto": {"adapt_delta": 0.999},
+        "GEV": {"adapt_delta": 0.99},
+        }
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
@@ -218,8 +235,8 @@ class StanSamplingVariable():
                  censor=CENSOR_DEFAULT,
                  name="y",
                  ninits=NCHAINS_DEFAULT,
-                 prior_from_importance=False,
-                 nimportance=0):
+                 prior_from_importance=None,
+                 nparams_sampled=None):
         self._name = str(name)
         if len(self._name) != 1:
             errmess = "Expected one character in name."
@@ -241,16 +258,26 @@ class StanSamplingVariable():
         self._initial_parameters = []
         self._initial_cdfs = []
 
-        # Importance sampling
-        self.prior_from_importance = prior_from_importance
-        if prior_from_importance and nimportance < 1000:
-            wmess = "Use of importance prior with low number of samples"\
-                    + f" ({nimportance}) is risky."\
-                    + f" Raising to {NIMPORTANCE_SAMPLE_FOR_PRIOR}."
-            warnings.warn(wmess)
-            nimportance = NIMPORTANCE_SAMPLE_FOR_PRIOR
+        # Parameters sampled for initial and potentially prior
+        nparams_sampled = NPARAMS_SAMPLED if nparams_sampled is None\
+            else nparams_sampled
 
-        self.nimportance = nimportance
+        # Importance sampling
+        if prior_from_importance is None:
+            prior_from_importance = \
+                    marginal.name in MARGINALS_WHICH_USE_PRIOR_FROM_IMPORTANCE
+        self.prior_from_importance = prior_from_importance
+
+        if prior_from_importance \
+                and nparams_sampled < NSAMPLE_MIN_FOR_IMPORTANCE_PRIOR:
+            wmess = "Use of importance prior with low number of samples"\
+                    + f" ({nparams_sampled}) is risky."\
+                    + f" Raising to {NSAMPLE_MIN_FOR_IMPORTANCE_PRIOR}."
+            warnings.warn(wmess)
+            nparams_sampled = NSAMPLE_MIN_FOR_IMPORTANCE_PRIOR
+
+        self.nparams_sampled = nparams_sampled
+        self._sampled_parameters_are_from_importance = False
         self._sampled_parameters = []
         self._sampled_parameters_valid = []
 
@@ -350,6 +377,14 @@ class StanSamplingVariable():
             raise ValueError(errmess)
         return self._data
 
+    @property
+    def stan_sample_args(self):
+        marginal_name = self.marginal.name
+        if marginal_name in STAN_SAMPLE_ARGS:
+            return STAN_SAMPLE_ARGS[marginal_name]
+        else:
+            return {}
+
     def set_data(self, data, censor):
         data = np.array(data).astype(np.float64)
 
@@ -401,9 +436,9 @@ class StanSamplingVariable():
         marginal = self.marginal
         data = self.data
         censor = self.censor
-        nsamples = self.nimportance
-        params = None
-        if nsamples > 0:
+        nsamples = self.nparams_sampled
+        pfi = self.prior_from_importance
+        if pfi:
             try:
                 # Use importance sampling
                 boot = bootstrap(marginal, data, nboot=nsamples)
@@ -413,22 +448,24 @@ class StanSamplingVariable():
                 if neff < min(100, nsamples / 10):
                     params = None
 
+                self._sampled_parameters_are_from_importance = \
+                    params is not None
+
             except Exception:
                 wmess = "Importance sampling failed."
                 warnings.warn(wmess)
                 params = None
 
-        if params is None:
-            nparams = NIMPORTANCE_SAMPLE_FOR_PRIOR
+        if not pfi or (pfi and params is None):
             n = self.name
             p0 = np.array([self.guess_parameters[f"{n}{pn}"]
                            for pn in PARAMETERS])
-            eps = np.random.normal(scale=2e-1, size=(nparams, 3))
+            eps = np.random.normal(scale=2e-1, size=(nsamples, 3))
             params = pd.DataFrame(p0[None, :] + eps, columns=PARAMETERS)
             params.loc[:, "locn"] = p0[0] * (1 + eps[:, 0])
             # .. sample closer to 0 to avoid problems with suppoer
             params.loc[:, "shape1"] = \
-                p0[2] * np.random.uniform(0, 1.0, size=nparams)
+                p0[2] * np.random.uniform(0, 1.0, size=nsamples)
 
         self._sampled_parameters = params
         self._sampled_parameters_valid = -np.ones(len(params))
@@ -467,6 +504,13 @@ class StanSamplingVariable():
 
     def set_priors(self):
         if self.prior_from_importance:
+            if not self._sampled_parameters_are_from_importance:
+                wmess = "Sampled parameters are not from"\
+                        + " importance sampling. Cannot use it"\
+                        + " for prior."
+                warnings.warn(wmess)
+                return
+
             # Use importance sampling to refine priors
             marginal = self.marginal
             params = self.sampled_parameters
@@ -558,6 +602,15 @@ class StanSamplingDataset():
 
         return self._initial_parameters
 
+    @property
+    def stan_sample_args(self):
+        say = self.stan_variables[0].stan_sample_args
+        saz = self.stan_variables[1].stan_sample_args
+        if say != saz:
+            errmess = "Both variables should have the same stan_sample_args."
+            raise ValueError(errmess)
+        return say
+
     def set_indexes(self):
         yv = self.stan_variables[0]
         zv = self.stan_variables[1]
@@ -618,15 +671,14 @@ class StanSamplingDataset():
             notnan = ~np.any(np.isnan(cdfs), axis=1)
             cdfs = cdfs[notnan]
 
-            #rho0 = kendalltau(cdfs[:, 0], cdfs[:, 1]).statistic
             iok = ~np.isnan(data[0]) & ~np.isnan(data[1])
             rho0 = kendalltau(data[0][iok], data[1][iok]).statistic
             rhos = np.random.normal(loc=rho0, scale=0.1,
-                                    size=MAX_INIT_PARAM_SEARCH)
+                                    size=NPARAMS_SAMPLED)
             rhos = rhos.clip(copula.rho_min + 0.05,
                              copula.rho_max - 0.05)
             niter = 0
-            while True and niter < MAX_INIT_PARAM_SEARCH:
+            while True and niter < NPARAMS_SAMPLED:
                 rho = rhos[niter]
                 niter += 1
 
