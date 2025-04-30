@@ -54,18 +54,30 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
 
         # Run sampling variable with low number of
         # importance samples
+        pfi = False
         sv = sample.StanSamplingVariable(marginal, yboot, censor,
-                                         ninits=1)
+                                         ninits=1,
+                                         prior_from_importance=pfi)
         stan_data = sv.to_dict()
         marginal.params = {k[1:]: v for k, v in
                            sv.initial_parameters[0].items()}
-
         # Test shape close to 0 for edge cases
         if marginal.has_shape:
             if iboot < nboot // 20:
                 marginal.shape1 = 1e-20
+                # .. fix prior if needed
+                l = stan_data["shape1_lower"]
+                stan_data["shape1_lower"] = min(l, 1e-20)
+                u = stan_data["shape1_upper"]
+                stan_data["shape1_upper"] = max(l, 1e-20)
+
             elif iboot >= nboot // 20 and iboot < 2 * nboot // 20:
                 marginal.shape1 = 1e-3
+                # .. fix prior if needed
+                l = stan_data["shape1_lower"]
+                stan_data["shape1_lower"] = min(l, 1e-3)
+                u = stan_data["shape1_upper"]
+                stan_data["shape1_upper"] = max(l, 1e-3)
 
         y0, y1 = marginal.support
         ynocens = yboot[yboot > censor]
@@ -113,6 +125,13 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         for pn in marginals.PARAMETERS:
             lp = smp.filter(regex=f"logprior_{pn}")
             prior = getattr(marginal, f"{pn}_prior")
+
+            # .. need to adjust prior
+            prior.lower = stan_data[f"{pn}_lower"]
+            prior.upper = stan_data[f"{pn}_upper"]
+            prior.loc = stan_data[f"y{pn}_prior"][0]
+            prior.scale = stan_data[f"y{pn}_prior"][1]
+
             expected = prior.logpdf(getattr(marginal, pn))
             assert allclose(lp, expected, atol=atol)
             lpr += lp.squeeze()

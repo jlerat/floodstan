@@ -518,9 +518,10 @@ class StanSamplingVariable():
                 se = params.loc[:, pn]
                 prior = getattr(marginal, f"{pn}_prior")
                 prior.loc = se.mean()
-                prior.scale = se.std() * 5
+                prior.scale = se.std() * 10
                 prior.lower = max(se.quantile(0.001), prior.lower)
                 prior.upper = min(se.quantile(0.999), prior.upper)
+                prior.uninformative = False
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
