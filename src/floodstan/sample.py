@@ -40,9 +40,17 @@ MARGINALS_WHICH_USE_PRIOR_FROM_IMPORTANCE = [
         ]
 NSAMPLE_MIN_FOR_IMPORTANCE_PRIOR = 1000
 
+# .. maximum number of iteration in importance sampling
+NITER_MAX_IMPORTANCE = 10
+
+# Minimum ratio between neff and nsamples to stop iterating
+EFFECTIVE_SAMPLE_FACTOR = 0.5
+
+# Minimum neff tolerated during iteration
+EFFECTIVE_SAMPLE_MIN = 5
+
 # Maximum number of
 NPARAMS_SAMPLED = 1000
-
 
 # Special stan sampling arguments
 STAN_SAMPLE_ARGS = {
@@ -153,8 +161,11 @@ def bootstrap(marginal, data, fit_method="params_guess",
         errmess = f"Expected fit_method in [{'/'.join(expected)}]."
         raise ValueError(errmess)
 
-    data = np.array(data)
-    nval = len(data)
+    data, dcens, ncens = _prepare_censored_data(data, -np.inf)
+    nval = len(dcens)
+    if nval < 5:
+        errmess = f"Less than 5 valid data points."
+        raise ValueError(errmess)
 
     # Parameter estimation method
     fun = getattr(marginal, fit_method)
@@ -165,7 +176,7 @@ def bootstrap(marginal, data, fit_method="params_guess",
                          columns=PARAMETERS)
     # Run bootstrap
     for i in range(nboot):
-        resampled = np.random.choice(data, nval, replace=True)
+        resampled = np.random.choice(dcens, nval, replace=True)
         try:
             fun(resampled, **kw)
         except Exception:
@@ -186,14 +197,7 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
     data, dcens, ncens = _prepare_censored_data(data, censor)
     params = np.array(params)
 
-    # Maximum number of iterations
-    niter_max = 3
-    # Minimum ratio between neff and nsamples to stop iterating
-    neff_factor = 0.5
-    # Minimum neff tolerated during iteration
-    neff_min = 5
-
-    for niter in range(niter_max):
+    for niter in range(NITER_MAX_IMPORTANCE):
         # Compute log posteriors
         logposts = np.zeros(len(params))
         for i, param in enumerate(params):
@@ -206,9 +210,18 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
         weights /= weights.sum()
         neff = 1. / (weights**2).sum()
 
-        if neff < neff_min:
-            errmess = f"Effective sample size < {neff_min} ({neff})."
-            raise ValueError(errmess)
+        if neff < EFFECTIVE_SAMPLE_MIN:
+            if niter == NITER_MAX_IMPORTANCE - 1:
+                errmess = f"Effective sample size"\
+                          + f"< {EFFECTIVE_SAMPLE_MIN} ({neff})."
+                raise ValueError(errmess)
+
+            # Start from the best params
+            p0 = params[np.argmax(weights)]
+            cov = np.maximum(1, np.cov(params.T))
+            params = np.random.multivariate_normal(mean=p0, cov=cov,
+                                                   size=nsamples)
+            continue
 
         k = np.random.choice(np.arange(len(weights)), size=nsamples, p=weights)
         samples = params[k]
@@ -220,11 +233,10 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
             params = np.random.multivariate_normal(mean=mean, cov=cov,
                                                    size=nsamples)
 
-        if neff > neff_factor * nsamples:
+        if neff > EFFECTIVE_SAMPLE_FACTOR * nsamples:
             break
 
     samples = pd.DataFrame(samples, columns=PARAMETERS)
-
     return samples, logposts, neff
 
 
@@ -285,6 +297,7 @@ class StanSamplingVariable():
         self.set_guess_parameters()
         self.set_sampled_parameters()
         self.set_priors()
+        # .. initial parameters last because they depend on priors
         self.set_initial_parameters()
 
     @property
@@ -451,8 +464,8 @@ class StanSamplingVariable():
                 self._sampled_parameters_are_from_importance = \
                     params is not None
 
-            except Exception:
-                wmess = "Importance sampling failed."
+            except Exception as err:
+                wmess = f"Importance sampling failed ({err})."
                 warnings.warn(wmess)
                 params = None
 
@@ -469,6 +482,7 @@ class StanSamplingVariable():
 
         self._sampled_parameters = params
         self._sampled_parameters_valid = -np.ones(len(params))
+
 
     def set_initial_parameters(self):
         ninits = self.ninits
@@ -517,10 +531,16 @@ class StanSamplingVariable():
             for pn in PARAMETERS:
                 se = params.loc[:, pn]
                 prior = getattr(marginal, f"{pn}_prior")
+
+                # Prior centered on mean param
                 prior.loc = se.mean()
                 prior.scale = se.std() * 10
-                prior.lower = max(se.quantile(0.001), prior.lower)
-                prior.upper = min(se.quantile(0.999), prior.upper)
+
+                # Define min max with a 20% tolerance
+                x0, x1 = se.min(), se.max()
+                dx = (x1 - x0) * 0.2
+                prior.lower = max(x0 - dx, prior.lower)
+                prior.upper = min(x1 + dx, prior.upper)
                 prior.uninformative = False
 
     def to_dict(self):
@@ -702,6 +722,18 @@ class StanSamplingDataset():
     def to_dict(self):
         dd = self.stan_variables[0].to_dict()
         dd.update(self.stan_variables[1].to_dict())
+
+        # Careful with upper and lower bounds
+        for pn in PARAMETERS:
+            p0, p1 = np.inf, -np.inf
+            for v in self.stan_variables:
+                prior = getattr(v.marginal, f"{pn}_prior")
+                p0 = min(p0, prior.lower)
+                p1 = max(p1, prior.upper)
+
+            dd[f"{pn}_lower"] = p0
+            dd[f"{pn}_upper"] = p1
+
         dd.update({
             "copula": self.copula_code,
             "rho_lower": self._copula.rho_min,

@@ -126,6 +126,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
                                       iter_warmup=stan_nwarm,
                                       iter_sampling=
                                       stan_nsamples//stan_nchains,
+                                      parallel_chains=stan_nchains,
                                       output_dir=fout_stan,
                                       inits=stan_inits,
                                       show_progress=False,
@@ -140,7 +141,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
 
     # Test divergence
     prc = diag["divergence_proportion"]
-    print(f"\n{stationid}-{marginal_name}-{censoring} : Divergence proportion = {prc}\n")
+    print(f"\n{stationid}-{copula}-{censoring} : Divergence proportion = {prc}\n")
     thresh = 30 if censoring else 5
     assert prc < thresh
 
@@ -179,6 +180,7 @@ def test_bivariate_sampling_problem(allclose):
                                       iter_warmup=stan_nwarm,
                                       iter_sampling=
                                       stan_nsamples//stan_nchains,
+                                      parallel_chains=stan_nchains,
                                       output_dir=fout_stan,
                                       inits=stan_inits,
                                       show_progress=False)
@@ -253,6 +255,7 @@ def test_bivariate_sampling_not_enough_data(varname, allclose):
                                       iter_warmup=stan_nwarm,
                                       iter_sampling=
                                       stan_nsamples//stan_nchains,
+                                      parallel_chains=stan_nchains,
                                       inits=stan_inits,
                                       show_progress=False)
 

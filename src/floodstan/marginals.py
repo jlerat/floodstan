@@ -975,11 +975,11 @@ class LogPearson3(FloodFreqDistribution):
         if lam2 <= 0 or T3 >= 1:
             mu = 0.
             sigma = 0.
-            gam = 0.
+            gam = 1e-6
         elif T3 <= SMALL:
             mu = lam1
             sigma = lam2*rootpi
-            gam = 0.
+            gam = 1e-6
         elif T3 >= 1./3:
             alpha = 0.
             Ti3 = 1.-T3
