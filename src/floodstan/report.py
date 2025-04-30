@@ -257,8 +257,15 @@ def ams_report(marginal, params=None, observed=None,
         #    posterior distribution
         if posterior_predictive:
             fi = marginal.cdf(xi)
+            x0, x1 = marginal.support
+            fi[xi < x0] = 0.
+            fi[xi > x1] = 1.
+
             fm = marginal.cdf(xm)
-            a, b, c = quadapprox.get_coefficients(xi, fi, fm)
+            fm[xm < x0] = 0.
+            fm[xm > x1] = 1.
+
+            a, b, c = quadapprox.get_coefficients(xi, fi, fm, True)
             a_coefs += a
             b_coefs += b
             c_coefs += c
