@@ -164,7 +164,7 @@ def bootstrap(marginal, data, fit_method="params_guess",
     data, dcens, ncens = _prepare_censored_data(data, -np.inf)
     nval = len(dcens)
     if nval < 5:
-        errmess = f"Less than 5 valid data points."
+        errmess = "Less than 5 valid data points."
         raise ValueError(errmess)
 
     # Parameter estimation method
@@ -212,7 +212,7 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
 
         if neff < EFFECTIVE_SAMPLE_MIN:
             if niter == NITER_MAX_IMPORTANCE - 1:
-                errmess = f"Effective sample size"\
+                errmess = "Effective sample size"\
                           + f"< {EFFECTIVE_SAMPLE_MIN} ({neff})."
                 raise ValueError(errmess)
 
@@ -483,7 +483,6 @@ class StanSamplingVariable():
         self._sampled_parameters = params
         self._sampled_parameters_valid = -np.ones(len(params))
 
-
     def set_initial_parameters(self):
         ninits = self.ninits
         niter = 0
@@ -696,8 +695,8 @@ class StanSamplingDataset():
             rho0 = kendalltau(data[0][iok], data[1][iok]).statistic
             rhos = np.random.normal(loc=rho0, scale=0.1,
                                     size=NPARAMS_SAMPLED)
-            rhos = rhos.clip(copula.rho_min + 0.05,
-                             copula.rho_max - 0.05)
+            rhos = rhos.clip(copula.rho_min + 0.02,
+                             copula.rho_max - 0.02)
             niter = 0
             while True and niter < NPARAMS_SAMPLED:
                 rho = rhos[niter]
