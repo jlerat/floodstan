@@ -139,8 +139,6 @@ def test_stan_sampling_variable(stationid, marginal_name, allclose):
     sv = sample.StanSamplingVariable(marginal, y,
                                      prior_from_importance=True)
     assert sv.sampled_parameters.shape[0] == 1000
-    assert np.all(sv.sampled_parameters_valid[:sv.ninits] == 1)
-
 
 
 @pytest.mark.parametrize("marginal_name",

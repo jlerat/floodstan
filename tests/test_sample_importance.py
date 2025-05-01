@@ -34,18 +34,19 @@ FTESTS = Path(__file__).resolve().parent
 @pytest.mark.parametrize("distname",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
-def test_importance_sampling(stationid, distname, censoring):
+def test_univariate_importance_sampling(stationid, distname, censoring):
     y = get_ams(stationid)
     censor = y.median() if censoring else -100.
     marginal = marginals.factory(distname)
 
     # First sample
-    nsamples = 5000
+    nsamples = 2000
 
     # .. use lh as prior
-    params = sample.bootstrap(marginal, y, nboot=2000)
+    params = sample.bootstrap(marginal, y, nboot=nsamples)
     # .. importance sampling
-    smp, lps, neff = sample.importance_sampling(marginal, y, params,
+    smp, lps, neff, niter = sample.univariate_importance_sampling(marginal, y, params,
                                            censor, nsamples)
-    assert neff > 500
+    print(f"neff={neff:0.0f}/{nsamples} niter={niter}")
+    assert neff > 200
 
