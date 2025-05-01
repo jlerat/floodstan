@@ -188,7 +188,7 @@ def bootstrap(marginal, data, fit_method="params_guess",
 
 
 def univariate_importance_sampling(marginal, data, params, censor=-np.inf,
-                        nsamples=10000):
+                                   nsamples=10000):
     """ See
     Smith, A. F. M., & Gelfand, A. E. (1992).
     Bayesian Statistics without Tears: A Sampling-Resampling Perspective.
@@ -463,9 +463,10 @@ class StanSamplingVariable():
             try:
                 # Use importance sampling
                 boot = bootstrap(marginal, data, nboot=nsamples)
-                params, lps, neff, niter = univariate_importance_sampling(marginal, data,
-                                                        boot, censor,
-                                                        nsamples)
+                params, lps, neff, niter = \
+                    univariate_importance_sampling(marginal, data,
+                                                   boot, censor,
+                                                   nsamples)
                 if neff < min(100, nsamples / 10):
                     params = None
 
