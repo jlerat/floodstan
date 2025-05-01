@@ -187,7 +187,7 @@ def bootstrap(marginal, data, fit_method="params_guess",
     return boots
 
 
-def importance_sampling(marginal, data, params, censor=-np.inf,
+def univariate_importance_sampling(marginal, data, params, censor=-np.inf,
                         nsamples=10000):
     """ See
     Smith, A. F. M., & Gelfand, A. E. (1992).
@@ -216,7 +216,7 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
                           + f"< {EFFECTIVE_SAMPLE_MIN} ({neff})."
                 raise ValueError(errmess)
 
-            # Start from the best params
+            # Restart from the best params
             p0 = params[np.argmax(weights)]
             cov = np.maximum(1, np.cov(params.T))
             params = np.random.multivariate_normal(mean=p0, cov=cov,
@@ -237,7 +237,15 @@ def importance_sampling(marginal, data, params, censor=-np.inf,
             break
 
     samples = pd.DataFrame(samples, columns=PARAMETERS)
-    return samples, logposts, neff
+    return samples, logposts, neff, niter
+
+
+def bivariate_importance_sampling(marginal, data, params,
+                                  ycensor=-np.inf,
+                                  zcensor=-np.inf,
+                                  nsamples=10000):
+    # TODO a special for LP3, yeepee!
+    pass
 
 
 class StanSamplingVariable():
@@ -455,7 +463,7 @@ class StanSamplingVariable():
             try:
                 # Use importance sampling
                 boot = bootstrap(marginal, data, nboot=nsamples)
-                params, lps, neff = importance_sampling(marginal, data,
+                params, lps, neff, niter = univariate_importance_sampling(marginal, data,
                                                         boot, censor,
                                                         nsamples)
                 if neff < min(100, nsamples / 10):
