@@ -5,6 +5,7 @@ NVALID_MIN = 5
 
 BELOW_CENSOR = -1e10
 
+
 def to1d(u):
     u = np.atleast_1d(u).astype(float)
     if u.ndim != 1:

@@ -1,14 +1,8 @@
 import warnings
 import numpy as np
+from floodstan.data_processing import to1d
 
 XLARGE = 1e20
-
-
-def _to_1d(*args):
-    if len(args) == 1:
-        return np.atleast_1d(args[0])
-    else:
-        return [np.atleast_1d(v) for v in args]
 
 
 def _check_xi_a_b_c(xi, a, b, c):
@@ -26,14 +20,14 @@ def _check_xi_a_b_c(xi, a, b, c):
 
 
 def _expand_xi(xi, min_x, max_x):
-    xi = _to_1d(xi)
+    xi = to1d(xi)
     xmin = min(xi[0] - 1, min_x)
     xmax = max(xi[-1] + 1, max_x + 1e-10)
     return np.insert(xi, [0, len(xi)], [xmin, xmax])
 
 
 def get_coefficients(xi, fi, fm, monotonous=False):
-    xi, fi, fm = _to_1d(xi, fi, fm)
+    xi, fi, fm = [to1d(v) for v in [xi, fi, fm]]
     if len(xi) != len(fi):
         errmess = "Expected len(xi) = len(fi)."
         raise ValueError(errmess)
@@ -76,7 +70,7 @@ def get_coefficients(xi, fi, fm, monotonous=False):
 
 
 def forward(x, xi, a, b, c):
-    x, xi, a, b, c = _to_1d(x, xi, a, b, c)
+    x, xi, a, b, c = [to1d(v) for v in [x, xi, a, b, c]]
     _check_xi_a_b_c(xi, a, b, c)
 
     min_x = np.nanmin(x)
@@ -92,7 +86,7 @@ def forward(x, xi, a, b, c):
 
 
 def inverse(f, xi, a, b, c):
-    f, xi, a, b, c = _to_1d(f, xi, a, b, c)
+    f, xi, a, b, c = [to1d(v) for v in [f, xi, a, b, c]]
     _check_xi_a_b_c(xi, a, b, c)
     xi = _expand_xi(xi, -XLARGE, XLARGE)
 

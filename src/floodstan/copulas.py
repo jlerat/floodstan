@@ -5,7 +5,6 @@ import numpy as np
 from scipy.stats import norm
 from scipy.special import lambertw, owens_t
 from floodstan.marginals import TruncatedNormalParameterPrior
-from floodstan.data_processing import to1d
 from floodstan.data_processing import to2d
 
 COPULA_NAMES = {
@@ -116,9 +115,69 @@ class Copula():
 
         return uv
 
-    def neglogpost(self, theta, data, likelihood_cases_index,
+    def neglogpost(self, theta, data, icases,
                    ycensor, zcensor, marginal):
-        raise ValueError("TODO")
+        # Get params
+        yparams = theta[:3]
+        zparams = theta[3:-1]
+        self.rho = theta[-1]
+
+        # Get cdfs and pdfs and censor cdfs
+        cdfs, logpdfs = data * 0., data * 0.
+        cdf_censors, logpdf_censors = np.zeros((1, 2))
+
+        marginal.params = yparams
+        ydata = data[:, 0]
+        cdfs[:, 0] = marginal.cdf(ydata)
+        cdf_censors[0] = marginal.cdf(ycensor)
+        logpdfs[:, 0] = marginal.logpdf(ydata)
+
+        marginal.params = zparams
+        zdata = data[:, 1]
+        cdfs[:, 1] = marginal.cdf(zdata)
+        cdf_censors[1] = marginal.cdf(zcensor)
+        logpdfs[:, 1] = marginal.logpdf(zdata)
+
+        # initialise
+        nlp = 0
+
+        # Cases with z observed
+        i11 = icases.i11
+        if i11.sum() > 0:
+            nlp -= self.logpdf(cdfs[i11]).sum()
+            nlp -= logpdfs[i11].sum()
+
+        i21 = icases.i21
+        if i21.sum() > 0:
+            nlp -= self.conditional_density(cdf_censors[0],
+                                            cdfs[i21, 1]).sum()
+            nlp -= logpdfs[i21, 1].sum()
+
+        i31 = icases.i31
+        if i31.sum() > 0:
+            nlp -= logpdfs[i31, 1].sum()
+
+        # Cases with z censored
+        i12 = icases.i12
+        if i12.sum() > 0:
+            nlp -= self.conditional_density(cdf_censors[1],
+                                            cdfs[i12, 0]).sum()
+            nlp -= logpdfs[i12, 0].sum()
+
+        i22 = icases.i22
+        if i22.sum() > 0:
+            n22 = i22.sum()
+            nlp -= n22 * self.logpdf(cdf_censors)[0]
+
+        i32 = icases.i32
+        if i32.sum() > 0:
+            n32 = i32.sum()
+            nlp -= n32 * math.log(cdf_censors[1])
+
+        # Cases with z missing
+        # TODO
+
+        return nlp
 
 
 class GaussianCopula(Copula):
