@@ -10,6 +10,9 @@ from scipy.stats import lognorm, norm, genpareto
 from scipy.optimize import brentq, minimize
 from scipy.special import gamma, gammaln, polygamma, erfc
 
+from floodstan.data_processing import univariate2sorted
+from floodstan.data_processing import univariate2censored
+
 # Distribution names
 MARGINAL_NAMES = {
     "Gumbel": 1,
@@ -54,24 +57,6 @@ UNINFORMATIVE_PRIOR_LOC = 0.
 UNINFORMATIVE_PRIOR_SCALE = 1e10
 
 
-def _prepare(data):
-    data = np.array(data)
-    if data.ndim != 1:
-        errmess = f"Expected 1dim array, got ndim={data.ndim}."
-        raise ValueError(errmess)
-
-    data[np.isnan(data)] = -2e10
-    data_sorted = np.sort(data, axis=0)
-    data_sorted[data_sorted < -1e10] = np.nan
-    nval = (~np.isnan(data_sorted)).sum()
-
-    if nval < 4:
-        errmess = f"Expected length of valid data>=4, got {nval}."
-        raise ValueError(errmess)
-
-    return data_sorted, nval
-
-
 def _comb(n, i):
     """ Function much faster than scipy.comb """
     n = float(n)  # To avoid overflow if i == 8
@@ -114,17 +99,6 @@ def _check_param_value(x, lower=-np.inf, upper=np.inf, name=None):
     return max(lower, min(upper, x))
 
 
-def _prepare_censored_data(data, low_censor):
-    data = np.array(data)
-    low_censor = -1e10 if low_censor is None else float(low_censor)
-    dnocens = data[data >= low_censor]
-    if len(dnocens) < 5:
-        errmess = "Expected at least 5 uncensored values, "\
-                  + f"got {len(dnocens)}."
-        raise ValueError(errmess)
-    return data, dnocens, len(data) - len(dnocens)
-
-
 def lh_moments(data, eta=0, compute_lam4=True):
     """Compute LH moments as per Wang et al. (1997).
 
@@ -149,7 +123,7 @@ def lh_moments(data, eta=0, compute_lam4=True):
         Fourth LH moment.
     """
     # Prepare data
-    data_sorted, nval = _prepare(data)
+    data_sorted, nval = univariate2sorted(data)
     eta = int(eta)
 
     # Compute L moments, see ARR, book 3 page 47
@@ -215,9 +189,10 @@ def factory(distname):
 
 class TruncatedNormalParameterPrior():
     def __init__(self, param_name):
-        if param_name not in PARAMETERS:
+        pnames = PARAMETERS + ["rho"]
+        if param_name not in pnames:
             errmess = f"Expected param_name ('{param_name}') in"\
-                      + f" {'/'.join(PARAMETERS)}."
+                      + f" {'/'.join(pnames)}."
             raise ValueError(errmess)
 
         self.param_name = param_name
@@ -526,7 +501,7 @@ class FloodFreqDistribution():
             setattr(marginal, f"_{pn}_prior", sprior)
         return marginal
 
-    def neglogpost(self, theta, data_not_censored, low_censor, ncens):
+    def neglogpost(self, theta, data_obs, censor, ncens):
         try:
             self.locn = theta[0]
             self.logscale = theta[1]
@@ -542,26 +517,26 @@ class FloodFreqDistribution():
             nlp -= self.shape1_prior.logpdf(theta[2])
 
         # Negative log-likelihood
-        nlp -= self.logpdf(data_not_censored).sum()
+        nlp -= self.logpdf(data_obs).sum()
         if ncens > 0:
-            nlp -= self.logcdf(low_censor) * ncens
+            nlp -= self.logcdf(censor) * ncens
 
         if not np.isfinite(nlp) or np.isnan(nlp):
             return np.inf
 
         return nlp
 
-    def maximum_posterior_estimate(self, data, low_censor=None,
+    def maximum_posterior_estimate(self, data, censor=None,
                                    nexplore=1000):
         # Prepare data
-        data, dnocens, ncens = _prepare_censored_data(data, low_censor)
+        data, dobs, ncens, censor = univariate2censored(data, censor)
 
         # Initial parameter exploration
         # random perturb guesses parameters in
         # arcsinh space (log for large values and lin for small values)
         self.params_guess(data)
         theta0 = self.params
-        nlp_min = self.neglogpost(theta0, dnocens, low_censor, ncens)
+        nlp_min = self.neglogpost(theta0, dobs, censor, ncens)
 
         # .. loop throught explored parameter and check loglike
         nval = len(data)
@@ -570,7 +545,7 @@ class FloodFreqDistribution():
             kk = np.random.choice(k, nval, replace=True)
             self.params_guess(data[kk])
             theta = self.params
-            nlp = self.neglogpost(theta, dnocens, low_censor, ncens)
+            nlp = self.neglogpost(theta, dobs, censor, ncens)
             if nlp < nlp_min and np.isfinite(nlp) and not np.isnan(nlp):
                 theta0 = theta
                 nlp_min = nlp
@@ -579,7 +554,7 @@ class FloodFreqDistribution():
         options = dict(maxiter=10000)
         theta0 = theta0[:2] if not self.has_shape else theta0
         opt = minimize(self.neglogpost, theta0,
-                       args=(dnocens, low_censor, ncens),
+                       args=(dobs, censor, ncens),
                        options=options, method="Nelder-Mead")
 
         self.locn = opt.x[0]
@@ -601,7 +576,7 @@ class FloodFreqDistribution():
         # cov = np.linalg.inv(opt.hess_inv)
         # however, this does NOT work for LP3 due to boundary pb.
 
-        return -opt.fun, opt.x, dnocens, ncens
+        return -opt.fun, opt.x, dobs, ncens
 
 
 class Normal(FloodFreqDistribution):
@@ -631,8 +606,9 @@ class Normal(FloodFreqDistribution):
         return -np.inf, np.inf
 
     def params_guess(self, data):
-        self.locn = np.mean(data)
-        scale2 = ((data - self.locn)**2).mean()
+        _, dobs, _, _ = univariate2censored(data, -np.inf)
+        self.locn = np.mean(dobs)
+        scale2 = ((dobs - self.locn)**2).mean()
         self.logscale = math.log(math.sqrt(scale2))
 
     def fit_lh_moments(self, data, eta=0):
@@ -679,26 +655,27 @@ class GEV(FloodFreqDistribution):
         return super(GEV, self).__getattribute__(name)
 
     def params_guess(self, data):
+        _, dobs, _, _ = univariate2censored(data, -np.inf)
         try:
             # Try LH moments with decrasing eta to
             # favour high eta if possible.
             for eta in [2, 1, 0]:
-                self.fit_lh_moments(data, eta)
+                self.fit_lh_moments(dobs, eta)
 
                 # Check support is ok to avoid
                 # problems with likelihood computation later on
-                if np.all(self.in_support(data)):
+                if np.all(self.in_support(dobs)):
                     break
 
-            if not np.all(self.in_support(data)):
+            if not np.all(self.in_support(dobs)):
                 raise ValueError()
 
         except Exception:
             # Revert to moment matching of Gumbel distribution
             # See https://en.wikipedia.org/wiki/Gumbel_distribution
-            alpha = data.var()*6/math.pi**2
+            alpha = dobs.var() * 6 / math.pi**2
             self.logscale = math.log(alpha)
-            self.locn = data.mean()-EULER_CONSTANT*alpha
+            self.locn = dobs.mean() - EULER_CONSTANT*alpha
             self.shape1 = 0.01
 
     def fit_lh_moments(self, data, eta=0):
@@ -923,15 +900,16 @@ class LogPearson3(FloodFreqDistribution):
         return np.exp(pearson3.ppf(q, **kw))
 
     def params_guess(self, data):
+        _, dobs, _, _ = univariate2censored(data, -np.inf)
         try:
-            self.fit_lh_moments(data)
-            if not np.all(self.in_support(data)):
+            self.fit_lh_moments(dobs)
+            if not np.all(self.in_support(dobs)):
                 raise ValueError()
 
         except Exception:
             # Problem with gam, revert back to log norm
             self.shape1 = 0.01
-            logx = np.log(data[data > 0])
+            logx = np.log(dobs[dobs > 0])
             self.locn = logx.mean()
             self.logscale = math.log((logx-self.locn).std(ddof=1))
 
@@ -1059,26 +1037,27 @@ class Gumbel(FloodFreqDistribution):
         self.locn = tau
 
     def params_guess(self, data):
+        _, dobs, _, _ = univariate2censored(data, -np.inf)
         try:
             # Try LH moments with decrasing eta to
             # favour high eta if possible.
             for eta in [2, 1, 0]:
-                self.fit_lh_moments(data, eta)
+                self.fit_lh_moments(dobs, eta)
 
                 # Check support is ok to avoid
                 # problems with likelihood computation later on
-                if np.all(self.in_support(data)):
+                if np.all(self.in_support(dobs)):
                     break
 
-            if not np.all(self.in_support(data)):
+            if not np.all(self.in_support(dobs)):
                 raise ValueError()
 
         except Exception:
             # Revert to moment matching
             # See https://en.wikipedia.org/wiki/Gumbel_distribution
-            alpha = data.var()*6/math.pi**2
+            alpha = dobs.var() * 6 / math.pi**2
             self.logscale = math.log(alpha)
-            self.locn = data.mean()-EULER_CONSTANT*alpha
+            self.locn = dobs.mean() - EULER_CONSTANT * alpha
             self.shape1 = 0.01
 
 
@@ -1115,7 +1094,8 @@ class LogNormal(FloodFreqDistribution):
         return super(LogNormal, self).__getattribute__(name)
 
     def params_guess(self, data):
-        data_ok = data[~np.isnan(data) & (data > 0)]
+        _, dobs, _, _ = univariate2censored(data, -np.inf)
+        data_ok = dobs[dobs > 0]
         if len(data_ok) <= 3:
             errmess = "Expected at least 3 samples valid and  > 0."
             raise ValueError(errmess)
@@ -1173,11 +1153,12 @@ class GeneralizedPareto(FloodFreqDistribution):
         return super(GeneralizedPareto, self).__getattribute__(name)
 
     def params_guess(self, data):
-        self.fit_lh_moments(data)
+        _, dobs, _, _ = univariate2censored(data, -np.inf)
+        self.fit_lh_moments(dobs)
 
         # .. Correct if lh moments is failing
         smin, smax = self.support
-        dmin, dmax = data.min(), data.max()
+        dmin, dmax = dobs.min(), dobs.max()
         delta = dmax - dmin
         tau, alpha = self.locn, self.scale
         if smin > dmin:
@@ -1273,16 +1254,17 @@ class GeneralizedLogistic(FloodFreqDistribution):
         return super(GeneralizedLogistic, self).__getattribute__(name)
 
     def params_guess(self, data):
-        self.fit_lh_moments(data)
+        _, dobs, _, _ = univariate2censored(data, -np.inf)
+        self.fit_lh_moments(dobs)
 
         # .. Correct if lh moments is failing
         smin, smax = self.support
-        dmin, dmax = data.min(), data.max()
+        dmin, dmax = dobs.min(), dobs.max()
         tau, alpha = self.locn, self.scale
         if smin > dmin:
-            self.shape1 = alpha/(dmin-tau)*0.99
+            self.shape1 = alpha / (dmin-tau) * 0.99
         elif smax < dmax:
-            self.shape1 = alpha/(dmax-tau)*0.99
+            self.shape1 = alpha / (dmax-tau) * 0.99
 
     def fit_lh_moments(self, data, eta=0):
         """ See Hosking and Wallis (1997), Appendix, page 197. """
@@ -1344,7 +1326,8 @@ class Gamma(FloodFreqDistribution):
         return super(Gamma, self).__getattribute__(name)
 
     def params_guess(self, data):
-        data_ok = data[~np.isnan(data) & (data > 0)]
+        _, dobs, _, _ = univariate2censored(data, -np.inf)
+        data_ok = dobs[dobs > 0]
         if len(data_ok) <= 5:
             errmess = "Expected at least 5 samples valid and  > 0."
             raise ValueError(errmess)

@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 import logging
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -13,16 +12,14 @@ from floodstan.copulas import COPULA_NAMES
 from floodstan.marginals import MARGINAL_NAMES
 from floodstan.marginals import PARAMETERS
 from floodstan.copulas import factory
-from floodstan.marginals import _prepare_censored_data
+from floodstan.data_processing import univariate2censored
+from floodstan.data_processing import univariate2cases
 
 MARGINAL_CODES = {code: name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code: name for name, code in COPULA_NAMES.items()}
 
 # Subset of copula currently supported in the stan model
 COPULA_NAMES_STAN = ["Gaussian", "Clayton", "Gumbel"]
-
-# Prior on copula parameter
-RHO_PRIOR = [0.7, 1.]
 
 # Prior on discrete parameters
 DISCRETE_LOCN_PRIOR = [1, 10]
@@ -32,19 +29,11 @@ CENSOR_DEFAULT = -1e10
 
 STAN_VARIABLE_INITIAL_CDF_MIN = 1e-8
 
-# Configure prior from importance sampling
-MARGINALS_WHICH_USE_PRIOR_FROM_IMPORTANCE = [
-        "LogPearson3",
-        "GeneralizedLogistic",
-        "GeneralizedPareto"
-        ]
-NSAMPLE_MIN_FOR_IMPORTANCE_PRIOR = 1000
-
 # .. maximum number of iteration in importance sampling
 NITER_MAX_IMPORTANCE = 10
 
 # Minimum ratio between neff and nsamples to stop iterating
-EFFECTIVE_SAMPLE_FACTOR = 0.5
+EFFECTIVE_SAMPLE_FACTOR = 0.8
 
 # Minimum neff tolerated during iteration
 EFFECTIVE_SAMPLE_MIN = 5
@@ -154,18 +143,15 @@ def are_marginal_params_valid(marginal, locn, logscale, shape1, data, censor):
     return None, None
 
 
-def bootstrap(marginal, data, fit_method="params_guess",
-              nboot=10000, eta=0):
+def univariate_bootstrap(marginal, data, fit_method="params_guess",
+                         nboot=10000, eta=0):
     expected = ["fit_lh_moments", "params_guess"]
     if fit_method not in expected:
         errmess = f"Expected fit_method in [{'/'.join(expected)}]."
         raise ValueError(errmess)
 
-    data, dcens, ncens = _prepare_censored_data(data, -np.inf)
-    nval = len(dcens)
-    if nval < 5:
-        errmess = "Less than 5 valid data points."
-        raise ValueError(errmess)
+    _, dobs, _, _ = univariate2censored(data, -np.inf)
+    nval = len(dobs)
 
     # Parameter estimation method
     fun = getattr(marginal, fit_method)
@@ -176,7 +162,7 @@ def bootstrap(marginal, data, fit_method="params_guess",
                          columns=PARAMETERS)
     # Run bootstrap
     for i in range(nboot):
-        resampled = np.random.choice(dcens, nval, replace=True)
+        resampled = np.random.choice(dobs, nval, replace=True)
         try:
             fun(resampled, **kw)
         except Exception:
@@ -187,29 +173,44 @@ def bootstrap(marginal, data, fit_method="params_guess",
     return boots
 
 
-def univariate_importance_sampling(marginal, data, params, censor=-np.inf,
+def compute_importance_weights(logposts):
+    lp_max = np.nanmax(logposts)
+    weights = np.exp(logposts - lp_max)
+    weights /= weights.sum()
+    neff = 1. / (weights**2).sum()
+    return weights, neff
+
+
+def univariate_importance_sampling(marginal, data, censor=-np.inf,
                                    nsamples=10000):
     """ See
     Smith, A. F. M., & Gelfand, A. E. (1992).
     Bayesian Statistics without Tears: A Sampling-Resampling Perspective.
     The American Statistician, 46(2), 84–88. https://doi.org/10.2307/2684170
     """
-    data, dcens, ncens = _prepare_censored_data(data, censor)
+    data, dobs, ncens, censor = univariate2censored(data, censor)
+
+    # Bootstrap to start
+    params = univariate_bootstrap(marginal, data, nboot=1000)
     params = np.array(params)
 
+    # Importance sampling iteration
     for niter in range(NITER_MAX_IMPORTANCE):
+        # Perturb parameters
+        cov = np.cov(params.T)
+        mean = np.mean(params, axis=0)
+        params = np.random.multivariate_normal(mean=mean, cov=cov,
+                                               size=nsamples)
+
         # Compute log posteriors
         logposts = np.zeros(len(params))
         for i, param in enumerate(params):
-            lp = -marginal.neglogpost(param, dcens, censor, ncens)
+            lp = -marginal.neglogpost(param, dobs, censor, ncens)
             logposts[i] = -1e100 if np.isnan(lp) or not np.isfinite(lp) else lp
 
-        # Compute rescaled pdf (normalized by lp_max to avoid underflow)
-        lp_max = np.nanmax(logposts)
-        weights = np.exp(logposts - lp_max)
-        weights /= weights.sum()
-        neff = 1. / (weights**2).sum()
+        weights, neff = compute_importance_weights(logposts)
 
+        # Compute rescaled pdf (normalized by lp_max to avoid underflow)
         if neff < EFFECTIVE_SAMPLE_MIN:
             if niter == NITER_MAX_IMPORTANCE - 1:
                 errmess = "Effective sample size"\
@@ -218,26 +219,21 @@ def univariate_importance_sampling(marginal, data, params, censor=-np.inf,
 
             # Restart from the best params
             p0 = params[np.argmax(weights)]
-            cov = np.maximum(1, np.cov(params.T))
+            cov = np.maximum(1, cov)
             params = np.random.multivariate_normal(mean=p0, cov=cov,
                                                    size=nsamples)
             continue
 
         k = np.random.choice(np.arange(len(weights)), size=nsamples, p=weights)
-        samples = params[k]
+        params = params[k]
         logposts = logposts[k]
-
-        if niter == 0:
-            mean = samples.mean(axis=0)
-            cov = np.cov(samples.T)
-            params = np.random.multivariate_normal(mean=mean, cov=cov,
-                                                   size=nsamples)
 
         if neff > EFFECTIVE_SAMPLE_FACTOR * nsamples:
             break
 
-    samples = pd.DataFrame(samples, columns=PARAMETERS)
-    return samples, logposts, neff, niter
+    params = pd.DataFrame(params, columns=PARAMETERS)
+    weights, neff = compute_importance_weights(logposts)
+    return params, logposts, neff, niter
 
 
 def bivariate_importance_sampling(marginal, data, params,
@@ -255,7 +251,6 @@ class StanSamplingVariable():
                  censor=CENSOR_DEFAULT,
                  name="y",
                  ninits=NCHAINS_DEFAULT,
-                 prior_from_importance=None,
                  nparams_sampled=None):
         self._name = str(name)
         if len(self._name) != 1:
@@ -283,29 +278,13 @@ class StanSamplingVariable():
             else nparams_sampled
 
         # Importance sampling
-        if prior_from_importance is None:
-            prior_from_importance = \
-                    marginal.name in MARGINALS_WHICH_USE_PRIOR_FROM_IMPORTANCE
-        self.prior_from_importance = prior_from_importance
-
-        if prior_from_importance \
-                and nparams_sampled < NSAMPLE_MIN_FOR_IMPORTANCE_PRIOR:
-            wmess = "Use of importance prior with low number of samples"\
-                    + f" ({nparams_sampled}) is risky."\
-                    + f" Raising to {NSAMPLE_MIN_FOR_IMPORTANCE_PRIOR}."
-            warnings.warn(wmess)
-            nparams_sampled = NSAMPLE_MIN_FOR_IMPORTANCE_PRIOR
-
         self.nparams_sampled = nparams_sampled
-        self._sampled_parameters_are_from_importance = False
         self._sampled_parameters = []
         self._sampled_parameters_valid = []
 
         self.set_data(data, censor)
         self.set_guess_parameters()
         self.set_sampled_parameters()
-        self.set_priors()
-        # .. initial parameters last because they depend on priors
         self.set_initial_parameters()
 
     @property
@@ -407,43 +386,24 @@ class StanSamplingVariable():
             return {}
 
     def set_data(self, data, censor):
-        data = np.array(data).astype(np.float64)
-
-        if data.ndim != 1:
-            errmess = "Expected data as 1d array."
-            raise ValueError(errmess)
-
-        if (~np.isnan(data)).sum() < 5:
-            errmess = "Need more than 5 valid data points."
-            raise ValueError(errmess)
-
-        self._data = data
+        icases, data, censor = univariate2cases(data, censor)
         self._N = len(data)
+        self._data = data
+        self._censor = censor
+        self._is_obs = icases.i11
+        self._is_cens = icases.i21
+        self._is_miss = icases.i31
+        self.i11 = np.where(icases.i11)[0] + 1
+        self.i21 = np.where(icases.i21)[0] + 1
 
-        dok = data[~np.isnan(data)]
-        if len(dok) == 0:
-            errmess = "Expected at least one valid data value."
-            raise ValueError(errmess)
-
-        # Set indexes
-        self._is_miss = pd.isnull(data)
-        self._is_obs = data >= self.censor
-        self._is_cens = data < self.censor
-        self.i11 = np.where(self.is_obs)[0] + 1
-        self.i21 = np.where(self.is_cens)[0] + 1
         # .. 3x3 due to stan code requirement.
         #    Only first 2 top left cells used
         self.Ncases = np.zeros((3, 3), dtype=int)
         self.Ncases[:2, 0] = [len(self.i11), len(self.i21)]
 
-        # We set the censor close to data min to avoid potential
-        # problems with computing log cdf for the censor
-        censor = max(np.float64(censor), dok.min() - 1e-10)
-        self._censor = censor
-
     def set_guess_parameters(self):
         censor = self.censor
-        data, dcens, ncens = _prepare_censored_data(self.data, censor)
+        _, dcens, _, _ = univariate2censored(self.data, censor)
         dist = self.marginal
         dist.params_guess(dcens)
         name = self.name
@@ -454,40 +414,21 @@ class StanSamplingVariable():
                 }
 
     def set_sampled_parameters(self):
-        marginal = self.marginal
-        data = self.data
-        censor = self.censor
         nsamples = self.nparams_sampled
-        pfi = self.prior_from_importance
-        if pfi:
-            try:
-                # Use importance sampling
-                boot = bootstrap(marginal, data, nboot=nsamples)
-                params, lps, neff, niter = \
-                    univariate_importance_sampling(marginal, data,
-                                                   boot, censor,
-                                                   nsamples)
-                if neff < min(100, nsamples / 10):
-                    params = None
 
-                self._sampled_parameters_are_from_importance = \
-                    params is not None
+        # Get guess parameters
+        n = self.name
+        p0 = np.array([self.guess_parameters[f"{n}{pn}"]
+                       for pn in PARAMETERS])
 
-            except Exception as err:
-                wmess = f"Importance sampling failed ({err})."
-                warnings.warn(wmess)
-                params = None
+        # Perturb guess parameters
+        eps = np.random.normal(scale=2e-1, size=(nsamples, 3))
+        params = pd.DataFrame(p0[None, :] + eps, columns=PARAMETERS)
+        params.loc[:, "locn"] = p0[0] * (1 + eps[:, 0])
 
-        if not pfi or (pfi and params is None):
-            n = self.name
-            p0 = np.array([self.guess_parameters[f"{n}{pn}"]
-                           for pn in PARAMETERS])
-            eps = np.random.normal(scale=2e-1, size=(nsamples, 3))
-            params = pd.DataFrame(p0[None, :] + eps, columns=PARAMETERS)
-            params.loc[:, "locn"] = p0[0] * (1 + eps[:, 0])
-            # .. sample closer to 0 to avoid problems with suppoer
-            params.loc[:, "shape1"] = \
-                p0[2] * np.random.uniform(0, 1.0, size=nsamples)
+        # Sample closer to 0 to avoid problems with suppoer
+        params.loc[:, "shape1"] = \
+            p0[2] * np.random.uniform(0, 1.0, size=nsamples)
 
         self._sampled_parameters = params
         self._sampled_parameters_valid = -np.ones(len(params))
@@ -523,33 +464,6 @@ class StanSamplingVariable():
 
         self._initial_parameters = inits
         self._initial_cdfs = cdfs
-
-    def set_priors(self):
-        if self.prior_from_importance:
-            if not self._sampled_parameters_are_from_importance:
-                wmess = "Sampled parameters are not from"\
-                        + " importance sampling. Cannot use it"\
-                        + " for prior."
-                warnings.warn(wmess)
-                return
-
-            # Use importance sampling to refine priors
-            marginal = self.marginal
-            params = self.sampled_parameters
-            for pn in PARAMETERS:
-                se = params.loc[:, pn]
-                prior = getattr(marginal, f"{pn}_prior")
-
-                # Prior centered on mean param
-                prior.loc = se.mean()
-                prior.scale = se.std() * 10
-
-                # Define min max with a 20% tolerance
-                x0, x1 = se.min(), se.max()
-                dx = (x1 - x0) * 0.2
-                prior.lower = max(x0 - dx, prior.lower)
-                prior.upper = min(x1 + dx, prior.upper)
-                prior.uninformative = False
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
@@ -704,8 +618,8 @@ class StanSamplingDataset():
             rho0 = kendalltau(data[0][iok], data[1][iok]).statistic
             rhos = np.random.normal(loc=rho0, scale=0.1,
                                     size=NPARAMS_SAMPLED)
-            rhos = rhos.clip(copula.rho_min + 0.02,
-                             copula.rho_max - 0.02)
+            rhos = rhos.clip(copula.rho_lower + 0.02,
+                             copula.rho_upper - 0.02)
             niter = 0
             while True and niter < NPARAMS_SAMPLED:
                 rho = rhos[niter]
@@ -742,11 +656,13 @@ class StanSamplingDataset():
             dd[f"{pn}_lower"] = p0
             dd[f"{pn}_upper"] = p1
 
+        rho_prior = self._copula.rho_prior
+
         dd.update({
             "copula": self.copula_code,
-            "rho_lower": self._copula.rho_min,
-            "rho_upper": self._copula.rho_max,
-            "rho_prior": RHO_PRIOR,
+            "rho_lower": rho_prior.lower,
+            "rho_upper": rho_prior.upper,
+            "rho_prior": rho_prior.to_list(),
             "Ncases": self.Ncases,
             "i11": self.i11,
             "i21": self.i21,

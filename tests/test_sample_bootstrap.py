@@ -44,7 +44,7 @@ def test_bootstrap(distname, stationid, fit_method):
     if distname == "Gamma" and fit_method == "fit_lh_moments":
         pytest.skip("Lh moments not available for Gamma.")
 
-    boot = sample.bootstrap(marginal, y, fit_method=fit_method,
+    boot = sample.univariate_bootstrap(marginal, y, fit_method=fit_method,
                             nboot=1000)
 
     nok = boot.notnull().all(axis=1).sum()

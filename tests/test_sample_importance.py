@@ -39,14 +39,10 @@ def test_univariate_importance_sampling(stationid, distname, censoring):
     censor = y.median() if censoring else -100.
     marginal = marginals.factory(distname)
 
-    # First sample
-    nsamples = 2000
-
-    # .. use lh as prior
-    params = sample.bootstrap(marginal, y, nboot=nsamples)
-    # .. importance sampling
-    smp, lps, neff, niter = sample.univariate_importance_sampling(marginal, y, params,
-                                           censor, nsamples)
+    nsamples = 1000
+    smp, lps, neff, niter = sample.univariate_importance_sampling(marginal, y,
+                                                                  censor,
+                                                                  nsamples)
     print(f"neff={neff:0.0f}/{nsamples} niter={niter}")
     assert neff > 200
 

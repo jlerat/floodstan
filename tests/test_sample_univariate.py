@@ -135,11 +135,6 @@ def test_stan_sampling_variable(stationid, marginal_name, allclose):
     assert len(cdfs) == len(inits)
     assert len(cdfs[0]) == len(sv.data)
 
-    # Importance sampling
-    sv = sample.StanSamplingVariable(marginal, y,
-                                     prior_from_importance=True)
-    assert sv.sampled_parameters.shape[0] == 1000
-
 
 @pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
@@ -215,7 +210,6 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     smp = univariate_censored_sampling(**kw)
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
-
 
     for f in fout.glob("*.*"):
         f.unlink()

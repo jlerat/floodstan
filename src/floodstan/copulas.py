@@ -4,6 +4,9 @@ import numpy as np
 
 from scipy.stats import norm
 from scipy.special import lambertw, owens_t
+from floodstan.marginals import TruncatedNormalParameterPrior
+from floodstan.data_processing import to1d
+from floodstan.data_processing import to2d
 
 COPULA_NAMES = {
     "Gumbel": 1,
@@ -16,6 +19,10 @@ COPULA_NAMES = {
 RHO_LOWER = 0.01
 RHO_UPPER = 0.95
 
+# Prior on copula parameter
+RHO_PRIOR_LOC_DEFAULT = 0.7
+RHO_PRIOR_SCALE_DEFAULT = 1.
+
 
 def factory(name):
     txt = "/".join(COPULA_NAMES.keys())
@@ -25,60 +32,56 @@ def factory(name):
 
     if name == "Gaussian":
         return GaussianCopula()
+
     elif name == "Gumbel":
         return GumbelCopula()
+
     elif name == "Clayton":
         return ClaytonCopula()
+
     elif name == "Frank":
         return FrankCopula()
+
     else:
         raise ValueError(f"Cannot find copula {name}")
-
-
-# Utility to make sure we have 1d or 2d arrays with 2 columns
-def to1d(u):
-    u = np.atleast_1d(u).astype(float)
-    if u.ndim != 1:
-        raise ValueError(f"Expected 1d array, got ndim={u.ndim}.")
-    return u
-
-
-def to2d(uv):
-    uv = np.atleast_2d(uv).astype(float)
-    if uv.ndim != 2:
-        raise ValueError(f"Expected 2d array, got ndim={uv.ndim}.")
-
-    if uv.shape[1] != 2:
-        uv = uv.T
-
-    if uv.shape[1] != 2:
-        raise ValueError(f"Expected shape[1]=2, got {uv.shape[1]}.")
-
-    return uv
 
 
 class Copula():
     def __init__(self, name):
         self.name = name
         self._rho = np.nan
-        self.rho_min = RHO_LOWER
-        self.rho_max = RHO_UPPER
+        self.rho_lower = RHO_LOWER
+        self.rho_upper = RHO_UPPER
 
     @property
     def rho(self):
         """ Get correlation parameter """
         rho = self._rho
-        if rho < self.rho_min or rho > self.rho_max or np.isnan(rho):
-            raise ValueError(f"Rho ({rho}) is not valid.")
+        self._check_rho(rho)
         return rho
 
     @rho.setter
     def rho(self, val):
         """ Set correlation parameter """
         rho = float(val)
-        errmsg = f"Expected rho in [{RHO_LOWER}, {RHO_UPPER}], got {rho}."
-        assert rho >= self.rho_min and rho <= self.rho_max, errmsg
+        self._check_rho(rho)
         self._rho = rho
+
+    @property
+    def rho_prior(self):
+        prior = TruncatedNormalParameterPrior("rho")
+        prior._lower = self.rho_lower
+        prior._upper = self.rho_upper
+        prior._loc = RHO_PRIOR_LOC_DEFAULT
+        prior._scale = RHO_PRIOR_SCALE_DEFAULT
+        prior.uninformative = True
+        return prior
+
+    def _check_rho(self, rho):
+        if rho < self.rho_lower or rho > self.rho_upper:
+            errmsg = f"Expected rho in [{self.rho_lower}, "\
+                     + f"{self.rho_upper}], got {rho}."
+            raise ValueError(errmsg)
 
     def pdf(self, uv):
         return NotImplementedError()
@@ -106,12 +109,16 @@ class Copula():
         k1 = rng.permutation(nsamples)
         k2 = rng.permutation(nsamples)
         uv = np.column_stack([uu[k1], uu[k2]])\
-            + rng.uniform(-delta / 2, delta / 2, size=(nsamples, 2))
+            + np.random.uniform(-delta / 2, delta / 2, size=(nsamples, 2))
         # Sampling from conditional copula
         # Considering that uv[:, 1] are probability samples
         uv[:, 1] = self.ppf_conditional(uv[:, 0], uv[:, 1])
 
         return uv
+
+    def neglogpost(self, theta, data, likelihood_cases_index,
+                   ycensor, zcensor, marginal):
+        raise ValueError("TODO")
 
 
 class GaussianCopula(Copula):
@@ -119,10 +126,10 @@ class GaussianCopula(Copula):
         super(GaussianCopula, self).__init__("Gaussian")
         self._rho = np.nan
         # rho max reduced to pass conditional density tests
-        self.rho_max = 0.92
+        self.rho_upper = 0.92
 
         # rho max reduced to pass conditional density tests
-        self.rho_max = 0.92
+        self.rho_upper = 0.92
 
     def _transform(self, uv):
         uv = to2d(uv)
@@ -133,11 +140,7 @@ class GaussianCopula(Copula):
     def rho(self, val):
         """ Set theta parameter """
         rho = float(val)
-        if rho < self.rho_min or rho > self.rho_max:
-            errmess = f"Expected rho in [{self.rho_min},"\
-                + f" {self.rho_max}], got {rho}."
-            raise ValueError(errmess)
-
+        self._check_rho(rho)
         self._rho = rho
         # Kendal Tau of Gaussian copula. See Joe (2014) Page 164.
         self.theta = math.sin(math.pi * rho / 2)
@@ -190,10 +193,7 @@ class GumbelCopula(Copula):
     def rho(self, val):
         """ Set theta parameter """
         rho = float(val)
-        if rho < self.rho_min or rho > self.rho_max:
-            errmess = f"Expected rho in [{self.rho_min}, "\
-                + f"{self.rho_max}], got {rho}."
-            raise ValueError(errmess)
+        self._check_rho(rho)
         self._rho = rho
         self.theta = 1. / (1. - rho)
 
@@ -265,9 +265,7 @@ class ClaytonCopula(Copula):
     def rho(self, val):
         """ Set theta parameter """
         rho = float(val)
-        errmsg = f"Expected rho in [{self.rho_min}, "\
-            + f"{self.rho_max}], got {rho}."
-        assert rho >= self.rho_min and rho <= self.rho_max, errmsg
+        self._check_rho(rho)
         self._rho = rho
         self.theta = 2. * rho/(1. - rho)
 
@@ -308,8 +306,7 @@ class FrankCopula(Copula):
     def rho(self, val):
         """ Set theta parameter """
         rho = float(val)
-        errmsg = f"Expected rho in [{RHO_LOWER}, {RHO_UPPER}], got {rho}."
-        assert rho >= RHO_LOWER and rho <= RHO_UPPER, errmsg
+        self._check_rho(rho)
         self._rho = rho
         self.theta = 2. * rho / (1. - rho)
 
@@ -326,8 +323,8 @@ class FrankCopula(Copula):
         theta = self.theta
         # see Joe (2014), eq 4.7 page 165
         w = 1 - math.exp(-theta)
-        x = np.exp(-theta*ucond)
-        y = np.exp(-theta*v)
+        x = np.exp(-theta * ucond)
+        y = np.exp(-theta * v)
         return x / (w / (1 - y) - (1-x))
 
     def cdf(self, uv):
@@ -343,4 +340,4 @@ class FrankCopula(Copula):
         # see Joe (2014), eq 4.7 page 165
         w = 1 - math.exp(-theta)
         x = np.exp(-theta * ucond)
-        return -1. / theta*np.log(1 - w / ((1./q - 1) * x + 1))
+        return -1. / theta * np.log(1 - w / ((1./q - 1) * x + 1))

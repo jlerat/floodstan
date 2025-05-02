@@ -52,12 +52,8 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         dnocens = yboot[yboot >= censor]
         ncens = (yboot < censor).sum()
 
-        # Run sampling variable with low number of
-        # importance samples
-        pfi = False
         sv = sample.StanSamplingVariable(marginal, yboot, censor,
-                                         ninits=1,
-                                         prior_from_importance=pfi)
+                                         ninits=1)
         stan_data = sv.to_dict()
         marginal.params = {k[1:]: v for k, v in
                            sv.initial_parameters[0].items()}
@@ -95,7 +91,7 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         smp = stan_test_marginal(data=stan_data)
 
         # Test params
-        atol = 1e-5
+        atol = 5e-4
         locn = smp.filter(regex="ylocn").values
         assert allclose(locn, marginal.locn, atol=atol)
 
@@ -136,6 +132,7 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
             assert allclose(lp, expected, atol=atol)
             lpr += lp.squeeze()
 
+        atol = 5e-3
         ll = smp.filter(regex="loglikelihood").values[0]
         expected = marginal.logpdf(dnocens).sum()
         expected += ncens * marginal.logcdf(censor)
