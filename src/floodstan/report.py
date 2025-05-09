@@ -300,6 +300,7 @@ def ams_report(marginal, params=None, observed=None,
           if cn in report_columns or cn in cp]
     report_stat = report_df.loc[:, cc].describe(percentiles=QUANTILES)
     report_stat = report_stat.drop(["count"], axis=0)
+    report_stat.loc["SKEW", :] = report_df.loc[:, cc].skew()
 
     # .. compute confidence interval
     ridx = report_stat.index

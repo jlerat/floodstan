@@ -47,11 +47,11 @@ def test_process_stan_diagnostic():
 def test_report(stationid, marginal_name, allclose):
     marginal = marginals.factory(marginal_name)
     y = get_ams(stationid)
-    params = sample.bootstrap(marginal, y, nboot=1000)
+    params = sample.univariate_bootstrap(marginal, y, nboot=1000)
 
     # Run report without obs
     rep, _ = report.ams_report(marginal, params)
-    assert rep.shape == (12, 14)
+    assert rep.shape == (12, 15)
 
     pred = rep.POSTERIOR_PREDICTIVE.filter(regex="DESIGN")
     assert pred.notnull().all()
@@ -63,7 +63,7 @@ def test_report(stationid, marginal_name, allclose):
         years = np.arange(y1, y2 + 1)
         obs = {year: y[year] for year in years}
         rep, _ = report.ams_report(marginal, params, obs)
-        assert rep.shape == (12 + 2 * len(obs), 14)
+        assert rep.shape == (12 + 2 * len(obs), 15)
 
 
 @pytest.mark.parametrize("nobs", [10, 100])
