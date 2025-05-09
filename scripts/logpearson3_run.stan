@@ -36,9 +36,9 @@ data {
 }
 
 parameters {
-  real ylocn; 
-  real ylogscale;
-  real yshape1;
+  real<lower=locn_lower, upper=locn_upper> ylocn; 
+  real<lower=logscale_lower, upper=logscale_upper> ylogscale;
+  real<lower=shape1_lower, upper=shape1_upper> yshape1;
 }  
 
 
@@ -62,5 +62,5 @@ model {
 
   // Case 21 : y censored 
   if(Ncases[2, 1] > 0)
-     target += Ncases[2,1] * logpearson3_lcdf(ycensor | ylocn, yscale, yshape1);
+     target += Ncases[2,1] * log(logpearson3_cdf(ycensor | ylocn, yscale, yshape1));
 }

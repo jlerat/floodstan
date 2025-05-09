@@ -67,6 +67,8 @@ def test_stan_sampling_dataset(distname, allclose):
     assert pd.isnull(df.y.iloc[i31-1]).all()
     assert pd.notnull(df.z.iloc[i31-1]).all()
 
+    sa = dset.stan_sample_args
+
     # Initial values
     inits = dset.initial_parameters
     for init in inits:
@@ -85,7 +87,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
 
     stan_nwarm = 10000
     stan_nsamples = 5000
-    stan_nchains = 10
+    stan_nchains = 5
 
     stationid = STATIONIDS[0]
     y = get_ams(stationid)
@@ -103,6 +105,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
     censor = y.median() if censoring else np.nanmin(y) - 1.
     yv = sample.StanSamplingVariable(marginal, y, censor,
                                      ninits=stan_nchains)
+
     censor = z.median() if censoring else np.nanmin(z) - 1.
     zv = sample.StanSamplingVariable(marginal, z, censor,
                                      ninits=stan_nchains)
@@ -110,6 +113,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
     sv = sample.StanSamplingDataset([yv, zv], copula)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
+    stan_sample_args = sv.stan_sample_args
 
     fout_stan = FTESTS / "sampling" / "bivariate" / f"{stationid}_{copula}"
     fout_stan.mkdir(exist_ok=True, parents=True)
@@ -122,6 +126,61 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
                                       iter_warmup=stan_nwarm,
                                       iter_sampling=
                                       stan_nsamples//stan_nchains,
+                                      parallel_chains=stan_nchains,
+                                      output_dir=fout_stan,
+                                      inits=stan_inits,
+                                      show_progress=False,
+                                      **stan_sample_args)
+    df = smp.draws_pd()
+    diag = report.process_stan_diagnostic(smp.diagnose())
+
+    # Test diag
+    assert diag["treedepth"] == "satisfactory"
+    assert diag["ebfmi"] == "satisfactory"
+    assert diag["rhat"] == "satisfactory"
+
+    # Test divergence
+    prc = diag["divergence_proportion"]
+    print(f"\n{stationid}-{copula}-{censoring} : Divergence proportion = {prc}\n")
+    thresh = 30 if censoring else 5
+    assert prc < thresh
+
+    # Clean folder
+    for f in fout_stan.glob("*.*"):
+        f.unlink()
+
+    fout_stan.rmdir()
+
+
+def test_bivariate_sampling_problem(allclose):
+    LOGGER = sample.get_logger(stan_logger=True)
+
+    stan_nwarm = 10000
+    stan_nsamples = 5000
+    stan_nchains = 10
+
+    LOGGER = sample.get_logger(stan_logger=True)
+
+    fd = FTESTS / "data" / "bivariate_stan_data.json"
+    with fd.open("r") as fo:
+        stan_data = json.load(fo)
+
+    fi = FTESTS / "data" / "bivariate_stan_inits.json"
+    with fd.open("r") as fo:
+        stan_inits = json.load(fo)
+
+    fout_stan = FTESTS / "sampling" / "bivariate" / "problem"
+    fout_stan.mkdir(exist_ok=True, parents=True)
+    for f in fout_stan.glob("*.*"):
+        f.unlink()
+
+    smp = bivariate_censored_sampling(data=stan_data,
+                                      chains=stan_nchains,
+                                      seed=SEED,
+                                      iter_warmup=stan_nwarm,
+                                      iter_sampling=
+                                      stan_nsamples//stan_nchains,
+                                      parallel_chains=stan_nchains,
                                       output_dir=fout_stan,
                                       inits=stan_inits,
                                       show_progress=False)
@@ -135,11 +194,68 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
 
     # Test divergence
     prc = diag["divergence_proportion"]
-    thresh = 30 if censoring else 5
-    assert prc < thresh
+    assert prc < 20
 
     # Clean folder
     for f in fout_stan.glob("*.*"):
         f.unlink()
 
     fout_stan.rmdir()
+
+
+@pytest.mark.parametrize("varname", ["y", "z"])
+def test_bivariate_sampling_not_enough_data(varname, allclose):
+    LOGGER = sample.get_logger(stan_logger=True)
+
+    marginal = marginals.factory("GEV")
+
+    stan_nwarm = 10000
+    stan_nsamples = 5000
+    stan_nchains = 5
+
+    stationid = STATIONIDS[0]
+    y = get_ams(stationid)
+
+    # Generate random covariate
+    scale = np.nanstd(y) / 5
+    z = y + np.random.normal(0, scale, size=len(y))
+
+    N = len(y)
+
+    z.iloc[-2] = np.nan # to add a missing data in z
+    df = pd.DataFrame({"y": y, "z": z}).sort_index()
+    y, z = df.y, df.z
+
+    censor = y.median()
+    yv = sample.StanSamplingVariable(marginal, y, censor,
+                                     ninits=stan_nchains)
+
+    censor = z.median()
+    zv = sample.StanSamplingVariable(marginal, z, censor,
+                                     ninits=stan_nchains)
+
+    sv = sample.StanSamplingDataset([yv, zv], "Gumbel")
+    stan_data = sv.to_dict()
+    stan_inits = sv.initial_parameters
+
+    # Leaves only 4 values not nan
+    if varname == "y":
+        inonan = np.where(~np.isnan(y))[0]
+        stan_data["y"][inonan[4:]] = np.nan
+    else:
+        inonan = np.where(~np.isnan(z))[0]
+        stan_data["z"][inonan[4:]] = np.nan
+
+
+    msg = "Error during sampling"
+    with pytest.raises(RuntimeError, match=msg):
+        smp = bivariate_censored_sampling(data=stan_data,
+                                      chains=stan_nchains,
+                                      seed=SEED,
+                                      iter_warmup=stan_nwarm,
+                                      iter_sampling=
+                                      stan_nsamples//stan_nchains,
+                                      parallel_chains=stan_nchains,
+                                      inits=stan_inits,
+                                      show_progress=False)
+

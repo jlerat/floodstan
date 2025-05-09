@@ -92,32 +92,27 @@ data {
   real zcensor;
 }
 
+transformed data {
+  // Imposes that at least 5 data points are observed
+  // for variable y
+  int<lower=5> Ny = Ncases[1, 1] + Ncases[1, 2] + Ncases[1, 3];  
+  int<lower=5> Nz = Ncases[1, 1] + Ncases[2, 1] + Ncases[3, 1];  
+}
+
 parameters {
-  //// Parameter for observed streamflow
-  //real<lower=locn_lower, upper=locn_upper> ylocn; 
-  //real<lower=logscale_lower, upper=logscale_upper> ylogscale;
-  //real<lower=shape1_lower, upper=shape1_upper> yshape1;
-
-  //// Parameter for covariate
-  //real<lower=locn_lower, upper=locn_upper> zlocn; 
-  //real<lower=logscale_lower, upper=logscale_upper> zlogscale;
-  //real<lower=shape1_lower, upper=shape1_upper> zshape1;
-
-  //// Parameter for copula correlation
-  //real<lower=rho_lower, upper=rho_upper> rho;
-
   // Parameter for observed streamflow
-  real ylocn; 
-  real ylogscale;
-  real yshape1;
+  // .. no bounds for loc, see univariate_censored_sampling
+  real ylocn;
+  real<lower=logscale_lower, upper=logscale_upper> ylogscale;
+  real<lower=shape1_lower, upper=shape1_upper> yshape1;
 
   // Parameter for covariate
-  real zlocn; 
-  real zlogscale;
-  real zshape1;
+  real zlocn;
+  real<lower=logscale_lower, upper=logscale_upper> zlogscale;
+  real<lower=shape1_lower, upper=shape1_upper> zshape1;
 
   // Parameter for copula correlation
-  real rho;
+  real<lower=rho_lower, upper=rho_upper> rho;
 }  
 
 
@@ -177,22 +172,29 @@ model {
   // y and z. This case does not contribute to the likelihood.
 
   // Case 11 : both y and z observed
-  target += copula_lpdf(uv[i11,:] | copula, rho);
-  target += marginal_lpdf(y[i11] | ymarginal, ylocn, yscale, yshape1);
-  target += marginal_lpdf(z[i11] | zmarginal, zlocn, zscale, zshape1);
+  if(Ncases[1, 1] > 0) {
+    target += copula_lpdf(uv[i11,:] | copula, rho);
+    target += marginal_lpdf(y[i11] | ymarginal, ylocn, yscale, yshape1);
+    target += marginal_lpdf(z[i11] | zmarginal, zlocn, zscale, zshape1);
+  }
 
   // Case 21 : y censored and z observed
-  target += copula_lpdf_conditional(uv[i21, 2], ucensor, copula, rho);
-  target += marginal_lpdf(z[i21] | zmarginal, zlocn, zscale, zshape1);
+  if(Ncases[2, 1] > 0) {
+    target += copula_lpdf_conditional(uv[i21, 2], ucensor, copula, rho);
+    target += marginal_lpdf(z[i21] | zmarginal, zlocn, zscale, zshape1);
+  }
 
   // Case 31 : y is missing and z is observed. 
   // this is marginal pdf for z
-  target += marginal_lpdf(z[i31] | zmarginal, zlocn, zscale, zshape1);
+  if(Ncases[3, 1] > 0) 
+    target += marginal_lpdf(z[i31] | zmarginal, zlocn, zscale, zshape1);
 
   // Case 12 : y observed and z censored
   // we re-use the expression of case 12 and invert u and v variables
-  target += copula_lpdf_conditional(uv[i12, 1], vcensor, copula, rho);
-  target += marginal_lpdf(y[i12] | ymarginal, ylocn, yscale, yshape1);
+  if(Ncases[1, 2] > 0) {
+    target += copula_lpdf_conditional(uv[i12, 1], vcensor, copula, rho);
+    target += marginal_lpdf(y[i12] | ymarginal, ylocn, yscale, yshape1);
+  }
 
   // Case 22 : both y and z censored. Copulas cdf times 
   // the number of occurences for 22

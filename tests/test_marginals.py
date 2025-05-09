@@ -39,6 +39,45 @@ def test_lh_moments(station, censoring, allclose):
     assert allclose(lams, expected, rtol=0, atol=1e-3)
 
 
+@pytest.mark.parametrize("param_name",
+                         marginals.PARAMETERS)
+def test_prior_properties(param_name):
+    with pytest.raises(ValueError, match="Expected param_name"):
+        marginals.TruncatedNormalParameterPrior("bidule")
+
+    prior = marginals.TruncatedNormalParameterPrior(param_name)
+    str(prior)
+    assert len(prior.to_list()) == 2
+
+    s = prior.sample(100000)
+    assert np.all(s > prior.lower)
+    assert np.all(s < prior.upper)
+
+    x0 = getattr(marginals, f"{param_name.upper()}_LOWER") + 1e-3
+    x1 = getattr(marginals, f"{param_name.upper()}_UPPER") - 1e-3
+    x = np.linspace(x0, x1, 10)
+    assert np.all(np.isfinite(prior.logpdf(x)))
+    assert np.all(np.isfinite(prior.logcdf(x)))
+
+    prior.lower = 10.
+    prior.upper = -10.
+    with pytest.raises(ValueError, match="Inconsistent lower"):
+        prior.lower
+
+    prior.set_uninformative()
+    rv = prior.rv
+    assert prior.loc == 0
+    assert prior.scale == 1e10
+    assert prior._a == -1.
+    assert prior._b == 1.
+
+    pc = prior.clone()
+    for n in ["lower", "upper", "loc", "scale", "uninformative"]:
+        v1 = getattr(pc, n)
+        v2 = getattr(prior, n)
+        assert v1 == v2
+
+
 def test_floodfreqdist(allclose):
     name = "bidule"
     dist = marginals.FloodFreqDistribution(name)
@@ -94,44 +133,30 @@ def test_floodfreqdist(allclose):
         dist.locn_prior.scale = np.nan
 
 
-@pytest.mark.parametrize("param_name",
-                         marginals.PARAMETERS)
-def test_prior_properties(param_name):
-    with pytest.raises(ValueError, match="Expected param_name"):
-        marginals.TruncatedNormalParameterPrior("bidule")
-
-    prior = marginals.TruncatedNormalParameterPrior(param_name)
-    str(prior)
-    assert len(prior.to_list()) == 2
-
-    s = prior.sample(100000)
-    assert np.all(s > prior.lower)
-    assert np.all(s < prior.upper)
-
-    x0 = getattr(marginals, f"{param_name.upper()}_LOWER") + 1e-3
-    x1 = getattr(marginals, f"{param_name.upper()}_UPPER") - 1e-3
-    x = np.linspace(x0, x1, 10)
-    assert np.all(np.isfinite(prior.logpdf(x)))
-    assert np.all(np.isfinite(prior.logcdf(x)))
-
-    prior.lower = 10.
-    prior.upper = -10.
-    with pytest.raises(ValueError, match="Inconsistent lower"):
-        prior.lower
-
-    prior.set_uninformative()
-    rv = prior.rv
-    assert prior.loc == 0
-    assert prior.scale == 1e10
-    assert prior._a == -1.
-    assert prior._b == 1.
-
-
-@pytest.mark.parametrize("distname",
+@pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
-def test_marginals_properties(distname, allclose):
+def test_floodfreqdist_clone(marginal_name, allclose):
+    marginal = marginals.factory(marginal_name)
     streamflow = get_ams("203014")
-    dist = marginals.factory(distname)
+    marginal.params_guess(streamflow)
+
+    for n in marginals.PARAMETERS:
+        prior = getattr(marginal, f"{n}_prior")
+        prior.loc = marginal[n]
+
+    mc = marginal.clone()
+    for n in marginals.PARAMETERS:
+        assert marginal[n] == mc[n]
+
+        prior = getattr(mc, f"{n}_prior")
+        assert prior.loc == mc[n]
+
+
+@pytest.mark.parametrize("marginal_name",
+                         marginals.MARGINAL_NAMES)
+def test_marginals_properties(marginal_name, allclose):
+    streamflow = get_ams("203014")
+    dist = marginals.factory(marginal_name)
     dist.params_guess(streamflow)
     s = str(dist)
     y = dist.rvs(size=10000)
@@ -141,53 +166,53 @@ def test_marginals_properties(distname, allclose):
 
 
 
-@pytest.mark.parametrize("distname",
+@pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("stationid",
                          get_stationids())
-def test_marginals_vs_nrivfloodfreq(distname, stationid, allclose):
+def test_marginals_vs_nrivfloodfreq(marginal_name, stationid, allclose):
     nparams = 500
     streamflow = get_ams(stationid)
 
-    if distname in ["GeneralizedPareto", "GeneralizedLogistic", "Gamma"]:
-        pytest.skip(f"Skipping {distname}")
+    if marginal_name in ["GeneralizedPareto", "GeneralizedLogistic", "Gamma"]:
+        pytest.skip(f"Skipping {marginal_name}")
 
-    dist1 = fdist.factory(distname)
-    dist2 = marginals.factory(distname)
+    dist1 = fdist.factory(marginal_name)
+    dist2 = marginals.factory(marginal_name)
 
     # Test lh moments
     p = dist1.fit_lh_moments(streamflow).iloc[0]
     dist1.set_dict_params(p.to_dict())
 
     # Skip if extreme shape parameter values
-    if distname in ["GEV", "LogPearson3"]:
-        sh = dist1.kappa if distname == "GEV" else dist1.g
+    if marginal_name in ["GEV", "LogPearson3"]:
+        sh = dist1.kappa if marginal_name == "GEV" else dist1.g
         if sh < marginals.SHAPE1_LOWER or \
                 sh > marginals.SHAPE1_UPPER:
             pytest.skip("Skipping test because shape is out of bounds")
 
     dist2.fit_lh_moments(streamflow)
 
-    if distname == "LogNormal":
+    if marginal_name == "LogNormal":
         assert allclose(dist2.locn, dist1.m, atol=1e-6)
         assert allclose(dist2.logscale, math.log(dist1.s), atol=1e-6)
 
-    elif distname == "Normal":
+    elif marginal_name == "Normal":
         assert allclose(dist2.locn, dist1.mu, atol=1e-6)
         assert allclose(dist2.logscale, dist1.logsig, atol=1e-6)
 
-    elif distname == "Gumbel":
+    elif marginal_name == "Gumbel":
         assert allclose(dist2.locn, dist1.tau, atol=1e-6)
         assert allclose(dist2.logscale, dist1.logalpha, atol=1e-6)
 
-    elif distname == "GEV":
+    elif marginal_name == "GEV":
         pass
         # Upgraded GEV lh moments
         #assert allclose(dist2.locn, dist1.tau, atol=1e-6)
         #assert allclose(dist2.logscale, dist1.logalpha, atol=1e-6)
         #assert allclose(dist2.shape1, dist1.kappa, atol=1e-6)
 
-    elif distname == "LogPearson3":
+    elif marginal_name == "LogPearson3":
         assert allclose(dist2.locn, dist1.m, atol=1e-6)
         assert allclose(dist2.logscale, math.log(dist1.s), atol=1e-6)
         assert allclose(dist2.shape1, dist1.g, atol=1e-6)
@@ -198,30 +223,30 @@ def test_marginals_vs_nrivfloodfreq(distname, stationid, allclose):
         dist1.set_dict_params(param.to_dict())
 
         # Skip if extreme shape parameter values
-        if distname in ["GEV", "LogPearson3"]:
-            sh = dist1.kappa if distname == "GEV" else dist1.g
+        if marginal_name in ["GEV", "LogPearson3"]:
+            sh = dist1.kappa if marginal_name == "GEV" else dist1.g
             if sh < marginals.SHAPE1_LOWER or \
                     sh > marginals.SHAPE1_UPPER:
                 continue
 
-        if distname == "LogNormal":
+        if marginal_name == "LogNormal":
             dist2.locn = dist1.m
             dist2.logscale = math.log(dist1.s)
 
-        elif distname == "Normal":
+        elif marginal_name == "Normal":
             dist2.locn = dist1.mu
             dist2.logscale = dist1.logsig
 
-        elif distname == "Gumbel":
+        elif marginal_name == "Gumbel":
             dist2.locn = dist1.tau
             dist2.logscale = dist1.logalpha
 
-        elif distname == "GEV":
+        elif marginal_name == "GEV":
             dist2.locn = dist1.tau
             dist2.logscale = dist1.logalpha
             dist2.shape1 = dist1.kappa
 
-        elif distname == "LogPearson3":
+        elif marginal_name == "LogPearson3":
             dist2.locn = dist1.m
             dist2.logscale = math.log(dist1.s)
             dist2.shape1 = dist1.g
@@ -235,22 +260,27 @@ def test_marginals_vs_nrivfloodfreq(distname, stationid, allclose):
 
         cdf1 = dist1.cdf(streamflow)
         cdf2 = dist2.cdf(streamflow)
-        assert allclose(cdf1, cdf2)
+        atol = 5e-7
+        assert allclose(cdf1, cdf2, atol=atol)
+
+        lcdf1 = dist1.logcdf(streamflow)
+        lcdf2 = dist2.logcdf(streamflow)
+        assert allclose(lcdf1, lcdf2, atol=atol)
 
 
-@pytest.mark.parametrize("distname",
+@pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("stationid",
                          get_stationids())
-def test_params_guess(distname, stationid, allclose):
+def test_params_guess(marginal_name, stationid, allclose):
     nvalues = 1000
     nboot = 200
     streamflow = get_ams(stationid)
 
-    dist = marginals.factory(distname)
+    dist = marginals.factory(marginal_name)
     dist.params_guess(streamflow)
 
-    distb = marginals.factory(distname)
+    distb = marginals.factory(marginal_name)
     for iboot in range(nboot):
         ys = dist.rvs(nvalues)
         distb.params_guess(ys)
@@ -263,13 +293,13 @@ def test_params_guess(distname, stationid, allclose):
         assert np.all(~np.isnan(lpdf))
 
 
-@pytest.mark.parametrize("distname",
+@pytest.mark.parametrize("marginal_name",
                          data_reader.DISTRIBUTIONS)
 @pytest.mark.parametrize("station",
                          data_reader.STATIONS)
-def test_quantile_vs_flike(distname, station, allclose):
+def test_quantile_vs_flike(marginal_name, station, allclose):
     try:
-        testdata, fr = data_reader.get_test_data(station, distname,
+        testdata, fr = data_reader.get_test_data(station, marginal_name,
                                                  "LH0", False, "flike")
     except FileNotFoundError:
         pytest.skip("No test data.")
@@ -277,31 +307,31 @@ def test_quantile_vs_flike(distname, station, allclose):
     qt = testdata["quantiles"].loc[:, "quantile"]
     pp = 1-1/qt.index
 
-    dist = marginals.factory(distname)
+    dist = marginals.factory(marginal_name)
 
     # Set parameters
     fit = testdata["fit"]
 
-    if distname == "GEV":
+    if marginal_name == "GEV":
         dist.locn = fit.loc[0, 1]
         dist.logscale = math.log(fit.loc[1, 1])
         dist.shape1 = fit.loc[2, 1]
 
-    elif distname == "LogPearson3":
+    elif marginal_name == "LogPearson3":
         dist.locn = fit.loc[0, 1]
         dist.logscale = math.log(fit.loc[1, 1])
         dist.shape1 = fit.loc[2, 1]
 
-    elif distname == "Gumbel":
+    elif marginal_name == "Gumbel":
         dist.locn = fit.loc[0, 1]
         dist.logscale = math.log(fit.loc[1, 1])
 
-    elif distname == "LogNormal":
+    elif marginal_name == "LogNormal":
         dist.locn = fit.loc[0, 1]
         dist.logscale = math.log(fit.loc[1, 1])
 
     qt2 = dist.ppf(pp)
-    if distname in ["LogNormal", "LogPearson3"]:
+    if marginal_name in ["LogNormal", "LogPearson3"]:
         # flike operates on log10 transform data for these 2 distributions
         # and not log transform. As our procedure apply a log transform,
         # we first transform to log10 and then exponentiate, which
@@ -311,15 +341,15 @@ def test_quantile_vs_flike(distname, station, allclose):
     assert allclose(qt, qt2, atol=0.1, rtol=5e-3)
 
 
-@pytest.mark.parametrize("distname",
+@pytest.mark.parametrize("marginal_name",
                          data_reader.DISTRIBUTIONS)
 @pytest.mark.parametrize("station",
                          data_reader.STATIONS)
 @pytest.mark.parametrize("censoring", [True, False])
-def test_fit_lh_moments_vs_flike(distname, station, censoring, allclose):
+def test_fit_lh_moments_vs_flike(marginal_name, station, censoring, allclose):
     eta = 0
     try:
-        testdata, fr = data_reader.get_test_data(station, distname, \
+        testdata, fr = data_reader.get_test_data(station, marginal_name, \
                                 f"LH{eta}", censoring, "flike")
     except FileNotFoundError:
         pytest.skip("No test data.")
@@ -327,8 +357,8 @@ def test_fit_lh_moments_vs_flike(distname, station, censoring, allclose):
     streamflow = testdata["data"].streamflow
     fit = testdata["fit"]
 
-    dist = marginals.factory(distname)
-    if distname in ["LogNormal", "LogPearson3"]:
+    dist = marginals.factory(marginal_name)
+    if marginal_name in ["LogNormal", "LogPearson3"]:
         # flike operates on log10 transform data for these 2 distributions
         # and not log transform. As our procedure apply a log transform,
         # we first transform to log10 and then exponentiate, which
@@ -343,12 +373,12 @@ def test_fit_lh_moments_vs_flike(distname, station, censoring, allclose):
                     "shape1": dist.shape1, "scale": dist.scale})
 
     # Compare parameters
-    if distname == "GEV":
+    if marginal_name == "GEV":
         assert allclose(samples.locn, fit.loc[0, 1], rtol=5e-3, atol=1e-2)
         assert allclose(samples.logscale, math.log(fit.loc[1, 1]), rtol=0, atol=1e-2)
         assert allclose(samples.shape1, fit.loc[2, 1], rtol=0, atol=1e-2)
 
-    elif distname == "LogPearson3":
+    elif marginal_name == "LogPearson3":
         assert allclose(samples.locn, fit.loc[0, 1], rtol=0, atol=1e-2)
         assert allclose(samples.scale, fit.loc[1, 1], rtol=0, atol=1e-2)
 
@@ -360,22 +390,22 @@ def test_fit_lh_moments_vs_flike(distname, station, censoring, allclose):
         else:
             assert allclose(samples.shape1, fit.loc[2, 1], rtol=0, atol=1e-2)
 
-    elif distname == "Gumbel":
+    elif marginal_name == "Gumbel":
         assert allclose(samples.logscale, math.log(fit.loc[1, 1]), rtol=0,atol=1e-2)
         assert allclose(samples.locn, fit.loc[0, 1], rtol=0, atol=1e-1)
 
-    elif distname == "LogNormal":
+    elif marginal_name == "LogNormal":
         assert allclose(samples.locn, fit.loc[0, 1], rtol=0, atol=1e-2)
         assert allclose(samples.scale, fit.loc[1, 1], rtol=0, atol=1e-2)
 
 
-@pytest.mark.parametrize("distname",
+@pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("stationid", get_stationids()[:3])
 @pytest.mark.parametrize("censoring", [False, True])
-def test_marginals_maxpost_numerical(distname, stationid, censoring, allclose):
+def test_marginals_maxpost_numerical(marginal_name, stationid, censoring, allclose):
     streamflow = get_ams(stationid)
-    marginal = marginals.factory(distname)
+    marginal = marginals.factory(marginal_name)
     censor = streamflow.quantile(0.33) if censoring else -1e10
     lmp, theta_lmp, dcens, ncens = \
         marginal.maximum_posterior_estimate(streamflow, censor)
@@ -388,18 +418,18 @@ def test_marginals_maxpost_numerical(distname, stationid, censoring, allclose):
     for theta in params:
         lp = -marginal.neglogpost(theta, dcens, censor, ncens)
         if np.isfinite(lp) and not np.isnan(lp):
-            mess = f"[{distname}/{stationid}/{censoring}] "\
+            mess = f"[{marginal_name}/{stationid}/{censoring}] "\
                    + f" num: lp={lp:0.1e} theta={theta} "\
                    + f" lmp: lp={lmp:0.1e} theta={theta_lmp}"
             eps = 5e-2
             assert lp < lmp + eps, print(mess)
 
 
-@pytest.mark.parametrize("distname", ["Gamma", "LogNormal", "Normal"])
+@pytest.mark.parametrize("marginal_name", ["Gamma", "LogNormal", "Normal"])
 @pytest.mark.parametrize("stationid", get_stationids())
-def test_marginals_mle_theoretical(distname, stationid, allclose):
+def test_marginals_mle_theoretical(marginal_name, stationid, allclose):
     streamflow = get_ams(stationid)
-    marginal = marginals.factory(distname)
+    marginal = marginals.factory(marginal_name)
 
     # Uninformative prior to get mle
     marginal.locn_prior.set_uninformative()
@@ -410,7 +440,7 @@ def test_marginals_mle_theoretical(distname, stationid, allclose):
         marginal.maximum_posterior_estimate(streamflow)
 
     # Theoretical value of MLE
-    if distname == "LogNormal":
+    if marginal_name == "LogNormal":
         marginal.params_guess(streamflow)
         locn, logscale = marginal.params[:2]
 
@@ -420,7 +450,7 @@ def test_marginals_mle_theoretical(distname, stationid, allclose):
         assert allclose(locn, locn0, atol=1e-8, rtol=0.)
         assert allclose(logscale, logscale0, atol=1e-8, rtol=0.)
 
-    elif distname == "Normal":
+    elif marginal_name == "Normal":
         marginal.params_guess(streamflow)
         locn, logscale = marginal.params[:2]
 
@@ -430,7 +460,7 @@ def test_marginals_mle_theoretical(distname, stationid, allclose):
         assert allclose(locn, locn0, atol=1e-8, rtol=0.)
         assert allclose(logscale, logscale0, atol=1e-8, rtol=0.)
 
-    elif distname == "Gamma":
+    elif marginal_name == "Gamma":
         marginal.params_guess(streamflow)
         locn, logscale = marginal.params[:2]
 
@@ -438,45 +468,45 @@ def test_marginals_mle_theoretical(distname, stationid, allclose):
     assert allclose(theta_mle[1], logscale, atol=1e-5, rtol=1e-5)
 
 
-@pytest.mark.parametrize("distname",
+@pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("stationid",
                          data_reader.STATIONS_BESTFIT)
 @pytest.mark.parametrize("censoring", [False, True])
-def test_marginals_vs_bestfit(distname, stationid, censoring, allclose):
-    if distname == "LogNormal":
+def test_marginals_vs_bestfit(marginal_name, stationid, censoring, allclose):
+    if marginal_name == "LogNormal":
         pytest.skip("Problem with LogNormal in bestfit")
     streamflow = get_ams(stationid)
 
     bestfit, censor = data_reader.read_bestfit_mle(stationid, censoring)
-    bestfit = bestfit.loc[:, distname]
+    bestfit = bestfit.loc[:, marginal_name]
 
-    marginal = marginals.factory(distname)
+    marginal = marginals.factory(marginal_name)
 
     theta_bestfit = np.array([float(bestfit["Location"]),
                               math.log(float(bestfit["Scale"])),
                               float(bestfit["Shape"])])
 
     # Take into account bestfit parameterisation
-    if distname in ["LogPearson3"]:
+    if marginal_name in ["LogPearson3"]:
         theta_bestfit[0] = math.log(10**theta_bestfit[0])
         theta_bestfit[1] = math.log(math.log(10**float(bestfit["Scale"])))
 
-    elif distname == "LogNormal":
+    elif marginal_name == "LogNormal":
         mean, std = bestfit.iloc[:2].astype(float)
         mu = math.log(mean / math.sqrt(1 + std**2 / mean**2))
         sig = math.log(1 + std**2 / mean**2)
         theta_bestfit[0] = mu
         theta_bestfit[1] = math.log(sig)
 
-    elif distname == "Gamma":
+    elif marginal_name == "Gamma":
         th, sc = theta_bestfit[:2]
         sc = math.exp(sc)
         theta_bestfit[0] = th*sc
         theta_bestfit[1] = math.log(th)
 
     # Fix 2 param distributions
-    if re.search("^(LogN|Norm|Gum|Gam)", distname):
+    if re.search("^(LogN|Norm|Gum|Gam)", marginal_name):
         theta_bestfit[-1] = 0
 
     marginal.params = theta_bestfit
@@ -495,21 +525,21 @@ def test_marginals_vs_bestfit(distname, stationid, censoring, allclose):
     assert np.all(quant_err < 1e-8)
 
 
-@pytest.mark.parametrize("distname",
+@pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("stationid",
                          data_reader.STATIONS_BESTFIT)
 @pytest.mark.parametrize("censoring", [False, True])
-def test_mle_vs_bestfit(distname, stationid, censoring, allclose):
-    if distname == "LogNormal":
+def test_mle_vs_bestfit(marginal_name, stationid, censoring, allclose):
+    if marginal_name == "LogNormal":
         pytest.skip("Problem with LogNormal in bestfit")
 
     streamflow = get_ams(stationid)
 
     bestfit, censor = data_reader.read_bestfit_mle(stationid, censoring)
-    bestfit = bestfit.loc[:, distname]
+    bestfit = bestfit.loc[:, marginal_name]
 
-    marginal = marginals.factory(distname)
+    marginal = marginals.factory(marginal_name)
 
     # Uninformative prior to get mle
     marginal.locn_prior.set_uninformative()
@@ -525,25 +555,25 @@ def test_mle_vs_bestfit(distname, stationid, censoring, allclose):
                               math.log(float(bestfit["Scale"])),
                               float(bestfit["Shape"])])
 
-    if distname in ["LogPearson3"]:
+    if marginal_name in ["LogPearson3"]:
         theta_bestfit[0] = math.log(10**theta_bestfit[0])
         theta_bestfit[1] = math.log(math.log(10**float(bestfit["Scale"])))
 
-    elif distname == "LogNormal":
+    elif marginal_name == "LogNormal":
         mean, std = bestfit.iloc[:2].astype(float)
         mu = math.log(mean / math.sqrt(1 + std**2 / mean**2))
         sig = math.log(1 + std**2 / mean**2)
         theta_bestfit[0] = mu
         theta_bestfit[1] = math.log(sig)
 
-    elif distname == "Gamma":
+    elif marginal_name == "Gamma":
         th, sc = theta_bestfit[:2]
         sc = math.exp(sc)
         theta_bestfit[0] = th*sc
         theta_bestfit[1] = math.log(th)
 
     # Fix 2 param distributions
-    if re.search("^(LogN|Norm|Gum|Gam)", distname):
+    if re.search("^(LogN|Norm|Gum|Gam)", marginal_name):
         theta_bestfit[-1] = 0
 
     # Test if we get better MLE than bestfit

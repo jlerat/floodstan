@@ -42,15 +42,14 @@ class SMCopula(copulas.Copula):
     def __init__(self, copula):
         super(SMCopula, self).__init__(f"SM-{copula}")
         self.copula = copula
-        self.rho_min = 0.01
-        self.rho_max = 0.95
+        self.rho_lower = copulas.RHO_LOWER
+        self.rho_upper = copulas.RHO_UPPER
 
     @copulas.Copula.rho.setter
     def rho(self, val):
         """ Set correlation parameter """
         rho = float(val)
-        errmsg = f"Expected rho in [{self.rho_min}, {self.rho_max}], got {rho}."
-        assert rho>=self.rho_min and rho<=self.rho_max, errmsg
+        self._check_rho(rho)
         self._rho = rho
 
         if self.copula == "Gaussian":
@@ -74,13 +73,13 @@ class SMCopula(copulas.Copula):
 
 def get_uv():
     x = np.exp(np.linspace(-7, 7, 10))
-    y = x/(1+x)
+    y = x / (1 + x)
     u, v = np.meshgrid(y, y)
     uv = np.column_stack([u.ravel(), v.ravel()])
     return uv, len(uv)
 
 def get_rhos(cop):
-    return np.linspace(cop.rho_min, cop.rho_max, 5)
+    return np.linspace(cop.rho_lower, cop.rho_upper, 5)
 
 # ---------------- TESTS -------------------------------------------
 def test_base_class():
@@ -89,12 +88,8 @@ def test_base_class():
     assert cop.name == "Dummy"
 
     # Test set/get of rho parameters
-    msg = r"Rho \(nan\)"
-    with pytest.raises(ValueError, match=msg):
-        rho = cop.rho
-
-    msg = f"Expected rho"
-    with pytest.raises(AssertionError, match=msg):
+    cop.rho = 0.5
+    with pytest.raises(ValueError):
         cop.rho = 100
 
     # test random sample
@@ -119,8 +114,8 @@ def test_vs_statsmodels(copula, allclose):
 
     uv, ndata = get_uv()
 
-    rmin = cop2.rho_min
-    rmax = cop2.rho_max
+    rmin = cop2.rho_lower
+    rmax = cop2.rho_upper
     nval = 20
     for rho in get_rhos(cop2):
         cop1.rho = rho
@@ -139,7 +134,7 @@ def test_vs_statsmodels(copula, allclose):
         # Statsmodels uses a random sample generator
         # that is not based in inverse CDF for Clayton
         if copula=="Clayton":
-            pytest.skip("Different random sample generator.")
+            continue
 
         pvalues = []
         for itry in range(10):

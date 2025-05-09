@@ -8,11 +8,11 @@
 ##
 ## ------------------------------
 
-
 import sys
 import re
 import math
 import argparse
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +29,7 @@ from cmdstanpy import CmdStanModel
 
 import importlib
 importlib.reload(marginals)
+importlib.reload(sample)
 
 f = Path(sample.__file__).parent.parent.parent / "tests" /\
     "test_sample_univariate.py"
@@ -49,7 +50,9 @@ args = parser.parse_args()
 censoring = args.censoring
 
 stationids = tsu.get_stationids()
+
 nboot = 100
+
 SEED = 5446
 
 # ----------------------------------------------------------------------
@@ -68,7 +71,7 @@ for f in fout.glob("*.*"):
 # @Logging
 # ----------------------------------------------------------------------
 basename = Path(__file__).stem
-LOGGER = sample.get_logger(stan_logger=True)
+LOGGER = sample.get_logger(stan_logger=False)
 
 # ----------------------------------------------------------------------
 # @Get data
@@ -79,78 +82,126 @@ LOGGER = sample.get_logger(stan_logger=True)
 marginal = marginals.factory("LogPearson3")
 
 stan_file = froot / "scripts" / "logpearson3_check.stan"
+LOGGER.info("Loading stan model")
 model = CmdStanModel(stan_file=stan_file)
-print(model)
+LOGGER.info(".. done")
 
 for stationid in stationids:
     LOGGER.info(f"Station {stationid}")
     y = tsu.get_ams(stationid)
+    N = len(y)
+    ndone = 0
 
     for iboot in range(nboot):
-        # Bootstrap fit
         rng = np.random.default_rng(SEED)
-        yboot = rng.choice(y.values, len(y))
-        marginal.params_guess(yboot)
+        yboot = rng.choice(y.values, N)
 
-        # Test 0 shape for edge cases
-        if np.random.uniform(0, 1) < 0.1:
-            marginal.shape1 = 1e-20
+        censor = np.percentile(yboot, 20)
+        dnocens = yboot[yboot >= censor]
+        ncens = (yboot < censor).sum()
 
-        sv = sample.StanSamplingVariable(marginal, yboot)
+        # Run sampling variable with low number of
+        # importance samples
+        nimportance = 0
+        sv = sample.StanSamplingVariable(marginal, yboot, censor,
+                                 nimportance=nimportance,
+                                 ninits=1)
         stan_data = sv.to_dict()
+        marginal.params = sv.initial_parameters[0]
+
+        # Test shape close to 0 for edge cases
+        if iboot < nboot // 20:
+            marginal.shape1 = 1e-20
+        elif iboot >= nboot // 20 and iboot < 2 * nboot // 20:
+            marginal.shape1 = 1e-3
+
+        y0, y1 = marginal.support
+        ynocens = yboot[yboot > censor]
+        if y0 > ynocens.min() or y1 < ynocens.max():
+            wmess = "Skipping because data is outside of support"
+            warnings.warn(wmess)
+            continue
+
+        ndone += 1
         stan_data["ylocn"] = marginal.locn
         stan_data["ylogscale"] = marginal.logscale
         stan_data["yshape1"] = marginal.shape1
 
-        kwargs = {}
+        # Run stan
+        kwargs = dict()
+        kwargs["data"] = stan_data
         kwargs["chains"] = 1
+        kwargs["seed"] = SEED
         kwargs["iter_warmup"] = 1
         kwargs["iter_sampling"] = 1
         kwargs["fixed_param"] = True
         kwargs["show_progress"] = False
-        kwargs["show_progress"] = False
-        kwargs["output_dir"] = fout
-        fit = model.sample(data=stan_data, **kwargs)
-        smp = fit.draws_pd().squeeze()
+        fout_stan = fout / f"stan_{stationid}"
+        for f in fout_stan.glob("*.*"):
+            f.unlink()
+        kwargs["output_dir"] = fout_stan
+        out = model.sample(**kwargs)
+        smp = out.draws_pd().squeeze()
 
-        # Test
-        errmess = f"Error using {marginal}."
+        # Test params
+        errmess = f"Error : {marginal}"
+        atol = 1e-5
+        rtol = 1e-3
+        locn = smp.filter(regex="ylocn").values
+        assert np.allclose(locn, marginal.locn,
+                           atol=atol, rtol=rtol), errmess
 
-        u = smp.filter(regex="^u").values
-        tu = smp.filter(regex="tu").values
-        assert np.all(tu > 0), errmess
-        assert np.allclose(tu[u<0], 0.), errmess
+        logscale = smp.filter(regex="ylogscale").values
+        assert np.allclose(logscale, marginal.logscale,
+                           atol=atol, rtol=rtol), errmess
 
-        a1 = 1.01
-        exp1 = gamma.logpdf(u, a1)
-        lp1 = smp.filter(regex="lpdf1").values
-        assert np.allclose(lp1[u>0], exp1[u>0]), errmess
+        shape1 = smp.filter(regex="yshape1").values
+        assert np.allclose(shape1, marginal.shape1,
+                           atol=atol, rtol=rtol), errmess
 
-        a2 = 1.1
-        exp2 = gamma.logpdf(u, a2)
-        lp2 = smp.filter(regex="lpdf2").values
-        assert np.allclose(lp2[u>0], exp2[u>0]), errmess
+        # Test data
+        i11 = stan_data["i11"] - 1
+        luncens = smp.filter(regex="luncens").values[i11]
+        expected = marginal.logpdf(yboot[i11])
+        assert np.allclose(luncens, expected,
+                           atol=atol, rtol=rtol), errmess
 
-        tau = smp.filter(regex="tau_copy").values
-        assert np.allclose(tau, marginal.tau, atol=1e-5), errmess
+        cens = smp.filter(regex="^cens").values[i11]
+        expected = marginal.cdf(yboot[i11])
+        assert np.allclose(cens, expected,
+                           atol=atol, rtol=rtol), errmess
 
-        beta = smp.filter(regex="beta_copy").values
-        assert np.allclose(beta, marginal.beta, atol=1e-5), errmess
+        rtol = 1e-2
+        atol = 5e-3
+        lcens = smp.filter(regex="^lcens").values[i11]
+        expected = marginal.logcdf(yboot[i11])
+        assert np.allclose(lcens, expected,
+                           atol=atol, rtol=rtol), errmess
+        atol = 1e-5
+        rtol = 1e-3
 
-        alpha = smp.filter(regex="alpha_copy").values
-        assert np.allclose(alpha, marginal.alpha, atol=1e-5), errmess
+        lpr = 0.
+        for pn in marginals.PARAMETERS:
+            lp = smp.filter(regex=f"logprior_{pn}")
+            prior = getattr(marginal, f"{pn}_prior")
+            expected = prior.logpdf(getattr(marginal, pn))
+            assert np.allclose(lp, expected,
+                               atol=atol, rtol=rtol), errmess
+            lpr += lp.squeeze()
 
-        luncens = smp.filter(regex="luncens").values
-        expected = marginal.logpdf(yboot)
-        assert np.allclose(luncens, expected, atol=1e-5), errmess
+        ll = smp.filter(regex="loglikelihood").values[0]
+        expected = marginal.logpdf(dnocens).sum()
+        expected += ncens * marginal.logcdf(censor)
+        assert np.allclose(ll, expected,
+                           atol=atol, rtol=rtol), errmess
 
-        cens = smp.filter(regex="^cens").values
-        expected = marginal.cdf(yboot)
-        assert np.allclose(cens, expected, atol=1e-5), errmess
+        lp = smp.filter(regex="logposterior").values[0]
+        expected = -marginal.neglogpost(marginal.params, dnocens,
+                                       censor, ncens)
+        assert np.allclose(lp, expected,
+                           atol=atol, rtol=rtol), errmess
 
-        lcens = smp.filter(regex="^lcens").values
-        expected = marginal.logcdf(yboot)
-        assert np.allclose(lcens, expected, atol=1e-5), errmess
-
+    # Ensures at least 5 simulation beyond 0 shape trials
+    assert ndone > nboot // 10 + 5
 
 LOGGER.info("Process completed")

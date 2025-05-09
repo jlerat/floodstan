@@ -18,9 +18,13 @@ DESIGN_ARIS = [2, 5, 10, 20, 50, 100, 200, 500, 1000]
 N_POSTPRED_APPROX = 2000
 
 # CDF range covered in posterior predictive approx
-CDF_APPROX_MIN = 0.3
+CDF_APPROX_MIN = 1e-10
 CDF_APPROX_MAX = 1 - 1e-10
 LOGIT_MAX = 200
+
+
+def _ari_to_label(ari):
+    return re.sub("\\.0$", "", f"DESIGN_ARI{ari}")
 
 
 def _prepare_design_aris(design_aris, truncated_probability):
@@ -29,11 +33,11 @@ def _prepare_design_aris(design_aris, truncated_probability):
         raise ValueError(errmess)
 
     design_aris = np.array(design_aris)
+    design_columns = [_ari_to_label(ari) for ari in design_aris]
     design_cdf = 1 - 1./design_aris
     # Correct CDF with truncated probability
     design_cdf = (design_cdf - truncated_probability)\
         / (1 - truncated_probability)
-    design_columns = [f"DESIGN_ARI{ari}" for ari in design_aris]
 
     # Approx nodes to compute posterior predictive distribution
     # .. regular spacing
@@ -103,7 +107,7 @@ def process_stan_diagnostic(diag):
         "treedepth": "(T|t)reedepth",
         "divergence": "divergen(t|ce)",
         "ebfmi": "E-BFMI",
-        "effsamplesz": "Effective|effective draws",
+        "effsamplesz": "Effective|effective draws|effective sample",
         "rhat": "R-hat"
         }
 
@@ -253,8 +257,15 @@ def ams_report(marginal, params=None, observed=None,
         #    posterior distribution
         if posterior_predictive:
             fi = marginal.cdf(xi)
+            x0, x1 = marginal.support
+            fi[xi < x0] = 0.
+            fi[xi > x1] = 1.
+
             fm = marginal.cdf(xm)
-            a, b, c = quadapprox.get_coefficients(xi, fi, fm)
+            fm[xm < x0] = 0.
+            fm[xm > x1] = 1.
+
+            a, b, c = quadapprox.get_coefficients(xi, fi, fm, True)
             a_coefs += a
             b_coefs += b
             c_coefs += c
@@ -327,7 +338,7 @@ def ams_report(marginal, params=None, observed=None,
         report_stat.loc[:, cn] = np.nan
 
     for ari, qp, qm in zip(design_aris, design_post, design_meanp):
-        idx = f"DESIGN_ARI{ari}"
+        idx = _ari_to_label(ari)
         report_stat.loc[idx, cnp] = qp
         report_stat.loc[idx, cnm] = qm
 

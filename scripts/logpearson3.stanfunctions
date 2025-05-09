@@ -2,11 +2,6 @@ real sign(real x) {
     return x > 0 ? 1 : (x < 0 ? -1 : 0);
 }
 
-real trans(real x) {
-    real eps = 1e-30;
-    return (x + abs(x)) / 2 + eps * eps / 2 / (eps + abs(x));
-}
-
 real logpearson3_lpdf(vector y, real m, real s, real g) {
     int N = rows(y);
 
@@ -24,23 +19,17 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
         real alpha = 4 / g / g;
         real beta = 2 / g / s;
         real abs_beta = abs(beta);
-        real log_s = log(s);
-        real log_beta = log(2) - log(abs_g) - log_s;
-        real tau = m - alpha / beta;
+        real tau = m - 2 * s / g;
 
-        real u;
-        real ly;
-        real lpdf_sum = 0;
-
-        for(i in 1:N) {
-            ly = log(y[i]);
-            if(u <= 0) 
-                reject("u[", i, "] (", u, ") < 0 with m=", m, " s=", s, " g=", g);
-
-            lpdf_sum += gamma_lpdf(u | alpha, 1.);
-            lpdf_sum += log_beta - ly;
+        vector[N] ly = log(y);
+        vector[N] u = sign_g * (ly - tau);
+        real umin = min(u);
+        if(umin < 0) {
+            reject("[logpearson3_lpdf] umin (", umin, ") < 0 with m=", m, 
+                   " logs=", log(s), " g=", g);
         }
-        return lpdf_sum;
+
+        return gamma_lpdf(u | alpha, abs_beta) - sum(ly);
     }
 }
 
@@ -55,59 +44,30 @@ real logpearson3_lpdf(vector y, real m, real s, real g) {
 //    Temme, N. M. (1994). A set of algorithms for the incomplete gamma 
 //    functions. Probability in the Engineering and Informational 
 //    Sciences, 8(2), 291-307.
-
+//
 // Approx of the function gamma star defined as
 // Gs(x) = sqrt(a/2pi).exp(a).a^(-a).Gamma(a)
 //
-real gammastar(real alpha) {
+real gamma_star(real alpha) {
     real num = 0;
     real den = 0;
 
-    array[4] real ak, bk;
-
     // Coefficients from Temme (1987)
-    ak[1] = 5.115471897484e-2;
-    bk[1] = 1.544892866413e-2;
-    ak[2] = 4.990196893575e-1;
-    bk[2] = 4.241288251916e-1;
-    ak[3] = 9.404953102900e-1;
-    bk[3] = 8.571609363101e-1;
-    ak[4] = 9.999999625957e-1;
-    bk[4] = 1.000000000000e+0;
+    array[4] real ak = {5.115471897484e-2, 4.990196893575e-1,
+                        9.404953102900e-1, 9.999999625957e-1};
+
+    array[4] real bk = {1.544892866413e-2, 4.241288251916e-1,
+                        8.571609363101e-1, 1.000000000000e+0};
     
     for(i in 1:4){
-        num = num*alpha+ak[5-i];
-        den = den*alpha+bk[5-i];
+        num = num * alpha + ak[5-i];
+        den = den * alpha + bk[5-i];
     }
 
     return num/den;
 }
 
-real logpearson3_cdf(real y, real m, real s, real g){
-    real cdf;
-    
-    // transition from Pearson3 to Normal
-    real n2p_trans = 1e-6;
-
-    // Threshold to transition from pearson to approx
-    // for cdf computation. This a high threshold
-    // due problems with computation of gamma function 
-    // for high x in Stan. 
-    real approx2pearson_transition = 0.5; 
-    
-    // Original LogPearson3 parameterisation
-    real alpha = 4. / g / g;
-    real beta = 2. / g / s;
-    real abs_beta = abs(beta);
-    real tau = m - alpha / beta;
-    
-    real abs_g = abs(g);
-
-    // .. no parameter constraints because they are covered in lpdf
-    // .. function above
-
-    // Variables needed for incomplete gamma approx.
-    // See refs above.
+real gamma_cdf_temme(real x, real alpha) {
     array[15] real fm = {-3.33333333e-01,  8.33333333e-02, -1.48148148e-02,
         1.15740741e-03,  3.52733686e-04, -1.78755144e-04,  3.91926318e-05,
        -2.18544851e-06, -1.85406221e-06,  8.29671134e-07, -1.76659527e-07,
@@ -116,55 +76,83 @@ real logpearson3_cdf(real y, real m, real s, real g){
     int Napprox = 14;
     array[Napprox+1] real bm;
 
-    // Compute log cdf depending on skew
-    //real x = beta * (log(y) - tau);
+    // First term of the approximation
+    real lam = x / alpha;
+    real eta = sqrt(2 * (lam - 1. - log(lam)));
+    eta = lam < 1 ? -eta : eta;
+    real cdf0 = erfc(-eta * sqrt(alpha / 2.)) / 2.;
+
+    // Approximation coefficients to compute the residual
+    bm[Napprox+1] = fm[Napprox+1];
+    bm[Napprox] = fm[Napprox];
+    real f;
+    for(i in 1:Napprox-1){
+        int mb = Napprox-i;
+        f = mb>0 ? fm[mb] : 1.0; 
+        bm[mb] = f + (mb + 1.) / alpha * bm[mb+2];
+    }
+    
+    // Compute residual
+    real S = 0;
+    for(ms in 1:Napprox)
+        S += bm[ms] * pow(eta, ms - 1.);
+
+    real A = exp(-alpha * eta * eta / 2.) / sqrt(2. * pi() * alpha);
+    real GS = gamma_star(alpha);
+    real R = A * S / GS;
+    
+    // .. put it together
+    return cdf0 - R;
+}
+
+real logpearson3_cdf(real y, real m, real s, real g){
+    real cdf;
+    
+    // transition from Pearson3 to Normal
+    real n2p_trans = 1e-6;
+    
+    // Threshold to transition from pearson to approx
+    // for cdf computation. This is a high threshold
+    // due to very slow computation of gamma function 
+    // for high x and alpha in Stan. 
+    real approx_trans = 1.; 
+
+    // Original LogPearson3 parameterisation
+    real alpha = 4. / g / g;
+    real beta = 2. / g / s;
+    real abs_beta = abs(beta);
+    real tau = m - 2 * s / g;
+    
+    real abs_g = abs(g);
+    real sign_g = sign(g);
+
+    // Important: here, the definition of x includes abs_beta
+    // contrary to what is done for logpearson3_logpdf.
+    // This is done because Temme's approximation does not have a 
+    // scaling parameters, and hence scaling must be included 
+    // in the x variable. Consequently, the stan function is
+    // used with a scale parameter set to 1.
     real x = beta * (log(y) - tau);
+    
+    if(x < 0 && abs_g > n2p_trans) 
+        reject("[logpearson3_cdf] x (", x, ") < 0 with m=", m, 
+               " logs=", log(s), " g=", g);
 
     if(abs_g < n2p_trans) {
         return lognormal_cdf(y | m, s);
     }
-    else if(abs_g > approx2pearson_transition) {
+    else if(abs_g > approx_trans) {
+        // Stan gamma cdf is fine
         cdf = gamma_cdf(x | alpha, 1.);
+    }    
+    else {
+        // Stan gamma is very slow and inaccurate. 
+        // Use Temme's approximation
+        cdf = gamma_cdf_temme(x, alpha);
+    } 
 
-    } else {
-        // First term of the approximation
-        real lam = x / alpha;
-        real eta = sqrt(2 * (lam - 1. -log(lam)));
-        eta = lam < 1 ? -eta : eta;
-        real cdf0 = erfc(-eta * sqrt(alpha / 2.)) / 2.;
-
-        // Approximation coefficients to compute the residual
-        bm[Napprox+1] = fm[Napprox+1];
-        bm[Napprox] = fm[Napprox];
-        real f;
-        for(i in 1:Napprox-1){
-            int mb = Napprox-i;
-            f = mb>0 ? fm[mb] : 1.0; 
-            bm[mb] = f + (mb + 1.) / alpha * bm[mb+2];
-        }
-      
-        // Compute residual
-        real S = 0;
-        for(ms in 1:Napprox)
-            S += bm[ms] * pow(eta, ms - 1.);
-
-        real A = exp(-alpha * eta * eta / 2.) / sqrt(2. * pi() * alpha);
-        real GS = gammastar(alpha);
-        real R = A * S / GS;
-        
-        // Put it together
-        cdf = cdf0 - R;
-    }
-
-    // In this case, cdf = 1-cdf, or 
     if(beta < 0)
-        cdf = 1-cdf;
+        cdf = 1 - cdf;
     
     return cdf;
 }
-
-real logpearson3_lcdf(real y, real m, real s, real g) {
-    return log(logpearson3_cdf(y | m, s, g));
-}
-
-

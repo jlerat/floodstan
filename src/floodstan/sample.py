@@ -12,16 +12,14 @@ from floodstan.copulas import COPULA_NAMES
 from floodstan.marginals import MARGINAL_NAMES
 from floodstan.marginals import PARAMETERS
 from floodstan.copulas import factory
-from floodstan.marginals import _prepare_censored_data
+from floodstan.data_processing import univariate2censored
+from floodstan.data_processing import univariate2cases
 
 MARGINAL_CODES = {code: name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code: name for name, code in COPULA_NAMES.items()}
 
 # Subset of copula currently supported in the stan model
 COPULA_NAMES_STAN = ["Gaussian", "Clayton", "Gumbel"]
-
-# Prior on copula parameter
-RHO_PRIOR = [0.7, 1.]
 
 # Prior on discrete parameters
 DISCRETE_LOCN_PRIOR = [1, 10]
@@ -31,7 +29,25 @@ CENSOR_DEFAULT = -1e10
 
 STAN_VARIABLE_INITIAL_CDF_MIN = 1e-8
 
-MAX_INIT_PARAM_SEARCH = 50
+# .. maximum number of iteration in importance sampling
+NITER_MAX_IMPORTANCE = 10
+
+# Minimum ratio between neff and nsamples to stop iterating
+EFFECTIVE_SAMPLE_FACTOR = 0.8
+
+# Minimum neff tolerated during iteration
+EFFECTIVE_SAMPLE_MIN = 5
+
+# Maximum number of
+NPARAMS_SAMPLED = 1000
+
+# Special stan sampling arguments
+STAN_SAMPLE_ARGS = {
+        "LogPearson3": {"adapt_delta": 0.999},
+        "GeneralizedLogistic": {"adapt_delta": 0.999},
+        "GeneralizedPareto": {"adapt_delta": 0.999},
+        "GEV": {"adapt_delta": 0.99},
+        }
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
@@ -98,8 +114,17 @@ def are_marginal_params_valid(marginal, locn, logscale, shape1, data, censor):
     except Exception:
         return None, None
 
+    # Check prior
+    for pn in PARAMETERS:
+        prior = getattr(marginal, f"{pn}_prior")
+        v = marginal[pn]
+        if v < prior.lower or v > prior.upper:
+            return None, None
+
+    # Check likelihood
     cdf = marginal.cdf(data)
     cdf[data < censor] = np.nan
+    cdf[np.isnan(data)] = np.nan
     cdf_min = np.nanmin(cdf)
     cdf_max = np.nanmax(cdf)
     cdf_censor = marginal.cdf(censor)
@@ -118,15 +143,15 @@ def are_marginal_params_valid(marginal, locn, logscale, shape1, data, censor):
     return None, None
 
 
-def bootstrap(marginal, data, fit_method="params_guess",
-              nboot=10000, eta=0):
+def univariate_bootstrap(marginal, data, fit_method="params_guess",
+                         nboot=10000, eta=0):
     expected = ["fit_lh_moments", "params_guess"]
     if fit_method not in expected:
         errmess = f"Expected fit_method in [{'/'.join(expected)}]."
         raise ValueError(errmess)
 
-    data = np.array(data)
-    nval = len(data)
+    _, dobs, _, _ = univariate2censored(data, -np.inf)
+    nval = len(dobs)
 
     # Parameter estimation method
     fun = getattr(marginal, fit_method)
@@ -137,7 +162,7 @@ def bootstrap(marginal, data, fit_method="params_guess",
                          columns=PARAMETERS)
     # Run bootstrap
     for i in range(nboot):
-        resampled = np.random.choice(data, nval, replace=True)
+        resampled = np.random.choice(dobs, nval, replace=True)
         try:
             fun(resampled, **kw)
         except Exception:
@@ -148,68 +173,88 @@ def bootstrap(marginal, data, fit_method="params_guess",
     return boots
 
 
-def importance_sampling(marginal, data, params, censor=-np.inf,
-                        nsamples=10000):
+def compute_importance_weights(logposts):
+    lp_max = np.nanmax(logposts)
+    weights = np.exp(logposts - lp_max)
+    weights /= weights.sum()
+    neff = 1. / (weights**2).sum()
+    return weights, neff
+
+
+def univariate_importance_sampling(marginal, data, censor=-np.inf,
+                                   nsamples=10000):
     """ See
     Smith, A. F. M., & Gelfand, A. E. (1992).
     Bayesian Statistics without Tears: A Sampling-Resampling Perspective.
     The American Statistician, 46(2), 84–88. https://doi.org/10.2307/2684170
     """
-    data, dcens, ncens = _prepare_censored_data(data, censor)
+    data, dobs, ncens, censor = univariate2censored(data, censor)
+
+    # Bootstrap to start
+    params = univariate_bootstrap(marginal, data, nboot=1000)
     params = np.array(params)
 
-    # Maximum number of iterations
-    niter_max = 3
-    # Minimum ratio between neff and nsamples to stop iterating
-    neff_factor = 0.5
-    # Minimum neff tolerated during iteration
-    neff_min = 5
+    # Importance sampling iteration
+    for niter in range(NITER_MAX_IMPORTANCE):
+        # Perturb parameters
+        cov = np.cov(params.T)
+        mean = np.mean(params, axis=0)
+        params = np.random.multivariate_normal(mean=mean, cov=cov,
+                                               size=nsamples)
 
-    for niter in range(niter_max):
         # Compute log posteriors
         logposts = np.zeros(len(params))
         for i, param in enumerate(params):
-            lp = -marginal.neglogpost(param, dcens, censor, ncens)
+            lp = -marginal.neglogpost(param, dobs, censor, ncens)
             logposts[i] = -1e100 if np.isnan(lp) or not np.isfinite(lp) else lp
 
-        # Compute rescaled pdf (normalized by lp_max to avoid underflow)
-        lp_max = np.nanmax(logposts)
-        weights = np.exp(logposts - lp_max)
-        weights /= weights.sum()
-        neff = 1. / (weights**2).sum()
+        weights, neff = compute_importance_weights(logposts)
 
-        if neff < neff_min:
-            errmess = f"Effective sample size < {neff_min} ({neff})."
-            raise ValueError(errmess)
+        # Compute rescaled pdf (normalized by lp_max to avoid underflow)
+        if neff < EFFECTIVE_SAMPLE_MIN:
+            if niter == NITER_MAX_IMPORTANCE - 1:
+                errmess = "Effective sample size"\
+                          + f"< {EFFECTIVE_SAMPLE_MIN} ({neff})."
+                raise ValueError(errmess)
+
+            # Restart from the best params
+            p0 = params[np.argmax(weights)]
+            cov = np.maximum(1, cov)
+            params = np.random.multivariate_normal(mean=p0, cov=cov,
+                                                   size=nsamples)
+            continue
 
         k = np.random.choice(np.arange(len(weights)), size=nsamples, p=weights)
-        samples = params[k]
+        params = params[k]
         logposts = logposts[k]
 
-        if niter == 0:
-            mean = samples.mean(axis=0)
-            cov = np.cov(samples.T)
-            params = np.random.multivariate_normal(mean=mean, cov=cov,
-                                                   size=nsamples)
-
-        if neff > neff_factor * nsamples:
+        if neff > EFFECTIVE_SAMPLE_FACTOR * nsamples:
             break
 
-    samples = pd.DataFrame(samples, columns=PARAMETERS)
+    params = pd.DataFrame(params, columns=PARAMETERS)
+    weights, neff = compute_importance_weights(logposts)
+    return params, logposts, neff, niter
 
-    return samples, logposts, neff
+
+def bivariate_importance_sampling(marginal, data, params,
+                                  ycensor=-np.inf,
+                                  zcensor=-np.inf,
+                                  nsamples=10000):
+    # TODO a special for LP3, yeepee!
+    pass
 
 
 class StanSamplingVariable():
     def __init__(self,
                  marginal,
-                 data=None,
+                 data,
                  censor=CENSOR_DEFAULT,
                  name="y",
-                 ninits=NCHAINS_DEFAULT):
-        self.name = str(name)
-        if len(self.name) != 1:
-            errmess = "Expected one character for name."
+                 ninits=NCHAINS_DEFAULT,
+                 nparams_sampled=None):
+        self._name = str(name)
+        if len(self._name) != 1:
+            errmess = "Expected one character in name."
             raise ValueError(errmess)
 
         self._N = 0
@@ -221,22 +266,49 @@ class StanSamplingVariable():
         self._is_obs = None
         self._is_cens = None
 
-        self.marginal = marginal
+        self.marginal = marginal.clone()
 
         # Initial parameters
         self.ninits = ninits
         self._initial_parameters = []
         self._initial_cdfs = []
 
-        data_set = False
-        if data is not None and censor is not None:
-            self.set_data(data, censor)
-            data_set = True
+        # Parameters sampled for initial and potentially prior
+        nparams_sampled = NPARAMS_SAMPLED if nparams_sampled is None\
+            else nparams_sampled
 
-        if data_set:
-            self.set_guess_parameters()
-            self.set_initial_parameters()
-            self.set_priors()
+        # Importance sampling
+        self.nparams_sampled = nparams_sampled
+        self._sampled_parameters = []
+        self._sampled_parameters_valid = []
+
+        self.set_data(data, censor)
+        self.set_guess_parameters()
+        self.set_sampled_parameters()
+        self.set_initial_parameters()
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, name):
+        name = str(name)
+        if len(name) != 1:
+            errmess = "Expected one character in name."
+            raise ValueError(errmess)
+        self._name = name
+
+        guess = self._guess_parameters
+        if len(guess) != 0:
+            self._guess_parameters = \
+                {f"{name}{k[1:]}": v for k, v in guess.items()}
+
+        inits = self._initial_parameters
+        if len(inits) != 0:
+            for i in range(len(inits)):
+                p = inits[i]
+                inits[i] = {f"{name}{k[1:]}": v for k, v in p.items()}
 
     @property
     def N(self):
@@ -247,15 +319,27 @@ class StanSamplingVariable():
         if len(self._guess_parameters) == 0:
             errmess = "Guess parameters have not been set."
             raise ValueError(errmess)
-
         return self._guess_parameters
+
+    @property
+    def sampled_parameters(self):
+        if len(self._sampled_parameters) == 0:
+            errmess = "Importance parameters have not been set."
+            raise ValueError(errmess)
+        return self._sampled_parameters
+
+    @property
+    def sampled_parameters_valid(self):
+        if len(self._sampled_parameters_valid) == 0:
+            errmess = "Importance parameters have not been set."
+            raise ValueError(errmess)
+        return self._sampled_parameters_valid
 
     @property
     def initial_parameters(self):
         if len(self._initial_parameters) == 0:
             errmess = "Initial parameters have not been set."
             raise ValueError(errmess)
-
         return self._initial_parameters
 
     @property
@@ -293,127 +377,93 @@ class StanSamplingVariable():
             raise ValueError(errmess)
         return self._data
 
+    @property
+    def stan_sample_args(self):
+        marginal_name = self.marginal.name
+        if marginal_name in STAN_SAMPLE_ARGS:
+            return STAN_SAMPLE_ARGS[marginal_name]
+        else:
+            return {}
+
     def set_data(self, data, censor):
-        data = np.array(data).astype(np.float64)
-
-        if data.ndim != 1:
-            errmess = "Expected data as 1d array."
-            raise ValueError(errmess)
-
-        if (~np.isnan(data)).sum() < 5:
-            errmess = "Need more than 5 valid data points."
-            raise ValueError(errmess)
-
-        self._data = data
+        icases, data, censor = univariate2cases(data, censor)
         self._N = len(data)
+        self._data = data
+        self._censor = censor
+        self._is_obs = icases.i11
+        self._is_cens = icases.i21
+        self._is_miss = icases.i31
+        self.i11 = np.where(icases.i11)[0] + 1
+        self.i21 = np.where(icases.i21)[0] + 1
 
-        dok = data[~np.isnan(data)]
-        if len(dok) == 0:
-            errmess = "Expected at least one valid data value."
-            raise ValueError(errmess)
-
-        # Set indexes
-        self._is_miss = pd.isnull(data)
-        self._is_obs = data >= self.censor
-        self._is_cens = data < self.censor
-        self.i11 = np.where(self.is_obs)[0] + 1
-        self.i21 = np.where(self.is_cens)[0] + 1
         # .. 3x3 due to stan code requirement.
         #    Only first 2 top left cells used
         self.Ncases = np.zeros((3, 3), dtype=int)
         self.Ncases[:2, 0] = [len(self.i11), len(self.i21)]
 
-        # We set the censor close to data min to avoid potential
-        # problems with computing log cdf for the censor
-        censor = max(np.float64(censor), dok.min() - 1e-10)
-        self._censor = censor
-
     def set_guess_parameters(self):
         censor = self.censor
-        data, dcens, ncens = _prepare_censored_data(self.data, censor)
+        _, dcens, _, _ = univariate2censored(self.data, censor)
         dist = self.marginal
         dist.params_guess(dcens)
+        name = self.name
         self._guess_parameters = {
-                "locn": dist.locn,
-                "logscale": dist.logscale,
-                "shape1": dist.shape1
+                f"{name}locn": dist.locn,
+                f"{name}logscale": dist.logscale,
+                f"{name}shape1": dist.shape1
                 }
 
+    def set_sampled_parameters(self):
+        nsamples = self.nparams_sampled
+
+        # Get guess parameters
+        n = self.name
+        p0 = np.array([self.guess_parameters[f"{n}{pn}"]
+                       for pn in PARAMETERS])
+
+        # Perturb guess parameters
+        eps = np.random.normal(scale=2e-1, size=(nsamples, 3))
+        params = pd.DataFrame(p0[None, :] + eps, columns=PARAMETERS)
+        params.loc[:, "locn"] = p0[0] * (1 + eps[:, 0])
+
+        # Sample closer to 0 to avoid problems with suppoer
+        params.loc[:, "shape1"] = \
+            p0[2] * np.random.uniform(0, 1.0, size=nsamples)
+
+        self._sampled_parameters = params
+        self._sampled_parameters_valid = -np.ones(len(params))
+
     def set_initial_parameters(self):
-        censor = self.censor
-        data, dcens, ncens = _prepare_censored_data(self.data, censor)
-        dist = self.marginal
-
-        # Default parameters
-        dist.params_guess(dcens)
-        params0 = dist.params
-
-        # Create a parameter from bootstrap guess
-        # parameters for each chain
         ninits = self.ninits
         niter = 0
         inits, cdfs = [], []
-        nval = len(data)
-        k = np.where(~np.isnan(data))[0]
+        marginal = self.marginal
+        data = self.data
+        censor = self.censor
+        params = self.sampled_parameters
 
-        while len(inits) < ninits \
-                and niter < MAX_INIT_PARAM_SEARCH:
-            niter += 1
-            kk = np.random.choice(k, nval, replace=True)
-            dboot = data[kk]
-
-            # Errors can occur here as params guess
-            # is not necessarily conform with prior
-            try:
-                dist.params_guess(dboot)
-            except ValueError:
-                continue
-
-            locn, logscale, shape1 = dist.params
-            pp, cdf = are_marginal_params_valid(dist, locn, logscale,
+        while len(inits) < ninits and niter < len(params):
+            locn, logscale, shape1 = params.iloc[niter]
+            pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
                                                 shape1, data, censor)
-            if pp is not None:
+            if pp is None:
+                self._sampled_parameters_valid[niter] = 0
+            else:
+                n = self.name
+                pp = {f"{n}{pn}": v for pn, v in pp.items()}
                 inits.append(pp)
                 cdfs.append(cdf)
+                self._sampled_parameters_valid[niter] = 1
 
-        # Fill up inits with params0 with small random noise
+            niter += 1
+
         if len(inits) < ninits:
-            locn0, logscale0, shape10 = params0
-            for i in range(ninits - len(inits)):
-                eps = np.random.uniform(-1, 1, size=3) * 1e-5
-
-                locn = locn0 + eps[0]
-                logscale = logscale0 + eps[1]
-                shape1 = shape10 + eps[2]
-                pp, cdf = are_marginal_params_valid(dist, locn, logscale,
-                                                    shape1, data, censor)
-                if pp is not None:
-                    inits.append(pp)
-                    cdfs.append(cdf)
-
-        if len(inits) == 0:
             errmess = "Cannot find initial parameter "\
                       + f"for variable {self.name}."
             raise ValueError(errmess)
 
-        if len(inits) < ninits:
-            nok = len(inits)
-            for i in range(ninits - nok):
-                k = np.random.choice(np.arange(nok))
-                inits.append(inits[k])
-
         self._initial_parameters = inits
         self._initial_cdfs = cdfs
-
-    def set_priors(self):
-        # Special set for LogPearson3 due to
-        # fitting difficulties otherwise
-        # use prior from marginal
-        if self.marginal.name == "LogPearson3":
-            start = self.guess_parameters
-            self.marginal.locn_prior.loc = start["locn"]
-            self.marginal.logscale_prior.loc = start["logscale"]
-            self.marginal.shape1_prior.loc = start["shape1"]
 
     def to_dict(self):
         """ Export stan data to be used by stan program """
@@ -495,6 +545,15 @@ class StanSamplingDataset():
 
         return self._initial_parameters
 
+    @property
+    def stan_sample_args(self):
+        say = self.stan_variables[0].stan_sample_args
+        saz = self.stan_variables[1].stan_sample_args
+        if say != saz:
+            errmess = "Both variables should have the same stan_sample_args."
+            raise ValueError(errmess)
+        return say
+
     def set_indexes(self):
         yv = self.stan_variables[0]
         zv = self.stan_variables[1]
@@ -543,11 +602,11 @@ class StanSamplingDataset():
         for i in range(ninits):
             init = {}
             cdfs = []
+            data = []
             for ivs, vs in enumerate(self._stan_variables):
-                n = vs.name
+                data.append(vs.data)
                 for pn, value in vs.initial_parameters[i].items():
-                    ppn = f"{n}{pn}"
-                    init[ppn] = value
+                    init[pn] = value
 
                 cdfs.append(vs.initial_cdfs[ivs])
 
@@ -555,16 +614,16 @@ class StanSamplingDataset():
             notnan = ~np.any(np.isnan(cdfs), axis=1)
             cdfs = cdfs[notnan]
 
+            iok = ~np.isnan(data[0]) & ~np.isnan(data[1])
+            rho0 = kendalltau(data[0][iok], data[1][iok]).statistic
+            rhos = np.random.normal(loc=rho0, scale=0.1,
+                                    size=NPARAMS_SAMPLED)
+            rhos = rhos.clip(copula.rho_lower + 0.02,
+                             copula.rho_upper - 0.02)
             niter = 0
-            rho = np.nan
-            nval = len(cdfs)
-            k = np.arange(nval)
-
-            while True and niter < MAX_INIT_PARAM_SEARCH:
+            while True and niter < NPARAMS_SAMPLED:
+                rho = rhos[niter]
                 niter += 1
-                kk = np.random.choice(k, nval, replace=True)
-                rho = kendalltau(cdfs[kk, 0], cdfs[kk, 1]).statistic
-                rho = min(copula.rho_max, max(copula.rho_min, rho))
 
                 # Check likelihood
                 copula.rho = rho
@@ -585,11 +644,25 @@ class StanSamplingDataset():
     def to_dict(self):
         dd = self.stan_variables[0].to_dict()
         dd.update(self.stan_variables[1].to_dict())
+
+        # Careful with upper and lower bounds
+        for pn in PARAMETERS:
+            p0, p1 = np.inf, -np.inf
+            for v in self.stan_variables:
+                prior = getattr(v.marginal, f"{pn}_prior")
+                p0 = min(p0, prior.lower)
+                p1 = max(p1, prior.upper)
+
+            dd[f"{pn}_lower"] = p0
+            dd[f"{pn}_upper"] = p1
+
+        rho_prior = self._copula.rho_prior
+
         dd.update({
             "copula": self.copula_code,
-            "rho_lower": self._copula.rho_min,
-            "rho_upper": self._copula.rho_max,
-            "rho_prior": RHO_PRIOR,
+            "rho_lower": rho_prior.lower,
+            "rho_upper": rho_prior.upper,
+            "rho_prior": rho_prior.to_list(),
             "Ncases": self.Ncases,
             "i11": self.i11,
             "i21": self.i21,

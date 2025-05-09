@@ -8,7 +8,7 @@ from hydrodiy.stat import sutils
 
 PLOT_TYPES = ["gumbel", "normal", "lognormal"]
 PLOT_TYPE_LABELS = {
-    "gumbel": "Gumbel reduced variate",
+    "gumbel": "Gumbel reduced variate -log(-log(F))",
     "normal": "Normal standard deviate",
     "lognormal": "LogNormal standard deviate"
     }
@@ -61,6 +61,17 @@ def cdf_to_reduced_variate_equidistant(nval, plot_type, cst=0.4):
     """
     ppos = sutils.ppos(nval, cst=0.4)
     return cdf_to_reduced_variate(ppos, plot_type)
+
+
+def set_xlim(ax, plot_type, ari_min, ari_max):
+    x0 = cdf_to_reduced_variate(1 - 1./ari_min, plot_type)
+    x1 = cdf_to_reduced_variate(1 - 1./ari_max, plot_type)
+    ax.set_xlim((x0, x1))
+
+
+def set_xlabel(ax, plot_type):
+    lab = PLOT_TYPE_LABELS[plot_type]
+    ax.set_xlabel(lab)
 
 
 def xaxis_label(ax, plot_type):
@@ -223,8 +234,6 @@ def plot_marginal_quantiles(ax, aris, quantiles, plot_type,
                         facecolor=facecolor,
                         alpha=alpha)
 
-    xlab = f"{PLOT_TYPE_LABELS[plot_type]} [-]"
-    ax.set_xlabel(xlab)
     return x
 
 

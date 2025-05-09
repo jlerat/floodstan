@@ -28,6 +28,7 @@ from cmdstanpy import CmdStanModel
 
 import importlib
 importlib.reload(marginals)
+importlib.reload(sample)
 
 f = Path(sample.__file__).parent.parent.parent / "tests" /\
     "test_sample_univariate.py"
@@ -42,8 +43,8 @@ parser = argparse.ArgumentParser(
     description="Run logpearson 3 inference",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument("-c", "--censoring", help="Use censoring",
-                    action="store_true", default=False)
+parser.add_argument("-c", "--censoring", help="Censoring threshold",
+                    type=float, default=0)
 args = parser.parse_args()
 censoring = args.censoring
 
@@ -51,9 +52,6 @@ stationids = tsu.get_stationids()
 
 distname = "LogPearson3"
 marginal = marginals.factory(distname)
-
-marginal.shape1_prior.lower = -1.9
-marginal.shape1_prior.upper = 1.9
 
 stan_nwarm = 5000
 stan_nsamples = 5000
@@ -74,43 +72,49 @@ fout.mkdir(exist_ok=True, parents=True)
 basename = Path(__file__).stem
 _ = sample.get_logger(stan_logger=False)
 LOGGER = iutils.get_logger(basename)
+
 LOGGER.info(f"Censoring : {censoring}")
 
-for stationid in stationids:
+stan_file = froot / "scripts" / "logpearson3_run.stan"
+model = CmdStanModel(stan_file=stan_file)
+print(model)
+
+aris = np.array([2, 5, 10, 20, 50, 100, 500, 1000])
+
+for stationid in stationids[:1]:
     LOGGER.info(f"Processing {stationid}")
 
-    # ----------------------------------------------------------------------
-    # @Get data
-    # ----------------------------------------------------------------------
+    LOGGER.info("Data prep", ntab=1)
     y = tsu.get_ams(stationid)
-    censor = y.median() if censoring else np.nanmin(y) - 1e-3
-    sv = sample.StanSamplingVariable(marginal, y, censor)
+    censor = np.percentile(y, censoring) if censoring > 0 \
+        else np.nanmin(y) - 1e-3
+
+    ncens = (y < censor).sum()
+    LOGGER.info(f"Censoring thresh = {censor:0.1f}"\
+                +f" (p={censoring}%, ncens={ncens})", ntab=1)
+
+    sv = sample.StanSamplingVariable(marginal, y, censor,
+                                     prior_from_importance=True)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
 
-    # ----------------------------------------------------------------------
-    # @Process
-    # ----------------------------------------------------------------------
+    LOGGER.info("Report from importance sampling")
+    rep_imp, _ = report.ams_report(sv.marginal, sv.sampled_parameters,
+                                   design_aris=aris)
 
-    stan_file = froot / "scripts" / "logpearson3_run.stan"
-    model = CmdStanModel(stan_file=stan_file)
-    print(model)
-
-    # sample
+    LOGGER.info("Stan sampling", ntab=1)
     kwargs = {}
     kwargs["chains"] = stan_nchains
     kwargs["parallel_chains"] = stan_nchains
     kwargs["iter_warmup"] = stan_nwarm
     kwargs["iter_sampling"] = stan_nsamples // stan_nchains
-    kwargs["show_progress"] = False
-
+    kwargs["show_progress"] = True
     fout_stan = fout / f"stan_{stationid}"
+    fout_stan.mkdir(exist_ok=True)
     for f in fout_stan.glob("*.*"):
         f.unlink()
-
     kwargs["output_dir"] = fout_stan
 
-    LOGGER.info("Sampling", ntab=1)
     fit = model.sample(data=stan_data, **kwargs)
 
     LOGGER.info("Processing", ntab=1)
@@ -119,35 +123,47 @@ for stationid in stationids:
     for n in ["divergence", "ebfmi", "effsamplesz", "rhat"]:
         LOGGER.info(f"Diag {n} : {diag[n]}", ntab=1)
 
-    aris = np.array([2, 5, 10, 20, 50, 100, 500, 1000])
     rep, _ = report.ams_report(sv.marginal, smp, design_aris=aris)
 
-    for f in fout_stan.glob("*.*"):
-        f.unlink()
-    fout_stan.rmdir()
+    #for f in fout_stan.glob("*.*"):
+    #    f.unlink()
+    #fout_stan.rmdir()
 
     LOGGER.info("Plotting", ntab=1)
     plt.close("all")
-    fig, ax = plt.subplots(figsize=(10, 8),
-                           layout="constrained")
+    fig, axs = plt.subplots(ncols=2,
+                            figsize=(16, 8),
+                            layout="constrained")
     ptype = "gumbel"
     quantiles = rep.filter(regex="DESIGN", axis=0)
+    ax = axs[0]
     freqplots.plot_marginal_quantiles(ax, aris, quantiles, ptype,
                                       center_column="MEAN",
                                       q0_column="5%",
                                       q1_column="95%",
-                                      label="LogPearson3",
+                                      label="LogPearson3 - stan",
                                       alpha=0.3,
                                       facecolor="tab:blue",
                                       edgecolor="k")
     freqplots.plot_data(ax, y, ptype)
+    retp = [5, 10, 100, 500]
+    aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
 
+    ax = axs[1]
+    quantiles = rep_imp.filter(regex="DESIGN", axis=0)
+    freqplots.plot_marginal_quantiles(ax, aris, quantiles, ptype,
+                                      center_column="MEAN",
+                                      q0_column="5%",
+                                      q1_column="95%",
+                                      label="LogPearson3 - importance",
+                                      alpha=0.3,
+                                      facecolor="tab:orange",
+                                      edgecolor="grey")
+    freqplots.plot_data(ax, y, ptype)
     retp = [5, 10, 100, 500]
     aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
 
     fig.suptitle(f"Station {stationid}")
     fig.savefig(fout / f"{stationid}_ffa.png")
-
-    sys.exit()
 
 LOGGER.info("Process completed")
