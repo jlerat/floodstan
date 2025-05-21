@@ -161,25 +161,35 @@ def test_gls_generate_stan():
     mu0 = x.dot(beta)
 
     # Low noise
-    sigma = np.std(mu0)/5
+    sigma = np.std(mu0) / 50
+
     # Large spatial covariance
-    alpha = 3*sigma
+    #alpha = 3 * sigma
+    alpha = 0.01 * sigma
+
     # Long spatial correlation
-    rho = 2.
+    rho = 0.5
+
+    iivalid = np.zeros(N).astype(bool)
+    iivalid[np.random.choice(np.arange(N), 5, replace=False)] = True
+    ivalid = np.where(iivalid)[0] + 1
+    Nvalid = len(ivalid)
 
     for kernel in [1, 2]:
         stan_data = {
             "N": N,
             "P": P,
+            "Nvalid": Nvalid,
             "x": x,
             "w": w,
+            "y": y,
+            "ivalid": ivalid,
             "beta": beta,
             "logrho": math.log(rho),
             "logalpha": math.log(alpha),
             "logsigma": math.log(sigma),
             "kernel": kernel
         }
-        stan_inits = {}
 
         # Clean output folder
         fout = FTESTS / "sampling" / "gls_generate"
@@ -190,7 +200,7 @@ def test_gls_generate_stan():
         # Sample
         nsamples = 16
         smp = gls_spatial_generate_sampling(data=stan_data,
-                                            inits=stan_inits,
+                                            inits={},
                                             seed=SEED,
                                             iter_warmup=10,
                                             iter_sampling=nsamples,
@@ -198,20 +208,18 @@ def test_gls_generate_stan():
                                             chains=1,
                                             output_dir=fout)
         df = smp.draws_pd()
-
-        y = df.filter(regex="^y", axis=1)
+        yhat = df.filter(regex="^yhat", axis=1)
+        ipred = np.where(~iivalid)[0]
 
         plt.close("all")
         fig, axs = plt.subplots(ncols=4, nrows=4, \
                             figsize=(12, 12), \
                             layout="tight")
         for i, ax in enumerate(axs.flat):
-            if i == 0:
-                ys = mu0.reshape((NX, NX))
-                title = "mu0"
-            else:
-                ys = y.iloc[i-1, :].values.reshape((NX, NX))
-                title = f"Sample {i}"
+            ys = y.copy()
+            ys[ipred] = yhat.iloc[i].values
+            ys = ys.reshape((NX, NX))
+            title = f"Sample {i}"
 
             ax.matshow(ys)
             ax.set_title(title)

@@ -2,6 +2,8 @@ import re
 import numpy as np
 import pandas as pd
 
+import matplotlib.patheffects as pe
+
 from scipy.stats import norm, lognorm
 
 from hydrodiy.stat import sutils
@@ -84,9 +86,7 @@ def xaxis_label(ax, plot_type):
 
 def add_aep_to_xaxis(ax, plot_type, full_line=True,
                      return_periods=[5, 10, 50, 100, 200],
-                     kwargs_plot={"color": "gray", "linewidth": 2},
-                     kwargs_text={"color": "gray",
-                                  "va": "bottom", "ha": "center"}):
+                     kwargs_plot=None, kwargs_text=None):
     """ Add annual exceedance probabilities (AEP) to x axis.
 
     Parameters
@@ -101,6 +101,20 @@ def add_aep_to_xaxis(ax, plot_type, full_line=True,
     aeps = 1. / np.array(return_periods) * 100
     xpos = cdf_to_reduced_variate(1 - aeps / 100, plot_type)
 
+    kwp = {"color": "gray", "linewidth": 2,
+           "linestyle":"-"}
+    if kwargs_plot is not None:
+        kwp.update(kwargs_plot)
+        kwargs_plot = kwp
+
+    kwt = {"color": "gray",
+           "va": "bottom", "ha": "center",
+           "path_effects":[pe.withStroke(linewidth=3,
+                           foreground="w")]}
+    if kwargs_text is not None:
+        kwt.update(kwargs_text)
+        kwargs_text = kwt
+
     # Handle non-linear axis transforms
     delta = 0.02
     y0, y1 = ax.get_ylim()
@@ -112,19 +126,14 @@ def add_aep_to_xaxis(ax, plot_type, full_line=True,
     for retper, aep, x in zip(return_periods, aeps, xpos):
         ax.plot([x, x], [y0, y0d1], **kwargs_plot)
         aep_txt = re.sub("\\.0+$", "", f"{aep:0.2f}")
-        txt = f"{aep_txt}%{nextline}{retper:0.0f}Y"
+        txt = f"{aep_txt}%AEP{nextline}1:{retper:0.0f}Y"
         ax.text(x, y0d2, txt, **kwargs_text)
 
         if full_line:
-            kwargs_plot_full = kwargs_plot.copy()
-
-            kwargs_plot_full["linewidth"] = \
-                kwargs_plot_full.get("linewidth", 2)/4
-
-            kwargs_plot_full["linestyle"] = \
-                kwargs_plot_full.get("linestyle", "--")
-
-            ax.plot([x, x], [y0, y1], **kwargs_plot_full)
+            kwp = kwargs_plot.copy()
+            kwp["linestyle"] = "--"
+            kwp["linewidth"] = 0.5
+            ax.plot([x, x], [y0, y1], **kwp)
 
     ax.set_ylim((y0, y1))
 
