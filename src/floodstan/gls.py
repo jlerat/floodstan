@@ -8,8 +8,8 @@ from scipy.spatial.distance import pdist, squareform
 from scipy.linalg import solve
 
 KERNEL_CODES = {
-    1 : "Gaussian",
-    2 : "Exponential"
+    1: "Gaussian",
+    2: "Exponential"
     }
 
 # Path to priors
