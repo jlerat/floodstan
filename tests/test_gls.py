@@ -18,7 +18,7 @@ import importlib
 from tqdm import tqdm
 
 from floodstan import gls_spatial_sampling, \
-                gls_spatial_generate_sampling, stan_test_glsfun
+                       stan_test_glsfun
 from floodstan import gls, sample
 
 from tqdm import tqdm
@@ -78,7 +78,8 @@ def test_gls_prepare(allclose):
     assert allclose(stan_data["ivalid"], np.arange(5, N+1))
 
 
-def test_kernel(allclose):
+@pytest.mark.parametrize("kernel", [1, 2])
+def test_kernel(kernel, allclose):
     x, w, y, N, P, NX = generate_data(5)
     beta = np.random.uniform(-1, 1, size=P)
     rho = 1
@@ -86,42 +87,42 @@ def test_kernel(allclose):
     sigma = 3
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
 
-    for kernel in ["Gaussian", "Exponential"]:
-        K = gls.kernel_covariance(w, rho, alpha, sigma, kernel)
+    K = gls.kernel_covariance(w, rho, alpha, sigma,
+                              kernel)
 
-        # Basic tests
-        assert K.shape == (N, N)
-        assert allclose(np.diag(K), alpha**2+sigma**2)
+    # Basic tests
+    assert K.shape == (N, N)
+    assert allclose(np.diag(K), alpha**2+sigma**2)
 
-        # Tests against stan
-        stan_data = {
-            "N": N, \
-            "P": P, \
-            "x": x, \
-            "w": w, \
-            "beta": beta, \
-            "logrho": math.log(rho), \
-            "logalpha": math.log(alpha), \
-            "logsigma": math.log(sigma), \
-            "kernel": gls.KERNEL_CODES[kernel]
-        }
-        smp = stan_test_glsfun(data=stan_data)
+    # Tests against stan
+    stan_data = {
+        "N": N, \
+        "P": P, \
+        "x": x, \
+        "w": w, \
+        "beta": beta, \
+        "logrho": math.log(rho), \
+        "logalpha": math.log(alpha), \
+        "logsigma": math.log(sigma), \
+        "kernel": kernel
+    }
+    smp = stan_test_glsfun(data=stan_data)
 
-        Ks = smp.filter(regex="^K").values.reshape((N, N))
-        assert allclose(K, Ks, rtol=0, atol=1e-5)
+    Ks = smp.filter(regex="^K").values.reshape((N, N))
+    assert allclose(K, Ks, rtol=0, atol=1e-5)
 
-        Ls = smp.filter(regex="^L").values.reshape((N, N))
-        L = np.linalg.cholesky(K).T
-        assert allclose(L, Ls, rtol=0, atol=1e-5)
+    Ls = smp.filter(regex="^L").values.reshape((N, N))
+    L = np.linalg.cholesky(K).T
+    assert allclose(L, Ls, rtol=0, atol=1e-5)
 
 
-def test_QR(allclose):
+@pytest.mark.parametrize("kernel", [1, 2])
+def test_QR(kernel, allclose):
     x, w, y, N, P, NX = generate_data(5)
     beta = np.random.uniform(-1, 1, size=P)
     rho = 1
     alpha = 2
     sigma = 3
-    kernel = "Gaussian"
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
 
     # Compute QR decomposition
@@ -141,7 +142,7 @@ def test_QR(allclose):
         "logrho": math.log(rho), \
         "logalpha": math.log(alpha), \
         "logsigma": math.log(sigma), \
-        "kernel": gls.KERNEL_CODES[kernel]
+        "kernel": kernel
     }
     smp = stan_test_glsfun(data=stan_data, \
                         chains=1, iter_warmup=0, iter_sampling=1, \
@@ -155,80 +156,9 @@ def test_QR(allclose):
     assert allclose(Q_ast_s.dot(R_ast_s), x, atol=1e-5, rtol=0.)
 
 
-def test_gls_generate_stan():
-    x, w, y, N, P, NX = generate_data(20)
-    beta = np.random.uniform(-1, 1, size=P)
-    mu0 = x.dot(beta)
-
-    # Low noise
-    sigma = np.std(mu0) / 50
-
-    # Large spatial covariance
-    #alpha = 3 * sigma
-    alpha = 0.01 * sigma
-
-    # Long spatial correlation
-    rho = 0.5
-
-    iivalid = np.zeros(N).astype(bool)
-    iivalid[np.random.choice(np.arange(N), 5, replace=False)] = True
-    ivalid = np.where(iivalid)[0] + 1
-    Nvalid = len(ivalid)
-
-    for kernel in [1, 2]:
-        stan_data = {
-            "N": N,
-            "P": P,
-            "Nvalid": Nvalid,
-            "x": x,
-            "w": w,
-            "y": y,
-            "ivalid": ivalid,
-            "beta": beta,
-            "logrho": math.log(rho),
-            "logalpha": math.log(alpha),
-            "logsigma": math.log(sigma),
-            "kernel": kernel
-        }
-
-        # Clean output folder
-        fout = FTESTS / "sampling" / "gls_generate"
-        fout.mkdir(parents=True, exist_ok=True)
-        for f in fout.glob("*.*"):
-            f.unlink()
-
-        # Sample
-        nsamples = 16
-        smp = gls_spatial_generate_sampling(data=stan_data,
-                                            inits={},
-                                            seed=SEED,
-                                            iter_warmup=10,
-                                            iter_sampling=nsamples,
-                                            adapt_engaged=True,
-                                            chains=1,
-                                            output_dir=fout)
-        df = smp.draws_pd()
-        yhat = df.filter(regex="^yhat", axis=1)
-        ipred = np.where(~iivalid)[0]
-
-        plt.close("all")
-        fig, axs = plt.subplots(ncols=4, nrows=4, \
-                            figsize=(12, 12), \
-                            layout="tight")
-        for i, ax in enumerate(axs.flat):
-            ys = y.copy()
-            ys[ipred] = yhat.iloc[i].values
-            ys = ys.reshape((NX, NX))
-            title = f"Sample {i}"
-
-            ax.matshow(ys)
-            ax.set_title(title)
-
-        fp = FIMG / f"gls_generate_stan_kernel{kernel}.png"
-        fig.savefig(fp)
-
-
-def test_gls_generate(allclose):
+@pytest.mark.parametrize("kernel", [1, 2])
+@pytest.mark.parametrize("conditional", [True, False])
+def test_gls_generate(kernel, conditional, allclose):
     x, w, y, N, P, NX = generate_data(30)
 
     sigma, rho = np.meshgrid([0.1, 1, 2, 3], [0.01, 0.1, 0.2, 0.4])
@@ -247,7 +177,7 @@ def test_gls_generate(allclose):
     y[k] = np.nan
     ivalid = np.where(pd.notnull(y))[0]+1
     stan_data = {"N": N, "x": x, "w": w, "y": y, \
-                    "ivalid": ivalid, "kernel": 1}
+                    "ivalid": ivalid, "kernel": kernel}
 
     smps = pd.DataFrame(np.column_stack([beta, \
                             np.log(sigma), \
@@ -256,41 +186,40 @@ def test_gls_generate(allclose):
     smps.columns = [f"beta_{i}" for i in range(1, P+1)]\
                     +["logsigma", "logrho", "logalpha"]
 
-    for conditional in [True, False]:
-        ys = gls.generate(stan_data, smps, conditional)
+    ys = gls.generate(stan_data, smps, conditional)
+
+    if conditional:
+        err = ys[:, ivalid-1]-y[ivalid-1][None, :]
+        assert allclose(np.abs(err), 0.)
+
+
+    plt.close("all")
+    fig, axs = plt.subplots(ncols=4, nrows=4, \
+                        figsize=(15, 15), \
+                        layout="tight")
+    for i, ax in enumerate(axs.flat):
+        rho = math.exp(smps.iloc[i].logrho)
+        alpha = math.exp(smps.iloc[i].logalpha)
+        sigma = math.exp(smps.iloc[i].logsigma)
+        params = f"R:{rho:0.1f} A:{alpha:0.1f} S:{sigma:0.1f}"
+        txt = ax.text(0.03, 0.97, params, transform=ax.transAxes, \
+                    va="top", ha="left", color="k", fontsize=16)
+        txt.set_path_effects([path_effects.Stroke(linewidth=3, foreground='w'),
+                       path_effects.Normal()])
+
+        yys = ys[i].reshape((NX, NX))
+        ax.contourf(uu, vv, yys)
+
 
         if conditional:
-            err = ys[:, ivalid-1]-y[ivalid-1][None, :]
-            assert allclose(np.abs(err), 0.)
+            ax.plot(*w[ivalid-1].T, "k+")
+
+    fp = FIMG / f"gls_generate_kernel{kernel}_cond{conditional}.png"
+    fig.savefig(fp)
 
 
-        plt.close("all")
-        fig, axs = plt.subplots(ncols=4, nrows=4, \
-                            figsize=(15, 15), \
-                            layout="tight")
-        for i, ax in enumerate(axs.flat):
-            rho = math.exp(smps.iloc[i].logrho)
-            alpha = math.exp(smps.iloc[i].logalpha)
-            sigma = math.exp(smps.iloc[i].logsigma)
-            params = f"R:{rho:0.1f} A:{alpha:0.1f} S:{sigma:0.1f}"
-            txt = ax.text(0.03, 0.97, params, transform=ax.transAxes, \
-                        va="top", ha="left", color="k", fontsize=16)
-            txt.set_path_effects([path_effects.Stroke(linewidth=3, foreground='w'),
-                           path_effects.Normal()])
-
-            yys = ys[i].reshape((NX, NX))
-            ax.contourf(uu, vv, yys)
-
-
-            if conditional:
-                ax.plot(*w[ivalid-1].T, "k+")
-
-        fp = FIMG / f"gls_generate_cond{conditional}.png"
-        fig.savefig(fp)
-
-
-
-def test_gls_sample():
+@pytest.mark.parametrize("kernel", [1, 2])
+def test_gls_sample(kernel, allclose):
     # Generate coordinates
     x, w, _, N, P, NX = generate_data(10)
     beta = np.random.uniform(-1, 1, size=P)
@@ -303,8 +232,10 @@ def test_gls_sample():
         "N": N,
         "P": P,
         "x": x,
+        "y": np.zeros(N),
+        "ivalid": np.arange(1, N+1),
         "w": w,
-        "kernel": 1,
+        "kernel": kernel,
         "beta": beta,
         "logrho": math.log(rho),
         "logalpha": math.log(alpha),
@@ -320,18 +251,18 @@ def test_gls_sample():
 
     # Generate
     nsamples = 1
-    smps = gls_spatial_generate_sampling(data=stan_data,
-                                         seed=SEED,
-                                         iter_warmup=10,
-                                         iter_sampling=nsamples,
-                                         adapt_engaged=True,
-                                         chains=1,
-                                         inits=stan_inits,
-                                         output_dir=fout)
-    smp = smps.draws_pd().iloc[0]
+    params = np.zeros((1, P+3))
+    params[:, :P] = beta
+    params[:, P] = math.log(rho)
+    params[:, P+1] = math.log(alpha)
+    params[:, P+2] = math.log(sigma)
+    cols = [f"beta{i}" for i in range(P)] \
+            + ["logrho", "logalpha", "logsigma"]
+    params = pd.DataFrame(params, columns=cols)
+    yfull = gls.generate(stan_data, params, False)
 
     # Select points
-    yfull = smp.filter(regex="^y").values
+    yfull = yfull[0]
     ipts = np.random.choice(np.arange(N), N-NX, replace=False)
     y = yfull.copy()
     y[ipts] = np.nan
@@ -340,12 +271,15 @@ def test_gls_sample():
     stan_data, stan_inits = gls.prepare(x, w, y,
                                         logrho_prior=[0, 3],
                                         logalpha_prior=[0, 6],
-                                        logsigma_prior=[0, 6])
+                                        logsigma_prior=[0, 6],
+                                        kernel=kernel)
 
     smp = gls_spatial_sampling(data=stan_data,
                                inits=stan_inits,
                                output_dir=fout)
-    df = smp.draws_pd()
+    params = smp.draws_pd()
+
+    smps = gls.generate(stan_data, params, False)
 
     # Plot
     plt.close("all")
@@ -357,39 +291,11 @@ def test_gls_sample():
             ys = yfull.reshape((NX, NX))
             title = "data unmasked"
         else:
-            dd = df.iloc[i]
-            beta = dd.filter(regex="beta").values
-            logrho = dd.logrho
-            logalpha = dd.logalpha
-            logsigma = dd.logsigma
-
-            stan_data = {
-                    "N": N, \
-                    "P": P, \
-                    "x": x, \
-                    "w": w, \
-                    "beta": beta, \
-                    "logrho": logrho, \
-                    "logalpha": logalpha, \
-                    "logsigma": logsigma, \
-                    "kernel": 1
-            }
-            smps = gls_spatial_generate_sampling(data=stan_data,
-                                                 seed=SEED,
-                                                 iter_warmup=10,
-                                                 iter_sampling=1,
-                                                 adapt_engaged=True,
-                                                 inits=stan_inits,
-                                                 chains=1,
-                                                 output_dir=fout)
-            smp = smps.draws_pd().iloc[0]
-            ys = smp.filter(regex="^y").values.reshape((NX, NX))
+            ys = smps[i - 1, :].reshape((NX, NX))
             title = f"Sample {i}"
 
         ax.matshow(ys)
         ax.set_title(title)
 
-    fp = FIMG / f"gls_sample.png"
+    fp = FIMG / f"gls_sample_kernel{kernel}.png"
     fig.savefig(fp)
-
-

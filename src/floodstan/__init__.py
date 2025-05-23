@@ -167,8 +167,6 @@ def load_stan_model(name: str, method: Optional[str] = "mcmc") -> Callable:
 univariate_censored_sampling = load_stan_model("univariate_censored_sampling")
 bivariate_censored_sampling = load_stan_model("bivariate_censored_sampling")
 gls_spatial_sampling = load_stan_model("gls_spatial_sampling")
-gls_spatial_generate_sampling = \
-    load_stan_model("gls_spatial_generate_sampling")
 
 # Stan test functions
 stan_test_marginal = load_stan_model("stan_test_marginal")

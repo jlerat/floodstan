@@ -1,15 +1,16 @@
+import re
 import math
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import pdist, squareform
+from scipy.linalg import solve
 
 KERNEL_CODES = {
-    "Gaussian": 1,
-    "Exponential": 2
+    1 : "Gaussian",
+    2 : "Exponential"
     }
-KERNEL_CODES_INV = {code: name for name, code in KERNEL_CODES.items()}
 
 # Path to priors
 FPRIORS = Path(__file__).resolve().parent / "priors"
@@ -17,18 +18,21 @@ FPRIORS = Path(__file__).resolve().parent / "priors"
 
 def kernel_covariance(w, rho, alpha, sigma, kernel):
     N = len(w)
-    d = squareform(pdist(w))/rho
-    if kernel == "Gaussian":
-        K = np.exp(-d*d/2)
-    elif kernel == "Exponential":
+    d = squareform(pdist(w)) / rho
+
+    if kernel == 1:
+        K = np.exp(-d * d / 2)
+
+    elif kernel == 2:
         K = np.exp(-d)
+
     else:
         txt = "/".join(list(KERNEL_CODES))
         errmsg = f"Expected kernel in {txt}, got {kernel}."
         raise ValueError(errmsg)
 
     # Add alpha and sigma error
-    return alpha*alpha*K+sigma**2*np.eye(N)
+    return alpha * alpha * K + sigma**2 * np.eye(N)
 
 
 def prepare(x, w, y,
@@ -38,7 +42,7 @@ def prepare(x, w, y,
             theta_prior=None,
             logrho_lower=-10,
             logrho_upper=20,
-            kernel="Gaussian"):
+            kernel=1):
     """ Prepare stan data for GLS model sampling.
 
     Parameters
@@ -106,7 +110,7 @@ def prepare(x, w, y,
         "w": w,
         "y": y,
         "ivalid": ivalid,
-        "kernel": KERNEL_CODES[kernel],
+        "kernel": kernel,
         "logrho_prior": logrho_prior,
         "logalpha_prior": logalpha_prior,
         "logsigma_prior": logsigma_prior,
@@ -146,24 +150,36 @@ def get_QR_matrices(x):
     return Q_ast, R_ast
 
 
-def generate(stan_data, samples, conditional=False):
+def generate(stan_data, params, conditional=True):
     # Get data
     N = stan_data["N"]
     x = stan_data["x"]
     w = stan_data["w"]
     y = stan_data["y"]
     ivalid = stan_data["ivalid"]-1
-    kernel = KERNEL_CODES_INV[stan_data["kernel"]]
+    kernel = stan_data["kernel"]
+
+    # Check params
+    for pn in ["alpha", "rho", "sigma"]:
+        lpn = f"log{pn}"
+        if lpn not in params.columns:
+            errmess = f"Expected a column {lpn} in params."
+            raise ValueError(errmess)
+
+    cnbeta = [cn for cn in params.columns if re.search("beta", cn)]
+    if len(cnbeta) == 0:
+        errmess = "Cannot find columns 'beta' in params."
+        raise ValueError(errmess)
 
     # generate data
-    M = len(samples)
+    M = len(params)
     eps = np.random.normal(size=(M, N))
-    samples_generated = np.zeros([M, N])
-    for i, (_, smp) in enumerate(samples.iterrows()):
-        beta = smp.filter(regex="beta").values
-        rho = math.exp(smp.logrho)
-        alpha = math.exp(smp.logalpha)
-        sigma = math.exp(smp.logsigma)
+    samples = np.zeros([M, N])
+    for i, (_, theta) in enumerate(params.iterrows()):
+        beta = theta.loc[cnbeta]
+        rho = math.exp(theta.logrho)
+        alpha = math.exp(theta.logalpha)
+        sigma = math.exp(theta.logsigma)
 
         # Derived parameters
         mu = x.dot(beta)
@@ -172,12 +188,14 @@ def generate(stan_data, samples, conditional=False):
         raw = mu + L.dot(eps[i])
 
         if conditional:
-            Sigma22inv = np.linalg.inv(Sigma[ivalid[:, None], ivalid[None, :]])
+            Sigma22 = Sigma[ivalid[:, None], ivalid[None, :]]
+            u = y[ivalid] - raw[ivalid]
+            v = solve(Sigma22, u, assume_a="pos")
             Sigma12 = Sigma[:, ivalid]
-            ys = raw + Sigma12.dot(Sigma22inv).dot(y[ivalid] - raw[ivalid])
+            ys = raw + Sigma12 @ v
         else:
             ys = raw
 
-        samples_generated[i, :] = ys
+        samples[i, :] = ys
 
-    return samples_generated
+    return samples

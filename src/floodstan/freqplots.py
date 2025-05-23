@@ -102,15 +102,15 @@ def add_aep_to_xaxis(ax, plot_type, full_line=True,
     xpos = cdf_to_reduced_variate(1 - aeps / 100, plot_type)
 
     kwp = {"color": "gray", "linewidth": 2,
-           "linestyle":"-"}
+           "linestyle": "-"}
     if kwargs_plot is not None:
         kwp.update(kwargs_plot)
         kwargs_plot = kwp
 
     kwt = {"color": "gray",
            "va": "bottom", "ha": "center",
-           "path_effects":[pe.withStroke(linewidth=3,
-                           foreground="w")]}
+           "path_effects": [pe.withStroke(linewidth=3,
+                            foreground="w")]}
     if kwargs_text is not None:
         kwt.update(kwargs_text)
         kwargs_text = kwt
