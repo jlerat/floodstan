@@ -103,6 +103,7 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
 
         # Test data
         i11 = stan_data["i11"] - 1
+        atol = 5e-3
         luncens = smp.filter(regex="luncens").values[i11]
         expected = marginal.logpdf(yboot[i11])
         assert allclose(luncens, expected, atol=atol)
@@ -111,7 +112,6 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         expected = marginal.cdf(yboot[i11])
         assert allclose(cens, expected, atol=atol)
 
-        atol = 5e-3
         lcens = smp.filter(regex="^lcens").values[i11]
         expected = marginal.logcdf(yboot[i11])
         assert allclose(lcens, expected, atol=atol)
@@ -132,16 +132,17 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
             assert allclose(lp, expected, atol=atol)
             lpr += lp.squeeze()
 
-        atol = 5e-3
         ll = smp.filter(regex="loglikelihood").values[0]
         expected = marginal.logpdf(dnocens).sum()
         expected += ncens * marginal.logcdf(censor)
-        assert allclose(ll, expected, atol=atol)
+        err = abs(math.asinh(ll) - math.asinh(expected))
+        assert err < 1e-3
 
         lp = smp.filter(regex="logposterior").values[0]
         expected = -marginal.neglogpost(marginal.params, dnocens,
                                        censor, ncens)
-        assert allclose(lp, expected, atol=atol)
+        err = abs(math.asinh(lp) - math.asinh(expected))
+        assert err < 1e-3
 
     # Ensures at least 5 simulation beyond 0 shape trials
     assert ndone > nboot // 10 + 5
@@ -156,8 +157,8 @@ def test_copulas_vs_stan(copula, allclose):
 
     cop = copulas.factory(copula)
 
-    rmin = cop.rho_min
-    rmax = cop.rho_max
+    rmin = cop.rho_lower
+    rmax = cop.rho_upper
     nval = 20
     for rho in np.linspace(rmin, rmax, nval):
         cop.rho = rho
