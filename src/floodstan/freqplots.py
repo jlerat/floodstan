@@ -1,4 +1,3 @@
-import re
 import numpy as np
 import pandas as pd
 
@@ -10,7 +9,7 @@ from hydrodiy.stat import sutils
 
 PLOT_TYPES = ["gumbel", "normal", "lognormal"]
 PLOT_TYPE_LABELS = {
-    "gumbel": "Gumbel reduced variate -log(-log(F))",
+    "gumbel": "Gumbel reduced variate -log(-log(P))",
     "normal": "Normal standard deviate",
     "lognormal": "LogNormal standard deviate"
     }
@@ -122,18 +121,16 @@ def add_aep_to_xaxis(ax, plot_type, full_line=True,
     _, y0d1 = fun((0, delta))
     _, y0d2 = fun((0, 2 * delta))
 
-    nextline = "\n"
     for retper, aep, x in zip(return_periods, aeps, xpos):
-        ax.plot([x, x], [y0, y0d1], **kwargs_plot)
-        aep_txt = re.sub("\\.0+$", "", f"{aep:0.2f}")
-        txt = f"{aep_txt}%AEP{nextline}1:{retper:0.0f}Y"
-        ax.text(x, y0d2, txt, **kwargs_text)
+        ax.plot([x, x], [y0, y0d1], **kwp)
+        txt = f"1:{retper:0.0f}"
+        ax.text(x, y0d2, txt, **kwt)
 
         if full_line:
-            kwp = kwargs_plot.copy()
-            kwp["linestyle"] = "--"
-            kwp["linewidth"] = 0.5
-            ax.plot([x, x], [y0, y1], **kwp)
+            kwpf = kwp.copy()
+            kwpf["linestyle"] = "--"
+            kwpf["linewidth"] = 0.5
+            ax.plot([x, x], [y0, y1], **kwpf)
 
     ax.set_ylim((y0, y1))
 
