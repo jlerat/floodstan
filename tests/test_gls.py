@@ -117,6 +117,20 @@ def test_kernel(kernel, allclose):
 
 
 @pytest.mark.parametrize("kernel", [1, 2])
+def test_kernel_sqroot(kernel, allclose):
+    x, w, y, N, P, NX = generate_data(20)
+    nrepeat = 100
+    rhos = [0.1, 1, 10.]
+    alphas = [0.1, 1., 10.]
+    sigmas = [0.1, 1., 10.]
+
+    for rho, alpha, sigma in prod(rhos, alphas, sigmas):
+        K = gls.kernel_covariance(w, rho, alpha, sigma, kernel)
+        L = gls.kernel_sqroot(K)
+        assert np.allclose(K, L @ L.T)
+
+
+@pytest.mark.parametrize("kernel", [1, 2])
 def test_QR(kernel, allclose):
     x, w, y, N, P, NX = generate_data(5)
     beta = np.random.uniform(-1, 1, size=P)

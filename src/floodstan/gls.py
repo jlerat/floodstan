@@ -35,6 +35,17 @@ def kernel_covariance(w, rho, alpha, sigma, kernel):
     return alpha * alpha * K + sigma**2 * np.eye(N)
 
 
+def kernel_sqroot(K, rcond=1e-10):
+    U, S, Vt = np.linalg.svd(K)
+
+    Smax = S.max()
+    Smin = Smax * rcond
+    S = np.maximum(S, Smin)
+    Sq = np.diag(np.sqrt(S))
+    L = U @ Sq @ Vt
+    return L
+
+
 def prepare(x, w, y,
             logrho_prior,
             logalpha_prior,
@@ -183,16 +194,16 @@ def generate(stan_data, params, conditional=True):
 
         # Derived parameters
         mu = x.dot(beta)
-        Sigma = kernel_covariance(w, rho, alpha, sigma, kernel)
-        L = np.linalg.cholesky(Sigma)
+        K = kernel_covariance(w, rho, alpha, sigma, kernel)
+        L = kernel_sqroot(K)
         raw = mu + L.dot(eps[i])
 
         if conditional:
-            Sigma22 = Sigma[ivalid[:, None], ivalid[None, :]]
+            K22 = K[ivalid[:, None], ivalid[None, :]]
             u = y[ivalid] - raw[ivalid]
-            v = solve(Sigma22, u, assume_a="pos")
-            Sigma12 = Sigma[:, ivalid]
-            ys = raw + Sigma12 @ v
+            v = solve(K22, u, assume_a="pos")
+            K12 = K[:, ivalid]
+            ys = raw + K12 @ v
         else:
             ys = raw
 
