@@ -93,7 +93,7 @@ def get_info():
 @pytest.mark.parametrize("stationid", get_stationids())
 def test_stan_sampling_variable(stationid, marginal_name, allclose):
     y = get_ams(stationid)
-    censor = y.median()
+    censor = np.nanpercentile(y, 30)
     marginal = marginals.factory(marginal_name)
 
     sv = sample.StanSamplingVariable(marginal, y, censor)
@@ -145,7 +145,7 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     y = get_ams(stationid)
     censor = np.nanmin(y) - 1
     if censoring:
-        pcens = 20 if stationid == "hard" else 50
+        pcens = 20
         censor = np.nanpercentile(y, pcens)
 
     marginal = marginals.factory(marginal_name)
