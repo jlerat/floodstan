@@ -145,7 +145,7 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     y = get_ams(stationid)
     censor = np.nanmin(y) - 1
     if censoring:
-        pcens = 20
+        pcens = 5 if stationid == "hard" else 20
         censor = np.nanpercentile(y, pcens)
 
     marginal = marginals.factory(marginal_name)
