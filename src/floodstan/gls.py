@@ -201,7 +201,11 @@ def generate(stan_data, params, conditional=True):
         if conditional:
             K22 = K[ivalid[:, None], ivalid[None, :]]
             u = y[ivalid] - raw[ivalid]
-            v = solve(K22, u, assume_a="pos")
+            try:
+                v = solve(K22, u, assume_a="pos")
+            except Exception:
+                v = solve(K22, u)
+
             K12 = K[:, ivalid]
             ys = raw + K12 @ v
         else:
