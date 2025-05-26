@@ -142,6 +142,9 @@ def test_stan_sampling_variable(stationid, marginal_name, allclose):
 @pytest.mark.parametrize("stationid",
                          get_stationids()[:2] + ["hard"])
 def test_univariate_censored_sampling(stationid, marginal_name, censoring, allclose):
+    if stationid == "hard" and marginal_name == "Gamma":
+        pytest.skip("Skipping sampling test. Data does not fit Gamma at all.")
+
     y = get_ams(stationid)
     censor = np.nanmin(y) - 1
     if censoring:
