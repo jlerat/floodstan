@@ -15,13 +15,10 @@ import warnings
 from cmdstanpy import CmdStanModel
 
 import importlib
-from tqdm import tqdm
 
 from floodstan import gls_spatial_sampling, \
                        stan_test_glsfun
 from floodstan import gls, sample
-
-from tqdm import tqdm
 
 SEED = 5446
 
@@ -29,8 +26,6 @@ FTESTS = Path(__file__).resolve().parent
 
 FIMG = FTESTS / "images"
 FIMG.mkdir(exist_ok=True)
-
-TQDM_DISABLE = True
 
 def generate_data(NX):
     u = np.linspace(0, 1, NX)
@@ -313,3 +308,6 @@ def test_gls_sample(kernel, allclose):
 
     fp = FIMG / f"gls_sample_kernel{kernel}.png"
     fig.savefig(fp)
+
+
+

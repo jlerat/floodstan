@@ -185,7 +185,7 @@ def generate(stan_data, params, conditional=True):
     # generate data
     M = len(params)
     eps = np.random.normal(size=(M, N))
-    samples = np.zeros([M, N])
+    samples = np.nan * np.zeros([M, N])
     for i, (_, theta) in enumerate(params.iterrows()):
         beta = theta.loc[cnbeta]
         rho = math.exp(theta.logrho)
@@ -194,8 +194,12 @@ def generate(stan_data, params, conditional=True):
 
         # Derived parameters
         mu = x.dot(beta)
-        K = kernel_covariance(w, rho, alpha, sigma, kernel)
-        L = kernel_sqroot(K)
+        try:
+            K = kernel_covariance(w, rho, alpha, sigma, kernel)
+            L = kernel_sqroot(K)
+        except Exception:
+            continue
+
         raw = mu + L.dot(eps[i])
 
         if conditional:
