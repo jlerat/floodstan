@@ -14,6 +14,7 @@ from floodstan.marginals import PARAMETERS
 from floodstan.copulas import factory
 from floodstan.data_processing import univariate2censored
 from floodstan.data_processing import univariate2cases
+from floodstan.data_processing import bivariate2cases
 
 MARGINAL_CODES = {code: name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code: name for name, code in COPULA_NAMES.items()}
@@ -143,13 +144,16 @@ def are_marginal_params_valid(marginal, locn, logscale, shape1, data, censor):
     return None, None
 
 
-def univariate_bootstrap(marginal, data, fit_method="params_guess",
-                         nboot=10000, eta=0):
+def _check_fit_method(fit_method):
     expected = ["fit_lh_moments", "params_guess"]
     if fit_method not in expected:
         errmess = f"Expected fit_method in [{'/'.join(expected)}]."
         raise ValueError(errmess)
 
+
+def univariate_bootstrap(marginal, data, fit_method="params_guess",
+                         nboot=10000, eta=0):
+    _check_fit_method(fit_method)
     _, dobs, _, _ = univariate2censored(data, -np.inf)
     nval = len(dobs)
 
@@ -173,6 +177,55 @@ def univariate_bootstrap(marginal, data, fit_method="params_guess",
     return boots
 
 
+def bivariate_bootstrap(marginaly, marginalz, data,
+                        fit_method="params_guess",
+                        nboot=10000, eta=0):
+    _check_fit_method(fit_method)
+    icases, data, _, _ = bivariate2cases(data, -np.inf, -np.inf)
+
+    # Keep data with both variables valid
+    data = data[icases.i11]
+    nval = len(data)
+
+    if nval < 5:
+        errmess = "Cannot do bootstrap with less than 5"\
+                  + " sample valid for both variables."
+        raise ValueError(errmess)
+
+    # Parameter estimation method
+    funy = getattr(marginaly, fit_method)
+    funz = getattr(marginalz, fit_method)
+    kw = {"eta": eta} if fit_method == "fit_lh_moments" else {}
+
+    # Prepare data
+    cols = [f"{prefix}{pn}" for prefix in ["y", "z"]
+            for pn in PARAMETERS] + ["rho"]
+    boots = pd.DataFrame(np.nan, index=np.arange(nboot),
+                         columns=cols)
+
+    # Run bootstrap
+    kk = np.arange(nval)
+    for i in range(nboot):
+        k = np.random.choice(kk, nval, replace=True)
+        datay, dataz = data[k].T
+
+        try:
+            funy(datay, **kw)
+            boots.loc[i, cols[:3]] = marginaly.params
+            Fy = marginaly.cdf(datay)
+
+            funz(dataz, **kw)
+            boots.loc[i, cols[3:6]] = marginalz.params
+            Fz = marginalz.cdf(dataz)
+
+            boots.loc[i, "rho"] = kendalltau(Fy, Fz)[0]
+
+        except Exception:
+            continue
+
+    return boots
+
+
 def compute_importance_weights(logposts):
     lp_max = np.nanmax(logposts)
     weights = np.exp(logposts - lp_max)
@@ -181,31 +234,25 @@ def compute_importance_weights(logposts):
     return weights, neff
 
 
-def univariate_importance_sampling(marginal, data, censor=-np.inf,
-                                   nsamples=10000):
+def generic_importance_sampling(params, logpost, nsamples, ntop=10):
     """ See
     Smith, A. F. M., & Gelfand, A. E. (1992).
     Bayesian Statistics without Tears: A Sampling-Resampling Perspective.
     The American Statistician, 46(2), 84–88. https://doi.org/10.2307/2684170
     """
-    data, dobs, ncens, censor = univariate2censored(data, censor)
-
-    # Bootstrap to start
-    params = univariate_bootstrap(marginal, data, nboot=1000)
-    params = np.array(params)
-
     # Importance sampling iteration
     for niter in range(NITER_MAX_IMPORTANCE):
-        # Perturb parameters
-        cov = np.cov(params.T)
-        mean = np.mean(params, axis=0)
-        params = np.random.multivariate_normal(mean=mean, cov=cov,
-                                               size=nsamples)
+        if niter > 0:
+            # Perturb parameters
+            cov = np.cov(params.T)
+            mean = np.mean(params, axis=0)
+            params = np.random.multivariate_normal(mean=mean, cov=cov,
+                                                   size=nsamples)
 
         # Compute log posteriors
         logposts = np.zeros(len(params))
         for i, param in enumerate(params):
-            lp = -marginal.neglogpost(param, dobs, censor, ncens)
+            lp = logpost(param)
             logposts[i] = -1e100 if np.isnan(lp) or not np.isfinite(lp) else lp
 
         weights, neff = compute_importance_weights(logposts)
@@ -213,14 +260,16 @@ def univariate_importance_sampling(marginal, data, censor=-np.inf,
         # Compute rescaled pdf (normalized by lp_max to avoid underflow)
         if neff < EFFECTIVE_SAMPLE_MIN:
             if niter == NITER_MAX_IMPORTANCE - 1:
-                errmess = "Effective sample size"\
-                          + f"< {EFFECTIVE_SAMPLE_MIN} ({neff})."
+                errmess = f"Sample has collapsed after {niter} iterations:"\
+                          + " effective sample size"\
+                          + f" < {EFFECTIVE_SAMPLE_MIN} ({neff})."
                 raise ValueError(errmess)
 
             # Restart from the best params
-            p0 = params[np.argmax(weights)]
-            cov = np.maximum(1, cov)
-            params = np.random.multivariate_normal(mean=p0, cov=cov,
+            itop = np.argsort(np.argsort(weights)) > len(weights) - ntop - 1
+            p0 = params[itop]
+            params = np.random.multivariate_normal(mean=p0.mean(axis=0),
+                                                   cov=np.cov(p0.T),
                                                    size=nsamples)
             continue
 
@@ -231,17 +280,55 @@ def univariate_importance_sampling(marginal, data, censor=-np.inf,
         if neff > EFFECTIVE_SAMPLE_FACTOR * nsamples:
             break
 
-    params = pd.DataFrame(params, columns=PARAMETERS)
+    params = pd.DataFrame(params)
     weights, neff = compute_importance_weights(logposts)
     return params, logposts, neff, niter
 
 
-def bivariate_importance_sampling(marginal, data, params,
+def univariate_importance_sampling(marginal, data, censor=-np.inf,
+                                   nsamples=10000):
+    data, dobs, ncens, censor = univariate2censored(data, censor)
+
+    # Bootstrap to start
+    params = univariate_bootstrap(marginal, data, nboot=1000)
+    params = np.array(params)
+
+    # Importance sampling using marginal logpost
+    def logpost(param):
+        return -marginal.neglogpost(param, dobs, censor, ncens)
+
+    params, logposts, neff, niter = generic_importance_sampling(params,
+                                                                logpost,
+                                                                nsamples)
+    params.columns = PARAMETERS
+    return params, logposts, neff, niter
+
+
+def bivariate_importance_sampling(marginaly, marginalz,
+                                  copula, data,
                                   ycensor=-np.inf,
                                   zcensor=-np.inf,
                                   nsamples=10000):
-    # TODO a special for LP3, yeepee!
-    pass
+    # Check data
+    icases, data, ycensor, zcensor = bivariate2cases(data,
+                                                     ycensor,
+                                                     zcensor)
+    # Bootstrap to start
+    params = bivariate_bootstrap(marginaly, marginalz, data, nboot=5000)
+    params = np.array(params)
+
+    # Importance sampling using copula logpost
+    def logpost(param):
+        return -copula.neglogpost(param, data, icases,
+                                  marginaly, marginalz,
+                                  ycensor, zcensor)
+
+    params, logposts, neff, niter = generic_importance_sampling(params,
+                                                                logpost,
+                                                                nsamples)
+    params.columns = [f"{prefix}{pn}" for prefix in ["y", "z"]
+                      for pn in PARAMETERS] + ["rho"]
+    return params, logposts, neff, niter
 
 
 class StanSamplingVariable():

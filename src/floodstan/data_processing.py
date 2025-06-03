@@ -81,6 +81,8 @@ def univariate2censored(data, censor):
 
 
 def bivariate2cases(data, ycensor, zcensor):
+    data, _ = data2array(data, 2)
+
     ycases, ydata, ycensor = univariate2cases(data[:, 0], ycensor)
     y_obs = ycases.i11
     y_cens = ycases.i21
@@ -101,8 +103,8 @@ def bivariate2cases(data, ycensor, zcensor):
                            "i23": y_cens & z_miss,
                            "i33": y_miss & z_miss})
 
-    if len(icases.i33) > 0:
-        errmess = "Expected at least one variable to be valid."
+    if icases.i33.sum() > 0:
+        errmess = "Cannot have both variables missing."
         raise ValueError(errmess)
 
-    return icases
+    return icases, data, ycensor, zcensor

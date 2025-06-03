@@ -116,66 +116,125 @@ class Copula():
         return uv
 
     def neglogpost(self, theta, data, icases,
-                   ycensor, zcensor, marginal):
+                   marginaly, marginalz,
+                   ycensor, zcensor):
         # Get params
         yparams = theta[:3]
         zparams = theta[3:-1]
-        self.rho = theta[-1]
+
+        rho = theta[-1]
+
+        if rho < self.rho_lower or rho > self.rho_upper:
+            return -np.inf
+        self.rho = rho
+
+        try:
+            marginaly.params = yparams
+        except Exception:
+            return -np.inf
+
+        try:
+            marginalz.params = zparams
+        except Exception:
+            return -np.inf
 
         # Get cdfs and pdfs and censor cdfs
         cdfs, logpdfs = data * 0., data * 0.
-        cdf_censors, logpdf_censors = np.zeros((1, 2))
+        cdf_censors = [0, 0]
 
-        marginal.params = yparams
         ydata = data[:, 0]
-        cdfs[:, 0] = marginal.cdf(ydata)
-        cdf_censors[0] = marginal.cdf(ycensor)
-        logpdfs[:, 0] = marginal.logpdf(ydata)
+        cdfs[:, 0] = marginaly.cdf(ydata)
+        cdf_censors[0] = marginaly.cdf(ycensor)
+        logpdfs[:, 0] = marginaly.logpdf(ydata)
 
-        marginal.params = zparams
         zdata = data[:, 1]
-        cdfs[:, 1] = marginal.cdf(zdata)
-        cdf_censors[1] = marginal.cdf(zcensor)
-        logpdfs[:, 1] = marginal.logpdf(zdata)
+        cdfs[:, 1] = marginalz.cdf(zdata)
+        cdf_censors[1] = marginalz.cdf(zcensor)
+        logpdfs[:, 1] = marginalz.logpdf(zdata)
 
-        # initialise
-        nlp = 0
+        # initialise with prior
+        nlp = -self.rho_prior.logpdf(rho)
+
+        nlp -= marginaly.locn_prior.logpdf(yparams[0])
+        nlp -= marginaly.logscale_prior.logpdf(yparams[1])
+        if marginaly.has_shape:
+            nlp -= marginaly.shape1_prior.logpdf(yparams[2])
+
+        nlp -= marginalz.locn_prior.logpdf(zparams[0])
+        nlp -= marginalz.logscale_prior.logpdf(zparams[1])
+        if marginalz.has_shape:
+            nlp -= marginalz.shape1_prior.logpdf(zparams[2])
 
         # Cases with z observed
         i11 = icases.i11
         if i11.sum() > 0:
-            nlp -= self.logpdf(cdfs[i11]).sum()
+            # Marginal likelihood
             nlp -= logpdfs[i11].sum()
+            # Copula likelihood
+            nlp -= self.logpdf(cdfs[i11]).sum()
+
+            if np.isnan(nlp):
+                return -np.inf
 
         i21 = icases.i21
         if i21.sum() > 0:
+            # Marginal likelihood for z
+            nlp -= logpdfs[i21, 1].sum()
+            # Conditional copula likelihood for ycensor
             nlp -= self.conditional_density(cdf_censors[0],
                                             cdfs[i21, 1]).sum()
-            nlp -= logpdfs[i21, 1].sum()
+            if np.isnan(nlp):
+                return -np.inf
 
         i31 = icases.i31
         if i31.sum() > 0:
+            # Marginal likelihood for z
             nlp -= logpdfs[i31, 1].sum()
+            if np.isnan(nlp):
+                return -np.inf
 
         # Cases with z censored
         i12 = icases.i12
         if i12.sum() > 0:
+            # Marginal likelihood for y
+            nlp -= logpdfs[i12, 0].sum()
+            # Conditional copula likelihood for zcensor
             nlp -= self.conditional_density(cdf_censors[1],
                                             cdfs[i12, 0]).sum()
-            nlp -= logpdfs[i12, 0].sum()
+            if np.isnan(nlp):
+                return -np.inf
 
         i22 = icases.i22
-        if i22.sum() > 0:
-            n22 = i22.sum()
+        n22 = i22.sum()
+        if n22 > 0:
+            # Copula likelihood for both censors
             nlp -= n22 * self.logpdf(cdf_censors)[0]
+            if np.isnan(nlp):
+                return -np.inf
 
         i32 = icases.i32
-        if i32.sum() > 0:
-            n32 = i32.sum()
+        n32 = i32.sum()
+        if n32 > 0:
+            # Censored likelihood for zcensor
             nlp -= n32 * math.log(cdf_censors[1])
+            if np.isnan(nlp):
+                return -np.inf
 
         # Cases with z missing
-        # TODO
+        i13 = icases.i13
+        if i13.sum() > 0:
+            # Marginal likelihood for y
+            nlp -= logpdfs[i13, 0].sum()
+            if np.isnan(nlp):
+                return -np.inf
+
+        i23 = icases.i23
+        n23 = i23.sum()
+        if n23 > 0:
+            # Censored likelihood for ycensor
+            nlp -= n23 * math.log(cdf_censors[0])
+            if np.isnan(nlp):
+                return -np.inf
 
         return nlp
 

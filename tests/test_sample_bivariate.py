@@ -35,6 +35,15 @@ STATIONIDS = get_stationids()
 LOGGER = sample.get_logger(stan_logger=False)
 
 
+def add_gaussian_covariate(y):
+    scale = np.nanstd(y) / 5
+    z = y + np.random.normal(0, scale, size=len(y))
+
+    z.iloc[-2] = np.nan # to add a missing data in z
+    df = pd.DataFrame({"y": y, "z": z}).sort_index()
+    return df.y, df.z
+
+
 @pytest.mark.parametrize("distname",
                          marginals.MARGINAL_NAMES)
 def test_stan_sampling_dataset(distname, allclose):
@@ -91,16 +100,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
 
     stationid = STATIONIDS[0]
     y = get_ams(stationid)
-
-    # Generate random covariate
-    scale = np.nanstd(y) / 5
-    z = y + np.random.normal(0, scale, size=len(y))
-
-    N = len(y)
-
-    z.iloc[-2] = np.nan # to add a missing data in z
-    df = pd.DataFrame({"y": y, "z": z}).sort_index()
-    y, z = df.y, df.z
+    y, z = add_gaussian_covariate(y)
 
     censor = y.median() if censoring else np.nanmin(y) - 1.
     yv = sample.StanSamplingVariable(marginal, y, censor,
@@ -215,16 +215,7 @@ def test_bivariate_sampling_not_enough_data(varname, allclose):
 
     stationid = STATIONIDS[0]
     y = get_ams(stationid)
-
-    # Generate random covariate
-    scale = np.nanstd(y) / 5
-    z = y + np.random.normal(0, scale, size=len(y))
-
-    N = len(y)
-
-    z.iloc[-2] = np.nan # to add a missing data in z
-    df = pd.DataFrame({"y": y, "z": z}).sort_index()
-    y, z = df.y, df.z
+    y, z = add_gaussian_covariate(y)
 
     censor = y.median()
     yv = sample.StanSamplingVariable(marginal, y, censor,
