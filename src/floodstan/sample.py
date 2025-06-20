@@ -234,30 +234,53 @@ def compute_importance_weights(logposts):
     return weights, neff
 
 
-def generic_importance_sampling(params, logpost, nsamples, ntop=10):
+def generic_importance_sampling(params, logpost, nsamples, ntop=10,
+                                mixing_probability=0.5):
     """ See
     Smith, A. F. M., & Gelfand, A. E. (1992).
     Bayesian Statistics without Tears: A Sampling-Resampling Perspective.
     The American Statistician, 46(2), 84–88. https://doi.org/10.2307/2684170
     """
+    params = np.array(params)
+
     # Importance sampling iteration
     for niter in range(NITER_MAX_IMPORTANCE):
         if niter > 0:
-            # Perturb parameters
+            # Select parameters to be resampled
+            iresampled = np.random.choice([0, 1], nsamples,
+                                          p=[1 - mixing_probability,
+                                             mixing_probability])
+            # Keep the best one however
+            iresampled[itop] = 1
+
+            # Parameters that are kept
+            p1 = params[iresampled==0]
+            lp1 = logposts[iresampled==0]
+
+            # Perturb other parameters
             cov = np.cov(params.T)
             mean = np.mean(params, axis=0)
-            params = np.random.multivariate_normal(mean=mean, cov=cov,
-                                                   size=nsamples)
+            p2 = np.random.multivariate_normal(mean=mean, cov=cov,
+                                               size=nsamples - len(lp1))
+            lp2 = np.ones(len(p2)) * np.nan
+
+            params = np.row_stack([p1, p2])
+            logposts = np.concatenate([lp1, lp2])
+        else:
+            logposts = np.zeros(len(params)) * np.nan
 
         # Compute log posteriors
-        logposts = np.zeros(len(params))
         for i, param in enumerate(params):
-            lp = logpost(param)
-            logposts[i] = -1e100 if np.isnan(lp) or not np.isfinite(lp) else lp
+            if np.isnan(logposts[i]):
+                lp = logpost(param)
+                logposts[i] = -1e100 if np.isnan(lp) or not np.isfinite(lp) else lp
 
         weights, neff = compute_importance_weights(logposts)
+        print(f"\nITER {niter} neff={neff:0.1f}\n")
 
         # Compute rescaled pdf (normalized by lp_max to avoid underflow)
+        itop = np.argsort(np.argsort(weights)) > len(weights) - ntop - 1
+        p0 = params[itop]
         if neff < EFFECTIVE_SAMPLE_MIN:
             if niter == NITER_MAX_IMPORTANCE - 1:
                 errmess = f"Sample has collapsed after {niter} iterations:"\
@@ -266,16 +289,15 @@ def generic_importance_sampling(params, logpost, nsamples, ntop=10):
                 raise ValueError(errmess)
 
             # Restart from the best params
-            itop = np.argsort(np.argsort(weights)) > len(weights) - ntop - 1
-            p0 = params[itop]
             params = np.random.multivariate_normal(mean=p0.mean(axis=0),
                                                    cov=np.cov(p0.T),
                                                    size=nsamples)
             continue
 
-        k = np.random.choice(np.arange(len(weights)), size=nsamples, p=weights)
-        params = params[k]
-        logposts = logposts[k]
+        iselected = np.random.choice(np.arange(len(weights)),
+                                     size=nsamples, p=weights)
+        params = params[iselected]
+        logposts = logposts[iselected]
 
         if neff > EFFECTIVE_SAMPLE_FACTOR * nsamples:
             break
@@ -291,7 +313,6 @@ def univariate_importance_sampling(marginal, data, censor=-np.inf,
 
     # Bootstrap to start
     params = univariate_bootstrap(marginal, data, nboot=1000)
-    params = np.array(params)
 
     # Importance sampling using marginal logpost
     def logpost(param):
@@ -314,8 +335,29 @@ def bivariate_importance_sampling(marginaly, marginalz,
                                                      ycensor,
                                                      zcensor)
     # Bootstrap to start
-    params = bivariate_bootstrap(marginaly, marginalz, data, nboot=5000)
-    params = np.array(params)
+    #params = bivariate_bootstrap(marginaly, marginalz, data, nboot=5000)
+    #params = np.array(params)
+
+    # Two univariate samples
+    paramsy, _, _, _ = univariate_importance_sampling(marginaly, data[:, 0],
+                                                      censor=ycensor,
+                                                      nsamples=nsamples)
+    paramsy.columns = [f"y{cn}" for cn in paramsy.columns]
+
+    paramsz, _, _, _ = univariate_importance_sampling(marginalz, data[:, 1],
+                                                      censor=zcensor,
+                                                      nsamples=nsamples)
+    paramsz.columns = [f"z{cn}" for cn in paramsz.columns]
+    params = pd.concat([paramsy, paramsz], axis=1)
+
+    # Kendall tau bootstrap for if both variables are above median
+    nval = len(data)
+    medians = np.nanmedian(data, axis=0)
+    kk = np.where((data - medians[None, :] >= 0).all(axis=1))[0]
+    params.loc[:, "rho"] = np.nan
+    for iboot in range(nsamples):
+        k = np.random.choice(kk, nval)
+        params.loc[iboot, "rho"] = kendalltau(data[k, 0], data[k ,1]).statistic
 
     # Importance sampling using copula logpost
     def logpost(param):
