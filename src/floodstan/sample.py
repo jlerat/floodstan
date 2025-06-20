@@ -280,7 +280,6 @@ def generic_importance_sampling(params, logpost, nsamples, ntop=10,
 
         # Compute rescaled pdf (normalized by lp_max to avoid underflow)
         itop = np.argsort(np.argsort(weights)) > len(weights) - ntop - 1
-        p0 = params[itop]
         if neff < EFFECTIVE_SAMPLE_MIN:
             if niter == NITER_MAX_IMPORTANCE - 1:
                 errmess = f"Sample has collapsed after {niter} iterations:"\
@@ -289,6 +288,7 @@ def generic_importance_sampling(params, logpost, nsamples, ntop=10,
                 raise ValueError(errmess)
 
             # Restart from the best params
+            p0 = params[itop]
             params = np.random.multivariate_normal(mean=p0.mean(axis=0),
                                                    cov=np.cov(p0.T),
                                                    size=nsamples)
@@ -298,6 +298,7 @@ def generic_importance_sampling(params, logpost, nsamples, ntop=10,
                                      size=nsamples, p=weights)
         params = params[iselected]
         logposts = logposts[iselected]
+        itop = itop[iselected]
 
         if neff > EFFECTIVE_SAMPLE_FACTOR * nsamples:
             break
