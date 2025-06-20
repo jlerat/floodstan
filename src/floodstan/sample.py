@@ -281,7 +281,6 @@ def generic_importance_sampling(params, logpost, nsamples, ntop=10,
                     or not np.isfinite(lp) else lp
 
         weights, neff = compute_importance_weights(logposts)
-        print(f"\nITER {niter} neff={neff:0.1f}\n")
 
         # Compute rescaled pdf (normalized by lp_max to avoid underflow)
         itop = np.argsort(np.argsort(weights)) > len(weights) - ntop - 1

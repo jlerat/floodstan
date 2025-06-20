@@ -208,7 +208,7 @@ class Copula():
         n22 = i22.sum()
         if n22 > 0:
             # Copula likelihood for both censors
-            nlp -= n22 * self.logpdf(cdf_censors)[0]
+            nlp -= n22 * self.logcdf(cdf_censors)[0]
             if np.isnan(nlp):
                 return -np.inf
 
