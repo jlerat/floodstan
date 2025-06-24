@@ -93,10 +93,10 @@ data {
 }
 
 transformed data {
-  // Imposes that at least 5 data points are observed
+  // Imposes that at least 2 data points are observed
   // for variable y
-  int<lower=5> Ny = Ncases[1, 1] + Ncases[1, 2] + Ncases[1, 3];  
-  int<lower=5> Nz = Ncases[1, 1] + Ncases[2, 1] + Ncases[3, 1];  
+  int<lower=2> Ny = Ncases[1, 1] + Ncases[1, 2] + Ncases[1, 3];  
+  int<lower=2> Nz = Ncases[1, 1] + Ncases[2, 1] + Ncases[3, 1];  
 }
 
 parameters {

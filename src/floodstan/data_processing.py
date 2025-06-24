@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-NVALID_MIN = 5
+NVALID_MIN = 2
 
 BELOW_CENSOR = -1e10
 

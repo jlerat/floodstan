@@ -65,8 +65,8 @@ data {
 }
 
 transformed data {
-  // Imposes that at least 5 data points are observed
-  int<lower=5> Ny = Ncases[1, 1];
+  // Imposes that at least 2 data points are observed
+  int<lower=2> Ny = Ncases[1, 1];
 }
 
 parameters {
