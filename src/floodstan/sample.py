@@ -234,8 +234,9 @@ def compute_importance_weights(logposts):
     return weights, neff
 
 
-def generic_importance_sampling(params, logpost, nsamples, ntop=10,
-                                mixing_probability=0.5):
+def generic_importance_sampling(params, logpost, nsamples,
+                                mixing_probability=0.5,
+                                ntop_params=10):
     """ See
     Smith, A. F. M., & Gelfand, A. E. (1992).
     Bayesian Statistics without Tears: A Sampling-Resampling Perspective.
@@ -244,16 +245,17 @@ def generic_importance_sampling(params, logpost, nsamples, ntop=10,
     params = np.array(params)
 
     # required to pass flake, not used.
-    logposts = np.zeros(len(params))
-    itop = np.zeros(len(params)).astype(bool)
+    nvalues = len(params)
+    logposts = np.zeros(nvalues)
+    itop = np.zeros(nvalues).astype(bool)
 
     # Importance sampling iteration
     for niter in range(NITER_MAX_IMPORTANCE):
         if niter > 0:
             # Select parameters to be resampled
-            iresampled = np.random.choice([0, 1], nsamples,
-                                          p=[1 - mixing_probability,
-                                             mixing_probability])
+            iresampled = np.random.choice([0, 1], len(params),
+                                          p=[mixing_probability,
+                                             1-mixing_probability])
             # Keep the best one however
             iresampled[itop] = 1
 
@@ -280,10 +282,13 @@ def generic_importance_sampling(params, logpost, nsamples, ntop=10,
                 logposts[i] = -1e100 if np.isnan(lp) \
                     or not np.isfinite(lp) else lp
 
+        # Compute rescaled pdf (normalized by lp_max to avoid underflow)
         weights, neff = compute_importance_weights(logposts)
 
-        # Compute rescaled pdf (normalized by lp_max to avoid underflow)
-        itop = np.argsort(np.argsort(weights)) > len(weights) - ntop - 1
+        # Find top parameters
+        rk_min = len(weights) - ntop_params - 1
+        itop = np.argsort(np.argsort(weights)) > rk_min
+
         if neff < EFFECTIVE_SAMPLE_MIN:
             if niter == NITER_MAX_IMPORTANCE - 1:
                 errmess = f"Sample has collapsed after {niter} iterations:"\
@@ -291,15 +296,22 @@ def generic_importance_sampling(params, logpost, nsamples, ntop=10,
                           + f" < {EFFECTIVE_SAMPLE_MIN} ({neff})."
                 raise ValueError(errmess)
 
+            if itop.sum() < ntop_params:
+                errmess = f"Cannot identify {ntop} valid parameters."
+                raise ValueError(errmess)
+
             # Restart from the best params
             p0 = params[itop]
             params = np.random.multivariate_normal(mean=p0.mean(axis=0),
                                                    cov=np.cov(p0.T),
                                                    size=nsamples)
+            itop = np.zeros(nsamples).astype(int)
+            logposts = np.nan * np.zeros(nsamples)
             continue
 
-        iselected = np.random.choice(np.arange(len(weights)),
-                                     size=nsamples, p=weights)
+        nvalues = len(weights)
+        iselected = np.random.choice(np.arange(nvalues),
+                                     size=nvalues, p=weights)
         params = params[iselected]
         logposts = logposts[iselected]
         itop = itop[iselected]
@@ -325,10 +337,10 @@ def univariate_importance_sampling(marginal, data, censor=-np.inf,
         return -marginal.neglogpost(param, dobs, censor, ncens)
 
     params, logposts, neff, niter = \
-        generic_importance_sampling(params,
-                                    logpost,
-                                    nsamples,
-                                    mixing_probability)
+        generic_importance_sampling(params=params,
+                                    logpost=logpost,
+                                    nsamples=nsamples,
+                                    mixing_probability=mixing_probability)
     params.columns = PARAMETERS
     return params, logposts, neff, niter
 
@@ -338,20 +350,24 @@ def bivariate_importance_sampling(marginaly, marginalz,
                                   ycensor=-np.inf,
                                   zcensor=-np.inf,
                                   nsamples=10000,
-                                  mixing_probability=0.3):
+                                  mixing_probability=0.7):
     # Check data
     icases, data, ycensor, zcensor = bivariate2cases(data,
                                                      ycensor,
                                                      zcensor)
     # Two univariate samples
-    paramsy, _, _, _ = univariate_importance_sampling(marginaly, data[:, 0],
-                                                      censor=ycensor,
-                                                      nsamples=nsamples)
+    paramsy, _, _, _ = \
+            univariate_importance_sampling(marginal=marginaly,
+                                           data=data[:, 0],
+                                           censor=ycensor,
+                                           nsamples=nsamples)
     paramsy.columns = [f"y{cn}" for cn in paramsy.columns]
 
-    paramsz, _, _, _ = univariate_importance_sampling(marginalz, data[:, 1],
-                                                      censor=zcensor,
-                                                      nsamples=nsamples)
+    paramsz, _, _, _ = \
+            univariate_importance_sampling(marginal=marginalz,
+                                           data=data[:, 1],
+                                           censor=zcensor,
+                                           nsamples=nsamples)
     paramsz.columns = [f"z{cn}" for cn in paramsz.columns]
     params = pd.concat([paramsy, paramsz], axis=1)
 
@@ -371,10 +387,10 @@ def bivariate_importance_sampling(marginaly, marginalz,
                                   ycensor, zcensor)
 
     params, logposts, neff, niter = \
-        generic_importance_sampling(params,
-                                    logpost,
-                                    nsamples,
-                                    mixing_probability)
+        generic_importance_sampling(params=params,
+                                    logpost=logpost,
+                                    nsamples=nsamples,
+                                    mixing_probability=mixing_probability)
     params.columns = [f"{prefix}{pn}" for prefix in ["y", "z"]
                       for pn in PARAMETERS] + ["rho"]
     return params, logposts, neff, niter
