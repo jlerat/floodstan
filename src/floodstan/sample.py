@@ -297,7 +297,7 @@ def generic_importance_sampling(params, logpost, nsamples,
                 raise ValueError(errmess)
 
             if itop.sum() < ntop_params:
-                errmess = f"Cannot identify {ntop} valid parameters."
+                errmess = f"Cannot identify {ntop_params} valid parameters."
                 raise ValueError(errmess)
 
             # Restart from the best params
@@ -357,17 +357,17 @@ def bivariate_importance_sampling(marginaly, marginalz,
                                                      zcensor)
     # Two univariate samples
     paramsy, _, _, _ = \
-            univariate_importance_sampling(marginal=marginaly,
-                                           data=data[:, 0],
-                                           censor=ycensor,
-                                           nsamples=nsamples)
+        univariate_importance_sampling(marginal=marginaly,
+                                       data=data[:, 0],
+                                       censor=ycensor,
+                                       nsamples=nsamples)
     paramsy.columns = [f"y{cn}" for cn in paramsy.columns]
 
     paramsz, _, _, _ = \
-            univariate_importance_sampling(marginal=marginalz,
-                                           data=data[:, 1],
-                                           censor=zcensor,
-                                           nsamples=nsamples)
+        univariate_importance_sampling(marginal=marginalz,
+                                       data=data[:, 1],
+                                       censor=zcensor,
+                                       nsamples=nsamples)
     paramsz.columns = [f"z{cn}" for cn in paramsz.columns]
     params = pd.concat([paramsy, paramsz], axis=1)
 
