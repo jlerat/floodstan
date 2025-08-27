@@ -297,3 +297,69 @@ def test_univariate_censored_sampling_not_enough_inits(allclose):
                                            iter_warmup=stan_nwarm)
 
 
+def test_univariate_klemes_data(allclose):
+    fd = FTESTS / "data" / "Klemes_19986_dilletantism_fig5_plot_data.csv"
+    y = pd.read_csv(fd).iloc[:, 1].sort_values().values
+    marginal_name = "GEV"
+    marginal = marginals.factory(marginal_name)
+    censor = 0.
+
+    # Set STAN
+    stan_nwarm = 10000
+    stan_nsamples = 5000
+    stan_nchains = 5
+
+    # Prepare sampling data
+    sv = sample.StanSamplingVariable(marginal, y, censor,
+                                     ninits=stan_nchains)
+    stan_data = sv.to_dict()
+    stan_inits = sv.initial_parameters
+    stan_args = sv.stan_sample_args
+
+    # Clean output folder
+    fname = f"univariate_klemes"
+    fout = FTESTS / "sampling" / fname
+    fout.mkdir(parents=True, exist_ok=True)
+    for f in fout.glob("*.*"):
+        f.unlink()
+
+    design = {}
+    for ibias in ["low", "neutral", "high"]:
+        yb = y.copy()
+        if ibias == "low":
+            yb[:3] = 3.
+        elif ibias == "high":
+            yb[:3] = 7.5
+
+        stan_data["y"] = yb
+
+        # Sample arguments
+        kw = dict(data=stan_data,
+                  seed=SEED,
+                  iter_sampling=stan_nsamples // stan_nchains,
+                  output_dir=fout,
+                  inits=stan_inits,
+                  chains=stan_nchains,
+                  parallel_chains=stan_nchains,
+                  iter_warmup=stan_nwarm)
+        kw.update(stan_args)
+
+        # Sample
+        smp = univariate_censored_sampling(**kw)
+        df = smp.draws_pd()
+        diag = report.process_stan_diagnostic(smp.diagnose())
+        rep, _ = report.ams_report(marginal, df)
+
+        for f in fout.glob("*.*"):
+            f.unlink()
+
+        # Test diag
+        assert diag["effsamplesz"] == "satisfactory"
+        assert diag["rhat"] == "satisfactory"
+
+        design[ibias] = rep.POSTERIOR_PREDICTIVE.filter(regex="DESIGN")
+
+    fout.rmdir()
+    design = pd.DataFrame(design)
+    diff = math.log(design.high.DESIGN_ARI100) - math.log(design.low.DESIGN_ARI100)
+    assert diff < 5e-2
