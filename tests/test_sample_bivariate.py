@@ -23,25 +23,15 @@ from floodstan import stan_test_marginal, stan_test_copula
 from floodstan import report, sample
 from floodstan import bivariate_censored_sampling
 
-from test_sample_univariate import get_stationids, get_ams
+from utils import get_stationids, get_ams, add_gaussian_covariate
+from utils import FTESTS
 
 SEED = 5446
 np.random.seed(SEED)
 
-FTESTS = Path(__file__).resolve().parent
-
 STATIONIDS = get_stationids()
 
 LOGGER = sample.get_logger(stan_logger=False)
-
-
-def add_gaussian_covariate(y):
-    scale = np.nanstd(y) / 5
-    z = y + np.random.normal(0, scale, size=len(y))
-
-    z.iloc[-2] = np.nan # to add a missing data in z
-    df = pd.DataFrame({"y": y, "z": z}).sort_index()
-    return df.y, df.z
 
 
 @pytest.mark.parametrize("distname",

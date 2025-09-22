@@ -14,7 +14,6 @@ from floodstan.marginals import PARAMETERS
 from floodstan.copulas import factory
 from floodstan.data_processing import univariate2censored
 from floodstan.data_processing import univariate2cases
-from floodstan.data_processing import bivariate2cases
 
 MARGINAL_CODES = {code: name for name, code in MARGINAL_NAMES.items()}
 COPULA_CODES = {code: name for name, code in COPULA_NAMES.items()}
@@ -22,25 +21,12 @@ COPULA_CODES = {code: name for name, code in COPULA_NAMES.items()}
 # Subset of copula currently supported in the stan model
 COPULA_NAMES_STAN = ["Gaussian", "Clayton", "Gumbel"]
 
-# Prior on discrete parameters
-DISCRETE_LOCN_PRIOR = [1, 10]
-DISCRETE_PHI_PRIOR = [1, 10]
-
 CENSOR_DEFAULT = -1e10
 
 STAN_VARIABLE_INITIAL_CDF_MIN = 1e-8
 
-# .. maximum number of iteration in importance sampling
-NITER_MAX_IMPORTANCE = 10
-
-# Minimum ratio between neff and nsamples to stop iterating
-EFFECTIVE_SAMPLE_FACTOR = 0.8
-
-# Minimum neff tolerated during iteration
-EFFECTIVE_SAMPLE_MIN = 5
-
-# Maximum number of
-NPARAMS_SAMPLED = 1000
+# Maximum number of parameter sampled for initialisation
+NPARAMS_INITS_MAX = 1000
 
 # Special stan sampling arguments
 STAN_SAMPLE_ARGS = {
@@ -144,258 +130,6 @@ def are_marginal_params_valid(marginal, locn, logscale, shape1, data, censor):
     return None, None
 
 
-def _check_fit_method(fit_method):
-    expected = ["fit_lh_moments", "params_guess"]
-    if fit_method not in expected:
-        errmess = f"Expected fit_method in [{'/'.join(expected)}]."
-        raise ValueError(errmess)
-
-
-def univariate_bootstrap(marginal, data, fit_method="params_guess",
-                         nboot=10000, eta=0):
-    _check_fit_method(fit_method)
-    _, dobs, _, _ = univariate2censored(data, -np.inf)
-    nval = len(dobs)
-
-    # Parameter estimation method
-    fun = getattr(marginal, fit_method)
-    kw = {"eta": eta} if fit_method == "fit_lh_moments" else {}
-
-    # Prepare data
-    boots = pd.DataFrame(np.nan, index=np.arange(nboot),
-                         columns=PARAMETERS)
-    # Run bootstrap
-    for i in range(nboot):
-        resampled = np.random.choice(dobs, nval, replace=True)
-        try:
-            fun(resampled, **kw)
-        except Exception:
-            continue
-
-        boots.loc[i, :] = marginal.params
-
-    return boots
-
-
-def bivariate_bootstrap(marginaly, marginalz, data,
-                        fit_method="params_guess",
-                        nboot=10000, eta=0):
-    _check_fit_method(fit_method)
-    icases, data, _, _ = bivariate2cases(data, -np.inf, -np.inf)
-
-    # Keep data with both variables valid
-    data = data[icases.i11]
-    nval = len(data)
-
-    if nval < 5:
-        errmess = "Cannot do bootstrap with less than 5"\
-                  + " sample valid for both variables."
-        raise ValueError(errmess)
-
-    # Parameter estimation method
-    funy = getattr(marginaly, fit_method)
-    funz = getattr(marginalz, fit_method)
-    kw = {"eta": eta} if fit_method == "fit_lh_moments" else {}
-
-    # Prepare data
-    cols = [f"{prefix}{pn}" for prefix in ["y", "z"]
-            for pn in PARAMETERS] + ["rho"]
-    boots = pd.DataFrame(np.nan, index=np.arange(nboot),
-                         columns=cols)
-
-    # Run bootstrap
-    kk = np.arange(nval)
-    for i in range(nboot):
-        k = np.random.choice(kk, nval, replace=True)
-        datay, dataz = data[k].T
-
-        try:
-            funy(datay, **kw)
-            boots.loc[i, cols[:3]] = marginaly.params
-            Fy = marginaly.cdf(datay)
-
-            funz(dataz, **kw)
-            boots.loc[i, cols[3:6]] = marginalz.params
-            Fz = marginalz.cdf(dataz)
-
-            boots.loc[i, "rho"] = kendalltau(Fy, Fz)[0]
-
-        except Exception:
-            continue
-
-    return boots
-
-
-def compute_importance_weights(logposts):
-    lp_max = np.nanmax(logposts)
-    weights = np.exp(logposts - lp_max)
-    weights /= weights.sum()
-    neff = 1. / (weights**2).sum()
-    return weights, neff
-
-
-def generic_importance_sampling(params, logpost, nsamples,
-                                mixing_probability=0.5,
-                                ntop_params=10):
-    """ See
-    Smith, A. F. M., & Gelfand, A. E. (1992).
-    Bayesian Statistics without Tears: A Sampling-Resampling Perspective.
-    The American Statistician, 46(2), 84–88. https://doi.org/10.2307/2684170
-    """
-    params = np.array(params)
-
-    # required to pass flake, not used.
-    nvalues = len(params)
-    logposts = np.zeros(nvalues)
-    itop = np.zeros(nvalues).astype(bool)
-
-    # Importance sampling iteration
-    for niter in range(NITER_MAX_IMPORTANCE):
-        if niter > 0:
-            # Select parameters to be resampled
-            iresampled = np.random.choice([0, 1], len(params),
-                                          p=[mixing_probability,
-                                             1-mixing_probability])
-            # Keep the best one however
-            iresampled[itop] = 1
-
-            # Parameters that are kept
-            p1 = params[iresampled == 0]
-            lp1 = logposts[iresampled == 0]
-
-            # Perturb other parameters
-            cov = np.cov(params.T)
-            mean = np.mean(params, axis=0)
-            p2 = np.random.multivariate_normal(mean=mean, cov=cov,
-                                               size=nsamples - len(lp1))
-            lp2 = np.ones(len(p2)) * np.nan
-
-            params = np.row_stack([p1, p2])
-            logposts = np.concatenate([lp1, lp2])
-        else:
-            logposts = np.zeros(len(params)) * np.nan
-
-        # Compute log posteriors
-        for i, param in enumerate(params):
-            if np.isnan(logposts[i]):
-                lp = logpost(param)
-                logposts[i] = -1e100 if np.isnan(lp) \
-                    or not np.isfinite(lp) else lp
-
-        # Compute rescaled pdf (normalized by lp_max to avoid underflow)
-        weights, neff = compute_importance_weights(logposts)
-
-        # Find top parameters
-        rk_min = len(weights) - ntop_params - 1
-        itop = np.argsort(np.argsort(weights)) > rk_min
-
-        if neff < EFFECTIVE_SAMPLE_MIN:
-            if niter == NITER_MAX_IMPORTANCE - 1:
-                errmess = f"Sample has collapsed after {niter} iterations:"\
-                          + " effective sample size"\
-                          + f" < {EFFECTIVE_SAMPLE_MIN} ({neff})."
-                raise ValueError(errmess)
-
-            if itop.sum() < ntop_params:
-                errmess = f"Cannot identify {ntop_params} valid parameters."
-                raise ValueError(errmess)
-
-            # Restart from the best params
-            p0 = params[itop]
-            params = np.random.multivariate_normal(mean=p0.mean(axis=0),
-                                                   cov=np.cov(p0.T),
-                                                   size=nsamples)
-            itop = np.zeros(nsamples).astype(int)
-            logposts = np.nan * np.zeros(nsamples)
-            continue
-
-        nvalues = len(weights)
-        iselected = np.random.choice(np.arange(nvalues),
-                                     size=nvalues, p=weights)
-        params = params[iselected]
-        logposts = logposts[iselected]
-        itop = itop[iselected]
-
-        if neff > EFFECTIVE_SAMPLE_FACTOR * nsamples:
-            break
-
-    params = pd.DataFrame(params)
-    weights, neff = compute_importance_weights(logposts)
-    return params, logposts, neff, niter
-
-
-def univariate_importance_sampling(marginal, data, censor=-np.inf,
-                                   nsamples=10000,
-                                   mixing_probability=0.5):
-    data, dobs, ncens, censor = univariate2censored(data, censor)
-
-    # Bootstrap to start
-    params = univariate_bootstrap(marginal, data, nboot=1000)
-
-    # Importance sampling using marginal logpost
-    def logpost(param):
-        return -marginal.neglogpost(param, dobs, censor, ncens)
-
-    params, logposts, neff, niter = \
-        generic_importance_sampling(params=params,
-                                    logpost=logpost,
-                                    nsamples=nsamples,
-                                    mixing_probability=mixing_probability)
-    params.columns = PARAMETERS
-    return params, logposts, neff, niter
-
-
-def bivariate_importance_sampling(marginaly, marginalz,
-                                  copula, data,
-                                  ycensor=-np.inf,
-                                  zcensor=-np.inf,
-                                  nsamples=10000,
-                                  mixing_probability=0.7):
-    # Check data
-    icases, data, ycensor, zcensor = bivariate2cases(data,
-                                                     ycensor,
-                                                     zcensor)
-    # Two univariate samples
-    paramsy, _, _, _ = \
-        univariate_importance_sampling(marginal=marginaly,
-                                       data=data[:, 0],
-                                       censor=ycensor,
-                                       nsamples=nsamples)
-    paramsy.columns = [f"y{cn}" for cn in paramsy.columns]
-
-    paramsz, _, _, _ = \
-        univariate_importance_sampling(marginal=marginalz,
-                                       data=data[:, 1],
-                                       censor=zcensor,
-                                       nsamples=nsamples)
-    paramsz.columns = [f"z{cn}" for cn in paramsz.columns]
-    params = pd.concat([paramsy, paramsz], axis=1)
-
-    # Kendall tau bootstrap for if both variables are above median
-    nval = len(data)
-    medians = np.nanmedian(data, axis=0)
-    kk = np.where((data - medians[None, :] >= 0).all(axis=1))[0]
-    params.loc[:, "rho"] = np.nan
-    for iboot in range(nsamples):
-        k = np.random.choice(kk, nval)
-        params.loc[iboot, "rho"] = kendalltau(data[k, 0], data[k, 1]).statistic
-
-    # Importance sampling using copula logpost
-    def logpost(param):
-        return -copula.neglogpost(param, data, icases,
-                                  marginaly, marginalz,
-                                  ycensor, zcensor)
-
-    params, logposts, neff, niter = \
-        generic_importance_sampling(params=params,
-                                    logpost=logpost,
-                                    nsamples=nsamples,
-                                    mixing_probability=mixing_probability)
-    params.columns = [f"{prefix}{pn}" for prefix in ["y", "z"]
-                      for pn in PARAMETERS] + ["rho"]
-    return params, logposts, neff, niter
-
-
 class StanSamplingVariable():
     def __init__(self,
                  marginal,
@@ -426,7 +160,7 @@ class StanSamplingVariable():
         self._initial_cdfs = []
 
         # Parameters sampled for initial and potentially prior
-        nparams_sampled = NPARAMS_SAMPLED if nparams_sampled is None\
+        nparams_sampled = NPARAMS_INITS_MAX if nparams_sampled is None\
             else nparams_sampled
 
         # Importance sampling
@@ -769,11 +503,11 @@ class StanSamplingDataset():
             iok = ~np.isnan(data[0]) & ~np.isnan(data[1])
             rho0 = kendalltau(data[0][iok], data[1][iok]).statistic
             rhos = np.random.normal(loc=rho0, scale=0.1,
-                                    size=NPARAMS_SAMPLED)
+                                    size=NPARAMS_INITS_MAX)
             rhos = rhos.clip(copula.rho_lower + 0.02,
                              copula.rho_upper - 0.02)
             niter = 0
-            while True and niter < NPARAMS_SAMPLED:
+            while True and niter < NPARAMS_INITS_MAX:
                 rho = rhos[niter]
                 niter += 1
 
