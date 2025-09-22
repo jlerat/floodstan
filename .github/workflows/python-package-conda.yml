@@ -60,9 +60,8 @@ jobs:
 
           cd $GITHUB_WORKSPACE
           echo "--- floodstan install : located in $PWD ---"
-          # .. create a tmp directory for pip install
-          mkdir -p tmp
-          export TMPDIR=tmp
+          # .. use tmp directory big enough
+          export TMPDIR=$RCONDA/tmp
           
           python -m pip uninstall -y floodstan || true
           python -m pip install -e .
