@@ -5,6 +5,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from floodstan.marginals import PARAMETERS
+from floodstan.data_processing import univariate2censored
+
 FTESTS = Path(__file__).resolve().parent
 
 class NumpyEncoder(json.JSONEncoder):
@@ -61,5 +64,30 @@ def add_gaussian_covariate(y):
     z.iloc[-2] = np.nan # to add a missing data in z
     df = pd.DataFrame({"y": y, "z": z}).sort_index()
     return df.y, df.z
+
+
+def univariate_bootstrap(marginal, data, fit_method="params_guess",
+                         nboot=10000, eta=0):
+    _, dobs, _, _ = univariate2censored(data, -np.inf)
+    nval = len(dobs)
+
+    # Parameter estimation method
+    fun = getattr(marginal, fit_method)
+    kw = {"eta": eta} if fit_method == "fit_lh_moments" else {}
+
+    # Prepare data
+    boots = pd.DataFrame(np.nan, index=np.arange(nboot),
+                         columns=PARAMETERS)
+    # Run bootstrap
+    for i in range(nboot):
+        resampled = np.random.choice(dobs, nval, replace=True)
+        try:
+            fun(resampled, **kw)
+        except Exception:
+            continue
+
+        boots.loc[i, :] = marginal.params
+
+    return boots
 
 

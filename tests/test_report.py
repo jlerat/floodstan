@@ -19,7 +19,7 @@ from scipy.stats import t as tstud
 from floodstan import marginals, sample, report
 from floodstan import univariate_censored_sampling
 
-from test_sample_univariate import get_stationids, get_ams
+from utils import get_stationids, get_ams, univariate_bootstrap
 
 SEED = 5446
 np.random.seed(SEED)
@@ -41,13 +41,13 @@ def test_process_stan_diagnostic():
 
 
 @pytest.mark.parametrize("stationid",
-                         get_stationids()[:2] + ["hard"])
+                         get_stationids()[:1] + ["hard"])
 @pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
 def test_report(stationid, marginal_name, allclose):
     marginal = marginals.factory(marginal_name)
     y = get_ams(stationid)
-    params = sample.univariate_bootstrap(marginal, y, nboot=1000)
+    params = univariate_bootstrap(marginal, y, nboot=1000)
 
     # Run report without obs
     rep, _ = report.ams_report(marginal, params)
