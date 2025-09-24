@@ -216,6 +216,7 @@ def test_univariate_censored_sampling_not_enough_data(allclose):
 
     # Leaves only 4 values not nan
     inonan = np.where(~np.isnan(y))[0]
+    stan_data["y"] = np.array(stan_data["y"])
     stan_data["y"][inonan[4:]] = np.nan
 
     msg = "Error during sampling"

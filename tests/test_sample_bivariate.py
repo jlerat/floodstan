@@ -125,15 +125,6 @@ def test_bivariate_sampling_satisfactory(distname, copula, censoring, allclose):
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
 
-    stan_args.update({
-            "data": stan_data,
-            "chains": stan_nchains,
-            "seed": SEED,
-            "iter_warmup": stan_nwarm,
-            "iter_sampling": stan_nsamples // stan_nchains,
-            "inits": stan_inits
-            })
-
     if marginal.name == "GeneralizedLogistic":
         fa = FTESTS / "data" / "bivariate_GeneralizedLogistic"\
                 / "stan_args_ok.json"
@@ -235,6 +226,8 @@ def test_bivariate_sampling_not_enough_data(varname, allclose):
     stan_inits = sv.initial_parameters
 
     # Leaves only 4 values not nan
+    stan_data["y"] = np.array(stan_data["y"])
+    stan_data["z"] = np.array(stan_data["z"])
     if varname == "y":
         inonan = np.where(~np.isnan(y))[0]
         stan_data["y"][inonan[4:]] = np.nan
