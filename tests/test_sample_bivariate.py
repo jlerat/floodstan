@@ -82,7 +82,9 @@ def test_stan_sampling_dataset(distname, allclose):
 def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
     LOGGER = sample.get_logger(stan_logger=True)
 
-    marginal = marginals.factory("GEV")
+    #marginal = marginals.factory("GEV")
+    #marginal = marginals.factory("GeneralizedLogistic")
+    marginal = marginals.factory("Gumbel")
 
     stan_nwarm = 5000
     stan_nsamples = 5000

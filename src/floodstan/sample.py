@@ -358,20 +358,20 @@ class StanSamplingVariable():
         dd = {
             f"{vn}marginal": self.marginal_code,
             "N": self.N,
-            vn: self.data,
-            f"{vn}censor": self.censor,
+            vn: self.data.tolist(),
+            f"{vn}censor": float(self.censor),
             f"{vn}locn_prior": dist.locn_prior.to_list(),
             f"{vn}logscale_prior": dist.logscale_prior.to_list(),
             f"{vn}shape1_prior": dist.shape1_prior.to_list(),
-            "locn_lower": dist.locn_prior.lower,
-            "locn_upper": dist.locn_prior.upper,
-            "logscale_lower": dist.logscale_prior.lower,
-            "logscale_upper": dist.logscale_prior.upper,
-            "shape1_lower": dist.shape1_prior.lower,
-            "shape1_upper": dist.shape1_prior.upper,
-            "i11": self.i11,
-            "i21": self.i21,
-            "Ncases": self.Ncases
+            "locn_lower": float(dist.locn_prior.lower),
+            "locn_upper": float(dist.locn_prior.upper),
+            "logscale_lower": float(dist.logscale_prior.lower),
+            "logscale_upper": float(dist.logscale_prior.upper),
+            "shape1_lower": float(dist.shape1_prior.lower),
+            "shape1_upper": float(dist.shape1_prior.upper),
+            "i11": self.i11.tolist(),
+            "i21": self.i21.tolist(),
+            "Ncases": self.Ncases.tolist()
             }
 
         return dd
@@ -539,24 +539,24 @@ class StanSamplingDataset():
                 p0 = min(p0, prior.lower)
                 p1 = max(p1, prior.upper)
 
-            dd[f"{pn}_lower"] = p0
-            dd[f"{pn}_upper"] = p1
+            dd[f"{pn}_lower"] = float(p0)
+            dd[f"{pn}_upper"] = float(p1)
 
         rho_prior = self._copula.rho_prior
 
         dd.update({
-            "copula": self.copula_code,
-            "rho_lower": rho_prior.lower,
-            "rho_upper": rho_prior.upper,
+            "copula": int(self.copula_code),
+            "rho_lower": float(rho_prior.lower),
+            "rho_upper": float(rho_prior.upper),
             "rho_prior": rho_prior.to_list(),
-            "Ncases": self.Ncases,
-            "i11": self.i11,
-            "i21": self.i21,
-            "i31": self.i31,
-            "i12": self.i12,
-            "i22": self.i22,
-            "i32": self.i32,
-            "i13": self.i13,
-            "i23": self.i23
+            "Ncases": self.Ncases.tolist(),
+            "i11": self.i11.tolist(),
+            "i21": self.i21.tolist(),
+            "i31": self.i31.tolist(),
+            "i12": self.i12.tolist(),
+            "i22": self.i22.tolist(),
+            "i32": self.i32.tolist(),
+            "i13": self.i13.tolist(),
+            "i23": self.i23.tolist()
             })
         return dd

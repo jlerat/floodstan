@@ -62,6 +62,17 @@ def test_stan_sampling_variable(stationid, marginal_name, allclose):
     assert sv.sampled_parameters.shape[0] == sample.NPARAMS_INITS_MAX
 
     dd = sv.to_dict()
+
+    # Test writing to json
+    fd = FTESTS / "sample.json"
+    if fd.exists():
+        fd.unlink()
+    with fd.open("w") as fo:
+        json.dump(dd, fo, indent=4)
+
+    fd.unlink()
+
+    # Test content of sample
     keys = ["ymarginal", "y",
             "ycensor",
             "ylocn_prior", "ylogscale_prior",
