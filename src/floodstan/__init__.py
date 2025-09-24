@@ -5,6 +5,8 @@ import warnings
 from pathlib import Path
 from typing import Callable, Optional
 
+from floodstan.marginals import MARGINAL_NAMES
+
 import cmdstanpy
 
 __version__ = "1.0"
@@ -75,6 +77,15 @@ def load_stan_model(name: str, method: Optional[str] = "mcmc") -> Callable:
         if "data" not in kwargs:
             errmess = "Expected data argument"
             raise ValueError(errmess)
+
+        # Exclude LogPearson3 from fitting for now
+        marginal_codes = [kwargs["data"].get(n, 1)
+                          for n in ["ymarginal", "zmarginal"]]
+        lp3_code = next(n for k, n in MARGINAL_NAMES.items()
+                        if k == "LogPearson3")
+        if lp3_code in marginal_codes:
+            errmsg = "LogPearson3 is not implemented in stan."
+            raise ValueError(errmsg)
 
         if is_test:
             if "inits" in kwargs:

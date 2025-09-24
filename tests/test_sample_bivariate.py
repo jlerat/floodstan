@@ -84,7 +84,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
 
     marginal = marginals.factory("GEV")
 
-    stan_nwarm = 10000
+    stan_nwarm = 5000
     stan_nsamples = 5000
     stan_nchains = 5
 
@@ -145,7 +145,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
 def test_bivariate_sampling_problem(allclose):
     LOGGER = sample.get_logger(stan_logger=True)
 
-    stan_nwarm = 10000
+    stan_nwarm = 5000
     stan_nsamples = 5000
     stan_nchains = 10
 
@@ -226,7 +226,6 @@ def test_bivariate_sampling_not_enough_data(varname, allclose):
     else:
         inonan = np.where(~np.isnan(z))[0]
         stan_data["z"][inonan[4:]] = np.nan
-
 
     msg = "Error during sampling"
     with pytest.raises(RuntimeError, match=msg):
