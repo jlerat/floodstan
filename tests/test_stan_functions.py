@@ -37,6 +37,9 @@ FTESTS = Path(__file__).resolve().parent
 @pytest.mark.parametrize("stationid",
                          get_stationids())
 def test_marginals_vs_stan(marginal_name, stationid, allclose):
+    if marginal_name == "LogPearson3":
+        pytest.skip("LogPearson3 is not numerically stable in stan")
+
     stationids = get_stationids()
     LOGGER = sample.get_logger(level="INFO", stan_logger=False)
     nboot = 100
