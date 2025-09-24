@@ -153,11 +153,11 @@ def test_bivariate_sampling_problem(allclose):
 
     LOGGER = sample.get_logger(stan_logger=True)
 
-    fd = FTESTS / "data" / "bivariate_stan_data.json"
+    fd = FTESTS / "data" / "bivariate_problem" / "bivariate_stan_data.json"
     with fd.open("r") as fo:
         stan_data = json.load(fo)
 
-    fi = FTESTS / "data" / "bivariate_stan_inits.json"
+    fi = FTESTS / "data" / "bivariate_problem" / "bivariate_stan_inits.json"
     with fd.open("r") as fo:
         stan_inits = json.load(fo)
 
@@ -175,7 +175,8 @@ def test_bivariate_sampling_problem(allclose):
                                       parallel_chains=stan_nchains,
                                       output_dir=fout_stan,
                                       inits=stan_inits,
-                                      show_progress=False)
+                                      show_progress=False,
+                                      adapt_delta=0.99)
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
 
