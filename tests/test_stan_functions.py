@@ -105,7 +105,7 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         assert allclose(shape1, marginal.shape1, atol=atol)
 
         # Test data
-        i11 = stan_data["i11"] - 1
+        i11 = np.array(stan_data["i11"]) - 1
         atol = 5e-3
         luncens = smp.filter(regex="luncens").values[i11]
         expected = marginal.logpdf(yboot[i11])

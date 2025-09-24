@@ -79,12 +79,11 @@ def test_stan_sampling_dataset(distname, allclose):
 
 @pytest.mark.parametrize("copula", sample.COPULA_NAMES_STAN)
 @pytest.mark.parametrize("censoring", [False, True])
-def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
+@pytest.mark.parametrize("distname", ["GeneralizedLogistic"])
+def test_bivariate_sampling_satisfactory(distname, copula, censoring, allclose):
     LOGGER = sample.get_logger(stan_logger=True)
 
-    #marginal = marginals.factory("GEV")
-    #marginal = marginals.factory("GeneralizedLogistic")
-    marginal = marginals.factory("Gumbel")
+    marginal = marginals.factory(distname)
 
     stan_nwarm = 5000
     stan_nsamples = 5000
@@ -105,7 +104,7 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
     sv = sample.StanSamplingDataset([yv, zv], copula)
     stan_data = sv.to_dict()
     stan_inits = sv.initial_parameters
-    stan_sample_args = sv.stan_sample_args
+    stan_args = sv.stan_sample_args
 
     fout_stan = FTESTS / "sampling" / "bivariate" / f"{stationid}_{copula}"
     fout_stan.mkdir(exist_ok=True, parents=True)
@@ -122,9 +121,24 @@ def test_bivariate_sampling_satisfactory(copula, censoring, allclose):
                                       output_dir=fout_stan,
                                       inits=stan_inits,
                                       show_progress=False,
-                                      **stan_sample_args)
+                                      **stan_args)
     df = smp.draws_pd()
     diag = report.process_stan_diagnostic(smp.diagnose())
+
+    stan_args.update({
+            "data": stan_data,
+            "chains": stan_nchains,
+            "seed": SEED,
+            "iter_warmup": stan_nwarm,
+            "iter_sampling": stan_nsamples // stan_nchains,
+            "inits": stan_inits
+            })
+
+    if marginal.name == "GeneralizedLogistic":
+        fa = FTESTS / "data" / "bivariate_GeneralizedLogistic"\
+                / "stan_args_ok.json"
+        with fa.open("w") as fo:
+            json.dump(stan_args, fo, indent=4)
 
     # Test diag
     assert diag["treedepth"] == "satisfactory"
@@ -150,8 +164,6 @@ def test_bivariate_sampling_problem(allclose):
     stan_nwarm = 5000
     stan_nsamples = 5000
     stan_nchains = 10
-
-    LOGGER = sample.get_logger(stan_logger=True)
 
     fd = FTESTS / "data" / "bivariate_problem" / "bivariate_stan_data.json"
     with fd.open("r") as fo:
@@ -241,4 +253,60 @@ def test_bivariate_sampling_not_enough_data(varname, allclose):
                                       parallel_chains=stan_nchains,
                                       inits=stan_inits,
                                       show_progress=False)
+
+
+def test_bivariate_sampling_generalizedlogistic(allclose):
+    LOGGER = sample.get_logger(stan_logger=True)
+
+    fd = FTESTS / "data" / "bivariate_GeneralizedLogistic" / "stan_args.json"
+    with fd.open("r") as fo:
+        stan_args = json.load(fo)
+
+    marginal = marginals.factory("GeneralizedLogistic")
+    copula = "Gumbel"
+    stan_nchains = stan_args["chains"]
+
+    y = np.array(stan_args["data"]["y"])
+    z = np.array(stan_args["data"]["z"])
+    z[-1] = np.nan
+
+    censor = np.nanmin(y) - 1.
+    yv = sample.StanSamplingVariable(marginal, y, censor,
+                                     ninits=stan_nchains)
+    censor = np.nanmin(z) - 1.
+    zv = sample.StanSamplingVariable(marginal, z, censor,
+                                     ninits=stan_nchains)
+
+    sv = sample.StanSamplingDataset([yv, zv], copula)
+    stan_args["data"] = sv.to_dict()
+    stan_args["inits"] = sv.initial_parameters
+
+
+    fout_stan = FTESTS / "sampling" / "bivariate" / "generalizedlogistic"
+    fout_stan.mkdir(exist_ok=True, parents=True)
+    for f in fout_stan.glob("*.*"):
+        f.unlink()
+
+    stan_args["output_dir"] = str(fout_stan)
+
+    smp = bivariate_censored_sampling(**stan_args)
+    df = smp.draws_pd()
+    diag = report.process_stan_diagnostic(smp.diagnose())
+
+    # Test diag
+    assert diag["treedepth"] == "satisfactory"
+    assert diag["ebfmi"] == "satisfactory"
+    assert diag["rhat"] == "satisfactory"
+
+    # Test divergence
+    prc = diag["divergence_proportion"]
+    assert prc < 20
+
+    # Clean folder
+    for f in fout_stan.glob("*.*"):
+        f.unlink()
+
+    fout_stan.rmdir()
+
+
 
