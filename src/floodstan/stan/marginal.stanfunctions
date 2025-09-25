@@ -274,7 +274,7 @@ real genlogistic_lpdf(vector y, real tau, real alpha, real kappa) {
  
         z = -1. / kappa * log1m(kappa * z);
     }
-    return -(1. - kappa) * sum(z) - 2. * sum(log1p_exp(-z)) - N * log(alpha);
+    return -(1. - kappa) * sum(z) - 2. * sum(log1m_exp(z)) - N * log(alpha);
 }
 
 real genlogistic_lcdf(real y, real tau, real alpha, real kappa) {
@@ -289,7 +289,7 @@ real genlogistic_lcdf(real y, real tau, real alpha, real kappa) {
 
         z = -1. / kappa * log1m(kappa * z);
     }
-    return -log1p_exp(-z);
+    return -log1m_exp(z);
 }
 
 // ------- Marginal functions -----------------------------
