@@ -17,7 +17,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.stats import gamma
 import matplotlib.pyplot as plt
 
 from hydrodiy.io import csv, iutils
@@ -27,31 +26,11 @@ from floodstan import report, freqplots
 
 from cmdstanpy import CmdStanModel
 
-import importlib
-importlib.reload(marginals)
-importlib.reload(sample)
-
-f = Path(sample.__file__).parent.parent.parent / "tests" /\
-    "test_sample_univariate.py"
-spec = importlib.util.spec_from_file_location("test_sample_univariate", f)
-tsu = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(tsu)
-
 # ----------------------------------------------------------------------
 # @Config
 # ----------------------------------------------------------------------
-parser = argparse.ArgumentParser(
-    description="Run logpearson 3 inference",
-    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-parser.add_argument("-c", "--censoring", help="Use censoring",
-                    action="store_true", default=False)
-args = parser.parse_args()
-censoring = args.censoring
-
-stationids = tsu.get_stationids()
-
-nboot = 100
+nboot = 20
+nboot_zero = 3
 
 SEED = 5446
 
@@ -59,12 +38,16 @@ SEED = 5446
 # @Folders
 # ----------------------------------------------------------------------
 source_file = Path(__file__).resolve()
-froot = source_file.parent.parent
+froot = source_file.parent.parent.parent
 
-fout = froot / "outputs" / "stan"
+fdata = froot / "tests" / "data"
+
+fout = froot / "outputs" / "genlogistic_fix" / "checks"
 fout.mkdir(exist_ok=True, parents=True)
 
-for f in fout.glob("*.*"):
+fout_stan = fout / "stan"
+
+for f in fout_stan.glob("*.*"):
     f.unlink()
 
 # ----------------------------------------------------------------------
@@ -76,23 +59,31 @@ LOGGER = sample.get_logger(stan_logger=False)
 # ----------------------------------------------------------------------
 # @Get data
 # ----------------------------------------------------------------------
+ams = {}
+for f in  fdata.glob("*.csv"):
+    stationid = re.sub("_AMS.*", "", f.stem)
+    if not re.search("\d{6}", stationid):
+        continue
+    df = pd.read_csv(f, skiprows=15)
+    ams[stationid] = df.iloc[:, 1]
+
 # ----------------------------------------------------------------------
 # @Process
 # ----------------------------------------------------------------------
-marginal = marginals.factory("LogPearson3")
+marginal = marginals.factory("GeneralizedLogistic")
 
-stan_file = froot / "scripts" / "logpearson3_check.stan"
-LOGGER.info("Loading stan model")
+LOGGER.info("Compiling stan model")
+stan_file = froot / "scripts" / "generalizedLogistic" / "genlogistic_check.stan"
 model = CmdStanModel(stan_file=stan_file)
 LOGGER.info(".. done")
 
-for stationid in stationids:
-    LOGGER.info(f"Station {stationid}")
-    y = tsu.get_ams(stationid)
+for stationid, y in ams.items():
+    LOGGER.info(f"Running station {stationid}")
     N = len(y)
     ndone = 0
 
     for iboot in range(nboot):
+        LOGGER.info(f"\tBoot {iboot + 1} / {nboot}")
         rng = np.random.default_rng(SEED)
         yboot = rng.choice(y.values, N)
 
@@ -100,18 +91,16 @@ for stationid in stationids:
         dnocens = yboot[yboot >= censor]
         ncens = (yboot < censor).sum()
 
-        # Run sampling variable with low number of
-        # importance samples
-        nimportance = 0
         sv = sample.StanSamplingVariable(marginal, yboot, censor,
-                                 nimportance=nimportance,
-                                 ninits=1)
+                                         ninits=1)
         stan_data = sv.to_dict()
-        marginal.params = sv.initial_parameters[0]
+        marginal.params = {k[1:]: v for k, v
+                           in sv.initial_parameters[0].items()}
 
         # Test shape close to 0 for edge cases
-        if iboot < nboot // 20:
+        if iboot < nboot_zero:
             marginal.shape1 = 1e-20
+            LOGGER.info("\t\t zero shape")
         elif iboot >= nboot // 20 and iboot < 2 * nboot // 20:
             marginal.shape1 = 1e-3
 
@@ -160,7 +149,7 @@ for stationid in stationids:
                            atol=atol, rtol=rtol), errmess
 
         # Test data
-        i11 = stan_data["i11"] - 1
+        i11 = np.array(stan_data["i11"]) - 1
         luncens = smp.filter(regex="luncens").values[i11]
         expected = marginal.logpdf(yboot[i11])
         assert np.allclose(luncens, expected,
@@ -202,6 +191,6 @@ for stationid in stationids:
                            atol=atol, rtol=rtol), errmess
 
     # Ensures at least 5 simulation beyond 0 shape trials
-    assert ndone > nboot // 10 + 5
+    assert ndone > nboot_zero + 5
 
 LOGGER.info("Process completed")

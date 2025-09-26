@@ -37,7 +37,7 @@ from hydrodiy.plot import putils
 # @Folders
 # ----------------------------------------------------------------------
 source_file = Path(__file__).resolve()
-froot = source_file.parent.parent
+froot = source_file.parent.parent.parent
 
 fout = froot / "outputs" / "check_incomplete_gamma"
 fout.mkdir(exist_ok=True)

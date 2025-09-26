@@ -36,7 +36,7 @@ x_target = 1e-17
 # @Folders
 # ----------------------------------------------------------------------
 source_file = Path(__file__).resolve()
-froot = source_file.parent.parent
+froot = source_file.parent.parent.parent
 
 fout = froot / "outputs"
 fout.mkdir(exist_ok=True, parents=True)

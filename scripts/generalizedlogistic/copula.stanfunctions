@@ -1,0 +1,38 @@
+real copula_lcdf(matrix uv, real rho){
+    int N = rows(uv);
+    real theta = 1. / (1. - rho);
+
+    // Gumbel copula
+    vector[N] x = -log(uv[:, 1]);
+    vector[N] y = -log(uv[:, 2]);
+    vector[N] expsum = pow(x, theta)+pow(y, theta);
+    return sum(-pow(expsum, 1. / theta));
+}
+
+real copula_lpdf(matrix uv, real rho){
+    int N = rows(uv);
+    real theta = 1. / (1. - rho);
+
+    // Gumbel copula
+    vector[N] x = -log(uv[:, 1]);
+    vector[N] y = -log(uv[:, 2]);
+    vector[N] expsum = pow(x, theta) + pow(y, theta);
+    vector[N] exppow = pow(expsum, 1. / theta);
+
+    return sum(- exppow
+                + log(exppow + theta - 1.)
+                + (1. / theta - 2.) * log(expsum)
+                + (theta - 1.) * log(x .* y)
+                + x + y);
+}
+
+real copula_lpdf_conditional(vector ucond, real v, real rho){
+    int N = rows(ucond);
+    real theta = 1. / (1. - rho);
+
+    // Gumbel copula
+    vector[N] x = -log(ucond);
+    real y = -log(v);
+    return sum(x - pow(pow(x, theta) + pow(y, theta), 1. / theta)
+                       + (1. / theta - 1.) * log(1. + pow( y ./ x, theta)));
+}
