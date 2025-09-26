@@ -88,3 +88,4 @@ tests/images/
 tests/report/
 tests/logs/
 outputs/
+tests/data/bivariate_GeneralizedLogistic/stan_args_ok.json

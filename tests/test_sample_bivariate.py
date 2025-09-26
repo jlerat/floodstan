@@ -79,7 +79,7 @@ def test_stan_sampling_dataset(distname, allclose):
 
 @pytest.mark.parametrize("copula", sample.COPULA_NAMES_STAN)
 @pytest.mark.parametrize("censoring", [False, True])
-@pytest.mark.parametrize("distname", ["GeneralizedLogistic"])
+@pytest.mark.parametrize("distname", ["GEV"])
 def test_bivariate_sampling_satisfactory(distname, copula, censoring, allclose):
     LOGGER = sample.get_logger(stan_logger=True)
 

@@ -262,7 +262,7 @@ real genpareto_lcdf(real y, real tau, real alpha, real kappa) {
 // -------------- Generalized Logistic -------------
 real genlogistic_lpdf(vector y, real tau, real alpha, real kappa) {
     int N = rows(y);
-    real kappa_transition = 1e-6; 
+    real kappa_transition = 1e-10; 
 
     vector[N] z = (y - tau) / alpha;
     if(abs(kappa) > kappa_transition){
@@ -274,11 +274,11 @@ real genlogistic_lpdf(vector y, real tau, real alpha, real kappa) {
  
         z = -1. / kappa * log1m(kappa * z);
     }
-    return -(1. - kappa) * sum(z) - 2. * sum(log1m_exp(z)) - N * log(alpha);
+    return -(1. - kappa) * sum(z) - 2. * sum(log1p_exp(-z)) - N * log(alpha);
 }
 
 real genlogistic_lcdf(real y, real tau, real alpha, real kappa) {
-    real kappa_transition = 1e-6; 
+    real kappa_transition = 1e-10; 
 
     real z = (y - tau) / alpha;
     if(abs(kappa) > kappa_transition){
@@ -289,7 +289,7 @@ real genlogistic_lcdf(real y, real tau, real alpha, real kappa) {
 
         z = -1. / kappa * log1m(kappa * z);
     }
-    return -log1m_exp(z);
+    return -log1p_exp(-z);
 }
 
 // ------- Marginal functions -----------------------------
