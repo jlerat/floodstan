@@ -209,7 +209,8 @@ model {
   
   // Case 13 : y is obs, z is missing
   // this is marginal pdf for y (analogous to case 31)
-  target += marginal_lpdf(y[i13] | ymarginal, ylocn, yscale, yshape1);
+  if(Ncases[1, 3] > 0)
+     target += marginal_lpdf(y[i13] | ymarginal, ylocn, yscale, yshape1);
 
   // Case 23 : y is cens, z is missing
   // this is marginal cdf for y (analogous to case 32)

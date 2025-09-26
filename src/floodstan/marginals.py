@@ -1212,7 +1212,7 @@ class GeneralizedLogistic(FloodFreqDistribution):
             tau, alpha, kappa = self.locn, self.scale, self.shape1
 
             def fun(x):
-                z = (x-tau)/alpha
+                z = (x - tau) / alpha
                 if abs(kappa) > kt:
                     u = 1 - kappa * z
                     z = np.where(u > 1e-100, -1. / kappa * np.log(u), np.nan)
