@@ -255,6 +255,15 @@ def test_bivariate_sampling_generalizedlogistic(allclose):
     with fd.open("r") as fo:
         stan_args = json.load(fo)
 
+    nsamples = 10000
+    nchains = 5
+    nwarm = 10000
+
+    stan_args["chains"] = nchains
+    stan_args["parallel_chains"] = nchains
+    stan_args["iter_warmup"] = nwarm
+    stan_args["iter_sampling"] = nsamples // nchains
+
     marginal = marginals.factory("GeneralizedLogistic")
     copula = "Gumbel"
     stan_nchains = stan_args["chains"]
@@ -273,7 +282,6 @@ def test_bivariate_sampling_generalizedlogistic(allclose):
     sv = sample.StanSamplingDataset([yv, zv], copula)
     stan_args["data"] = sv.to_dict()
     stan_args["inits"] = sv.initial_parameters
-
 
     fout_stan = FTESTS / "sampling" / "bivariate" / "generalizedlogistic"
     fout_stan.mkdir(exist_ok=True, parents=True)
