@@ -117,8 +117,8 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     marginal = marginals.factory(marginal_name)
 
     # Set STAN
-    stan_nwarm = 5000
-    stan_nsamples = 5000
+    stan_nwarm = 10000
+    stan_nsamples = 10000
     stan_nchains = 5
 
     # Prepare sampling data

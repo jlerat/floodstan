@@ -152,8 +152,8 @@ def test_bivariate_sampling_satisfactory(distname, copula, censoring, allclose):
 def test_bivariate_sampling_problem(allclose):
     LOGGER = sample.get_logger(stan_logger=True)
 
-    stan_nwarm = 5000
-    stan_nsamples = 5000
+    stan_nwarm = 10000
+    stan_nsamples = 10000
     stan_nchains = 10
 
     fd = FTESTS / "data" / "bivariate_problem" / "bivariate_stan_data.json"
