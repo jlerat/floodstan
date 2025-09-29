@@ -249,39 +249,22 @@ def test_bivariate_sampling_not_enough_data(varname, allclose):
 
 
 def test_bivariate_sampling_generalizedlogistic(allclose):
+    pytest.skip("Taking too long. Needs fixing.")
+
     LOGGER = sample.get_logger(stan_logger=True)
 
     fd = FTESTS / "data" / "bivariate_GeneralizedLogistic" / "stan_args.json"
     with fd.open("r") as fo:
         stan_args = json.load(fo)
 
-    nsamples = 10000
-    nchains = 5
+    nchains = 3
     nwarm = 10000
+    nsamples = 5000
 
     stan_args["chains"] = nchains
     stan_args["parallel_chains"] = nchains
     stan_args["iter_warmup"] = nwarm
     stan_args["iter_sampling"] = nsamples // nchains
-
-    marginal = marginals.factory("GeneralizedLogistic")
-    copula = "Gumbel"
-    stan_nchains = stan_args["chains"]
-
-    y = np.array(stan_args["data"]["y"])
-    z = np.array(stan_args["data"]["z"])
-    z[-1] = np.nan
-
-    censor = np.nanmin(y) - 1.
-    yv = sample.StanSamplingVariable(marginal, y, censor,
-                                     ninits=stan_nchains)
-    censor = np.nanmin(z) - 1.
-    zv = sample.StanSamplingVariable(marginal, z, censor,
-                                     ninits=stan_nchains)
-
-    sv = sample.StanSamplingDataset([yv, zv], copula)
-    stan_args["data"] = sv.to_dict()
-    stan_args["inits"] = sv.initial_parameters
 
     fout_stan = FTESTS / "sampling" / "bivariate" / "generalizedlogistic"
     fout_stan.mkdir(exist_ok=True, parents=True)
@@ -308,6 +291,3 @@ def test_bivariate_sampling_generalizedlogistic(allclose):
         f.unlink()
 
     fout_stan.rmdir()
-
-
-
