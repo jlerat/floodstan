@@ -7,7 +7,7 @@ Bayesian flood frequency analysis using Stan in python.
 
 # What is hyncu
 This python package performs flood frequency analysis using Bayesian inference
-performed with the [Stan](https://mc-stan.org) language.
+implemented in the [Stan](https://mc-stan.org) language.
 
 # Installation
 - Create a suitable python environment. We recommend using [miniconda](https://docs.conda.io/projects/miniconda/en/latest/) combined with the environment specification provided in the [env\_floodstan.yml] (env_floodstan.yml) file in this repository.
@@ -15,8 +15,110 @@ performed with the [Stan](https://mc-stan.org) language.
 
 # Basic use
 
-```python
-TODO
+```python 
+import numpy as np
+import matplotlib.pyplot as plt
+
+# .. import marginal objects (e.g., GEV, GeneralizedLogistic,...)
+from floodstan import marginals
+
+# .. import sampling functions
+from floodstan import sample, univariate_censored_sampling
+
+# .. import post-processing functions
+from floodstan import freqplots, report
+
+# Turn off stan logging which can be quite verbose
+# Important for debugging though.
+_ = sample.get_logger(stan_logger=False)
+
+# Example of annual maximum streamflow data
+ams = np.array([427.3, 7.2, 54.2, 382.5, 448.8, 386.1, 913.9, 535.1, 
+                548.2, 92.1, 555.5, 309.4, 479.4, 180.1, 197.8, 470.3, 
+                586.3, 179.3, 28, 760.3, 475, 1043.4, 614.7, 22.8, 
+                444.4, 20.4, 172.9, 226.2, 514.1, 34.7, 8.6, 156.4, 
+                126.8, 917.6, 7.9, 126.4, 455.4, 297.1, 202.7, 27.2, 
+                692.2, 641.3, 98.8, 491.1, 486.5, 499.3, 191.4, 565.9, 
+                387.8, 1073.1, 53.3, 33.8, 477.5, 583.4, 1343, ])
+
+# Step 1. Create marginal distribution
+marginal_name = "GEV"
+marginal = marginals.factory(marginal_name)
+
+# Step 2. Set censoring threhsold
+censor = np.percentile(ams, 30)
+
+# Step 3. Create sample data
+# .. specify the number of MCM chains to define the number 
+#    of initial parameters
+nchains = 3
+sv = sample.StanSamplingVariable(marginal, ams, censor,
+                                 ninits=nchains)
+stan_data = sv.to_dict()
+
+# .. initial parameter values
+stan_inits = sv.initial_parameters
+
+# .. additional arguments to be passed to stan
+stan_args = sv.stan_sample_args
+
+# Step 4. Sample 10,000 parameters from posterior using stan
+nwarm = 10000
+nsamples = 10000
+
+smp = univariate_censored_sampling(data=stan_data,
+                                   iter_warmup=nwarm,
+                                   chains=nchains,
+                                   parallel_chains=nchains,
+                                   iter_sampling=nsamples // nchains,
+                                   inits=stan_inits,
+                                   **stan_args)
+
+# Step 5. Process samples
+params = smp.draws_pd()
+
+# .. diagnostic report
+diag = report.process_stan_diagnostic(smp.diagnose())
+print("MCMC stan diagnostic:")
+for k in ["treedepth", "ebfmi", "rhat"]:
+    print(f"\t{k}: {diag[k]}")
+
+# .. 
+rep, _ = report.ams_report(marginal, params)
+
+# Step 6. plot results
+plt.close("all")
+fig, ax = plt.subplots(layout="constrained")
+
+# .. frequency plot type
+ptype = "gumbel"
+
+# .. plot data
+freqplots.plot_data(ax, ams, ptype)
+
+# .. plot posterior
+df = rep.filter(regex="DESIGN", axis=0)
+aris = df.index.to_series().str.replace("DESIGN_ARI", "").astype(float)
+quantiles = df.loc[:, ["5%", "POSTERIOR_PREDICTIVE", "95%"]]
+freqplots.plot_marginal_quantiles(ax, aris, quantiles, ptype,
+                                  center_column="POSTERIOR_PREDICTIVE",
+                                  q0_column="5%",
+                                  q1_column="95%",
+                                  label=marginal.name,
+                                  alpha=0.3,
+                                  facecolor="tab:blue",
+                                  edgecolor="k")
+
+# .. add AEP
+retp = [5, 10, 100, 500]
+aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
+
+ax.set(xlabel="Gumbel reduced variate",
+       ylabel="Annual Maximum Streamflow [m3.s-1]")
+
+figure_file = "test_readme_freqplots.png"
+fig.savefig(figure_file)
+
 ```
 
 # Attribution

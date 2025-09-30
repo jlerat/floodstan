@@ -87,5 +87,6 @@ tests/sampling/
 tests/images/
 tests/report/
 tests/logs/
+tests/test_readme_snipet.py
 outputs/
 tests/data/bivariate_GeneralizedLogistic/stan_args_ok.json
