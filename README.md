@@ -15,15 +15,17 @@ The package includes:
     * Normal distribution,
     * Gumbel distribution,
     * Log-Normal distribution,
+    * Gamma distribution,
     * General Extreme Value distribution,
     * Generalized Logistic distribution,
     * Generalized Pareto distribution,
     * Log-Pearson 3 distribution.
 
-* 3 types of copula to implement bi-variate flood frequency analysis:
+* 3 types of copula to implement bivariate flood frequency analysis:
     * Gumbel copula,
     * Gaussian copula,
-    * Clayton copula.
+    * Clayton copula,
+    * Frank copula.
 
 * Function to pre- and post process flood data:
     * Functions to prepare data prior to MCMC sampling in Stan.
