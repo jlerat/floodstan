@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+title: pyquasoare
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Julien
+    family-names: Lerat
+    email: julien.lerat@csiro.au
+    affiliation: CSIRO
+    orcid: 'https://orcid.org/0000-0003-4521-8874'
+identifiers:
+  - type: url
+    value: 'https://doi.org/10.5281/zenodo.13928253'
+repository-code: 'https://github.com/jlerat/floodstan'
+url: 'https://github.com/jlerat/floodstan'
+abstract: >-
+  This package performs flood frequency analysis
+  in a Bayesian inference framework based on the 
+  Stan software.
+keywords:
+  - Differential equation
+  - Reservoir
+  - Hydrology
+  - Rainfall-runoff
+license: MIT
+references:
+  - type: article
+    title: >-
+      How February 2022 redefines extreme floods in Australia
+    authors:
+      - family-names: Lerat
+        given-names: Julien
+        orcid: https://orcid.org/0000-0003-4521-8874
+      - family-names: Vaze
+        given-names: Jai
+    year: 2025
+    journal: Communications Earth and Environment
+    volume: 6, 378
+    url: 'https://doi.org/10.1038/s43247-025-02307-z'
