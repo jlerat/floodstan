@@ -10,6 +10,9 @@ authors:
     email: julien.lerat@csiro.au
     affiliation: CSIRO
     orcid: 'https://orcid.org/0000-0003-4521-8874'
+identifiers:
+  - type: url
+    value: 'https://doi.org/10.5281/zenodo.17239321'
 repository-code: 'https://github.com/jlerat/floodstan'
 url: 'https://github.com/jlerat/floodstan'
 abstract: >-

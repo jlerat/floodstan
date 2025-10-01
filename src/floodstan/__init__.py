@@ -9,7 +9,7 @@ from floodstan.marginals import MARGINAL_NAMES
 
 import cmdstanpy
 
-__version__ = "1.0"
+__version__ = "1.2"
 
 STAN_FILES_FOLDER = Path(__file__).parent / "stan"
 CMDSTAN_VERSION = "2.30.1"
