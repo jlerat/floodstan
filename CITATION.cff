@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: pyquasoare
+title: floodstan
 message: >-
   If you use this software, please cite it using the
   metadata from this file.
@@ -20,10 +20,10 @@ abstract: >-
   in a Bayesian inference framework based on the 
   Stan software.
 keywords:
-  - Differential equation
-  - Reservoir
   - Hydrology
-  - Rainfall-runoff
+  - Statistics
+  - Flood Frequency Analysis
+  - Bayesian Inference
 license: MIT
 references:
   - type: article
