@@ -30,7 +30,9 @@ if local_cmdstan.exists():
     cmdstanpy.set_cmdstan_path(str(local_cmdstan.resolve()))
 
 
-def load_stan_model(name: str, method: Optional[str] = "mcmc") -> Callable:
+def load_stan_model(name: str,
+                    method: Optional[str] = "mcmc",
+                    stan_files_folder: Optional[str] = STAN_FILES_FOLDER) -> Callable:
     """
     Try to load precompiled Stan models. If that fails,
     compile them.
@@ -51,21 +53,21 @@ def load_stan_model(name: str, method: Optional[str] = "mcmc") -> Callable:
 
     try:
         model = cmdstanpy.CmdStanModel(
-            exe_file=STAN_FILES_FOLDER / f"{stan_name}{suffix}",
-            stan_file=STAN_FILES_FOLDER / f"{stan_name}.stan"
+            exe_file=stan_files_folder / f"{stan_name}{suffix}",
+            stan_file=stan_files_folder / f"{stan_name}.stan"
         )
     except ValueError:
         warnmess = "Failed to load pre-built model "\
                    + f"'{name}{suffix}', compiling"
         warnings.warn(warnmess)
 
-        stan_file = STAN_FILES_FOLDER / f"{stan_name}.stan"
+        stan_file = stan_files_folder / f"{stan_name}.stan"
         model = cmdstanpy.CmdStanModel(stan_file=stan_file,
                                        stanc_options={"O1": True})
         try:
             shutil.copy(
                 model.exe_file,  # type: ignore
-                STAN_FILES_FOLDER / f"{stan_name}{suffix}",
+                stan_files_folder / f"{stan_name}{suffix}",
             )
         except shutil.SameFileError:
             pass
