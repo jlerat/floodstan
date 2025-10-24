@@ -122,13 +122,20 @@ def load_stan_model(name: str,
 
             elif method == "variational":
                 its = kwargs.get("iter_sampling", NSAMPLES_DEFAULT)
-                kwargs.pop("iter_sampling")
+                kwargs.pop("iter_sampling", None)
                 kwargs["output_samples"] = its
 
             elif method == "laplace":
                 its = kwargs.get("iter_sampling", NSAMPLES_DEFAULT)
-                kwargs.pop("iter_sampling")
+                kwargs.pop("iter_sampling", None)
                 kwargs["draws"] = its
+
+            elif method == "optimize":
+                argnames = ["iter_sampling", "chains",
+                            "parallel_chains", "iter_warmup",
+                            "show_progress"]
+                for argn in argnames:
+                    kwargs.pop(argn, None)
 
             # Check inits is of the right size
             ninits = len(kwargs["inits"])
