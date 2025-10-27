@@ -4,7 +4,7 @@ channels:
   - defaults
 dependencies:
   - anybadge
-  - cmdstan=2.36.0
+  - cmdstan=2.37.0
   - cmdstanpy=1.2.5
   - cython=3.0.10
   - flake8=7.1.1
