@@ -21,7 +21,7 @@ MODELS = ["univariate_censored", "bivariate_censored",
           "gls_spatial", "test_marginal", "test_copula",
           "test_glsfun"]
 
-CMDSTAN_VERSION = "2.36.0"
+CMDSTAN_VERSION = "2.37.0"
 BINARIES_DIR = "bin"
 BINARIES = ["diagnose", "print", "stanc", "stansummary"]
 MATH_LIB = "stan/lib/stan_math/lib"
