@@ -97,6 +97,9 @@ transformed data {
   // for variable y
   int<lower=2> Ny = Ncases[1, 1] + Ncases[1, 2] + Ncases[1, 3];  
   int<lower=2> Nz = Ncases[1, 1] + Ncases[2, 1] + Ncases[3, 1];  
+
+  // Sanity check on number of samples
+  int<lower=0, upper=0> Ncheck = sum(Ncases) - N;
 }
 
 parameters {
