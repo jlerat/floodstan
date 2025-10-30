@@ -69,7 +69,7 @@ transformed data {
   int<lower=2> Ny = Ncases[1, 1];
 
   // Sanity check on number of samples
-  int<lower=0, upper=0> Ncheck = Ncases[1, 1] + Ncases[1, 2] + Ncases[2, 1] + Ncases[2, 2] - N;
+  int<lower=0, upper=0> Ncheck = Ncases[1, 1] + Ncases[2, 1] - N;
 }
 
 parameters {

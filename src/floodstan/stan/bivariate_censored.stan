@@ -94,12 +94,17 @@ data {
 
 transformed data {
   // Imposes that at least 2 data points are observed
-  // for variable y
+  // for variable y and z
   int<lower=2> Ny = Ncases[1, 1] + Ncases[1, 2] + Ncases[1, 3];  
   int<lower=2> Nz = Ncases[1, 1] + Ncases[2, 1] + Ncases[3, 1];  
 
   // Sanity check on number of samples
-  int<lower=0, upper=0> Ncheck = sum(Ncases) - N;
+  int Ndiff;
+  Ndiff = Ncases[1, 1] + Ncases[1, 2] + Ncases[1, 3];
+  Ndiff += Ncases[2, 1] + Ncases[2, 2] + Ncases[2, 3];
+  Ndiff += Ncases[3, 1] + Ncases[3, 2];
+  Ndiff -= N;
+  int<lower=0, upper=0> Ncheck = Ndiff;
 }
 
 parameters {
