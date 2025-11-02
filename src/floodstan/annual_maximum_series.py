@@ -35,8 +35,7 @@ def get_annual_maximums(se, annual_idx,
         eventid = "NA"
         peak = np.nan
         if nvalid > 0:
-            nstdok = (se.loc[idx].std() > 1e-3).sum()
-            if nstdok > 0:
+            if se.loc[idx].std() > 1e-3:
                 timepeak = se.loc[idx].idxmax()
                 peak = se.loc[timepeak]
                 eventid = f"F{ievent:03d}"
