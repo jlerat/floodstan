@@ -582,3 +582,54 @@ def test_mle_vs_bestfit(marginal_name, stationid, censoring, allclose):
 
     # Test if bestfit MLE is not too far behind
     assert abs(ll_bestfit - ll_mle) < 1.0
+
+
+def test_gev_shape0(allclose):
+    gev = marginals.GEV()
+    gev.params = [100, math.log(50), 0.]
+
+    gum = marginals.Gumbel()
+    gum.params = gev.params
+
+    s0, s1 = gev.support
+    assert np.isinf(s0)
+    assert np.isinf(s1)
+
+    eps = 1e-8
+    u = np.linspace(eps, 1-eps, 1000)
+    qa = gev.ppf(u)
+    qb = gum.ppf(u)
+    assert allclose(qa, qb)
+
+    q0 = qa.min()
+    q1 = qa.max()
+    qq = np.linspace(q0, q1, 1000)
+    ca = gev.cdf(qq)
+    cb = gum.cdf(qq)
+    allclose(ca, cb)
+
+
+def test_lp3_shape0(allclose):
+    lp3 = marginals.LogPearson3()
+    lp3.params = [100, math.log(50), 0.]
+
+    ln = marginals.LogNormal()
+    ln.params = lp3.params
+
+    s0, s1 = lp3.support
+    assert np.isinf(s0)
+    assert np.isinf(s1)
+
+    eps = 1e-8
+    u = np.linspace(eps, 1-eps, 1000)
+    qa = lp3.ppf(u)
+    qb = ln.ppf(u)
+    assert allclose(qa, qb)
+
+    q0 = qa.min()
+    q1 = qa.max()
+    qq = np.linspace(q0, q1, 1000)
+    ca = lp3.cdf(qq)
+    cb = ln.cdf(qq)
+    allclose(ca, cb)
+

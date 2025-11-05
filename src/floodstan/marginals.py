@@ -630,6 +630,9 @@ class GEV(FloodFreqDistribution):
 
     @property
     def support(self):
+        if abs(self.shape1) < 1e-10:
+            return -np.inf, np.inf
+
         x0 = self.locn + self.scale / self.shape1
         if self.shape1 < 0:
             return x0, np.inf
@@ -844,6 +847,9 @@ class LogPearson3(FloodFreqDistribution):
 
     @property
     def support(self):
+        if abs(self.shape1) < 1e-10:
+            return [np.inf, np.inf]
+
         x0 = math.exp(max(-100, min(100, self.tau)))
         if self.beta < 0:
             return [0, x0]
