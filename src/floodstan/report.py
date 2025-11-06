@@ -22,6 +22,14 @@ CDF_APPROX_MIN = 1e-10
 CDF_APPROX_MAX = 1 - 1e-10
 LOGIT_MAX = 200
 
+STAN_DIAGNOSTIC_VARIABLES = {
+    "treedepth": "(T|t)reedepth",
+    "divergence": "divergen(t|ce)",
+    "ebfmi": "E-BFMI",
+    "effsamplesz": "Effective|effective draws|effective sample",
+    "rhat": "R-hat"
+    }
+
 
 def _ari_to_label(ari):
     return re.sub("\\.0$", "", f"DESIGN_ARI{ari}")
@@ -103,15 +111,7 @@ def process_stan_diagnostic(diag):
             if li != "" and not re.search(diag_pat, li)]
 
     stan_status = dict(message=" ".join(diag))
-    patterns = {
-        "treedepth": "(T|t)reedepth",
-        "divergence": "divergen(t|ce)",
-        "ebfmi": "E-BFMI",
-        "effsamplesz": "Effective|effective draws|effective sample",
-        "rhat": "R-hat"
-        }
-
-    for delem, pat in patterns.items():
+    for delem, pat in STAN_DIAGNOSTIC_VARIABLES.items():
         nelem = f"{delem}"
         line = [li for li in diag if re.search(pat, li)]
         if len(line) == 0:
