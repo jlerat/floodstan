@@ -46,6 +46,9 @@ def test_stan_sampling_variable(stationid, marginal_name, allclose):
     censor = np.nanpercentile(y, 30)
     marginal = marginals.factory(marginal_name)
 
+    with pytest.raises(ValueError, match="Expected at least"):
+        sv = sample.StanSamplingVariable(marginal, y * np.nan, censor)
+
     sv = sample.StanSamplingVariable(marginal, y, censor)
 
     assert allclose(sv.censor, censor)
