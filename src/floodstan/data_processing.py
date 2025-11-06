@@ -50,6 +50,11 @@ def univariate2sorted(data):
 def univariate2cases(data, censor):
     data, nonans = data2array(data, 1)
 
+    if nonans < NVALID_MIN:
+        errmess = f"Expected at least {NVALID_MIN} valid values, "\
+                  + f"got {nonans}."
+        raise ValueError(errmess)
+
     # We set the censor close to data min to avoid potential
     # problems with computing log cdf for the censor
     if censor is None or np.isnan(censor):
