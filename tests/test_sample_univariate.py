@@ -43,6 +43,10 @@ LOGGER = sample.get_logger(stan_logger=False)
 @pytest.mark.parametrize("stationid", get_stationids())
 def test_stan_sampling_variable(stationid, marginal_name, allclose):
     y = get_ams(stationid)
+
+    inan = np.random.choice(np.arange(len(y)), 5, replace=False)
+    y.iloc[inan] = np.nan
+
     censor = np.nanpercentile(y, 30)
     marginal = marginals.factory(marginal_name)
 
@@ -52,11 +56,14 @@ def test_stan_sampling_variable(stationid, marginal_name, allclose):
     sv = sample.StanSamplingVariable(marginal, y, censor)
 
     assert allclose(sv.censor, censor)
-    assert allclose(sv.data, y)
+    assert allclose(sv.data, y, equal_nan=True)
     assert sv.N == len(y)
     assert sv.marginal_code == marginals.MARGINAL_NAMES[marginal_name]
+
+    assert sv.Ncases[:, 0].sum() == len(y)
+
     nhigh, nlow = (y>=censor).sum(), (y<censor).sum()
-    Ncases = [[nhigh, 0, 0], [nlow, 0, 0], [0, 0, 0]]
+    Ncases = [[nhigh, 0, 0], [nlow, 0, 0], [len(y) - nhigh - nlow, 0, 0]]
     assert allclose(sv.Ncases, Ncases)
 
     i11 = np.where(y>=censor)[0]+1
