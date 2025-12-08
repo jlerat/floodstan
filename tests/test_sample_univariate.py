@@ -112,13 +112,13 @@ def test_stan_sampling_variable(stationid, marginal_name, allclose):
 @pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
-@pytest.mark.parametrize("stationid", ["203014"])
+@pytest.mark.parametrize("stationid", ["203010"])
 def test_univariate_censored_sampling(stationid, marginal_name, censoring, allclose):
     if stationid == "hard" and marginal_name == "Gamma":
         pytest.skip("Skipping sampling test. Data does not fit Gamma at all.")
 
     if marginal_name == "LogPearson3":
-        pytest.skip("Skipping LogPearson3 due to numerical problems")
+        pytest.skip("Skipping LogPearson3 - not implemented in stan")
 
     y = get_ams(stationid)
     censor = np.nanmin(y) - 1
@@ -131,7 +131,10 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     # Set STAN
     stan_nwarm = 10000
     stan_nsamples = 10000
-    stan_nchains = 5
+    if marginal_name == "GeneralizedPareto":
+        stan_nchains = 10
+    else:
+        stan_nchains = 5
 
     # Prepare sampling data
     sv = sample.StanSamplingVariable(marginal, y, censor,
