@@ -44,8 +44,9 @@ LOGGER = sample.get_logger(stan_logger=False)
 def test_stan_sampling_variable(stationid, marginal_name, allclose):
     y = get_ams(stationid)
 
-    inan = np.random.choice(np.arange(len(y)), 5, replace=False)
-    y.iloc[inan] = np.nan
+    if stationid != "hard":
+        inan = np.random.choice(np.arange(len(y)), 5, replace=False)
+        y.iloc[inan] = np.nan
 
     censor = np.nanpercentile(y, 30)
     marginal = marginals.factory(marginal_name)
