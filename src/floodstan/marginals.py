@@ -1074,8 +1074,8 @@ class LogNormal(FloodFreqDistribution):
         super(LogNormal, self).__init__("LogNormal", False)
 
         # locn in log space
-        self.locn_lower = -1e2
-        self.locn_upper = 1e2
+        self.locn_prior.lower = -1e2
+        self.locn_prior.upper = 1e2
 
     @property
     def support(self):

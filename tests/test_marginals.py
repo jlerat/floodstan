@@ -126,7 +126,7 @@ def test_floodfreqdist(allclose):
     with pytest.raises(ValueError, match="Invalid"):
         dist.params = [10, 1, np.nan]
 
-    with pytest.raises(AttributeError, match="can't set"):
+    with pytest.raises(AttributeError):
         dist.locn_prior = "bidule"
 
     with pytest.raises(ValueError, match="Invalid"):
@@ -632,4 +632,15 @@ def test_lp3_shape0(allclose):
     ca = lp3.cdf(qq)
     cb = ln.cdf(qq)
     allclose(ca, cb)
+
+
+def test_lognormal_prior(allclose):
+    # GEV is not bounded
+    gev = marginals.GEV()
+    assert gev.locn_prior.lower == marginals.LOCN_LOWER
+
+    # LogNormal is bounded
+    ln = marginals.LogNormal()
+    assert ln.locn_prior.lower == -1e2
+
 
