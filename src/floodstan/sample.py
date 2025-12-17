@@ -273,7 +273,8 @@ class StanSamplingVariable():
 
     def set_data(self, data, censor):
         icases, data, censor = univariate2cases(data, censor)
-        self._N = len(data)
+        N = len(data)
+        self._N = N
         self._data = data
         self._censor = censor
         self._is_obs = icases.i11
@@ -285,7 +286,10 @@ class StanSamplingVariable():
         # .. 3x3 due to stan code requirement.
         #    Only first 2 top left cells used
         self.Ncases = np.zeros((3, 3), dtype=int)
-        self.Ncases[:2, 0] = [len(self.i11), len(self.i21)]
+
+        N11 = len(self.i11)
+        N21 = len(self.i21)
+        self.Ncases[:, 0] = [N11, N21, N - N11 - N21]
 
     def set_guess_parameters(self):
         censor = self.censor

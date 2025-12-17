@@ -43,6 +43,11 @@ LOGGER = sample.get_logger(stan_logger=False)
 @pytest.mark.parametrize("stationid", get_stationids())
 def test_stan_sampling_variable(stationid, marginal_name, allclose):
     y = get_ams(stationid)
+
+    if stationid != "hard":
+        inan = np.random.choice(np.arange(len(y)), 5, replace=False)
+        y.iloc[inan] = np.nan
+
     censor = np.nanpercentile(y, 30)
     marginal = marginals.factory(marginal_name)
 
@@ -52,11 +57,14 @@ def test_stan_sampling_variable(stationid, marginal_name, allclose):
     sv = sample.StanSamplingVariable(marginal, y, censor)
 
     assert allclose(sv.censor, censor)
-    assert allclose(sv.data, y)
+    assert allclose(sv.data, y, equal_nan=True)
     assert sv.N == len(y)
     assert sv.marginal_code == marginals.MARGINAL_NAMES[marginal_name]
+
+    assert sv.Ncases[:, 0].sum() == len(y)
+
     nhigh, nlow = (y>=censor).sum(), (y<censor).sum()
-    Ncases = [[nhigh, 0, 0], [nlow, 0, 0], [0, 0, 0]]
+    Ncases = [[nhigh, 0, 0], [nlow, 0, 0], [len(y) - nhigh - nlow, 0, 0]]
     assert allclose(sv.Ncases, Ncases)
 
     i11 = np.where(y>=censor)[0]+1
@@ -78,7 +86,8 @@ def test_stan_sampling_variable(stationid, marginal_name, allclose):
     # Test content of sample
     keys = ["ymarginal", "y",
             "ycensor",
-            "ylocn_prior", "ylogscale_prior",
+            "ylocn_prior",
+            "ylogscale_prior",
             "yshape1_prior"]
     for key in keys:
         assert key in dd
@@ -109,7 +118,7 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
         pytest.skip("Skipping sampling test. Data does not fit Gamma at all.")
 
     if marginal_name == "LogPearson3":
-        pytest.skip("Skipping LogPearson3 due to numerical problems")
+        pytest.skip("Skipping LogPearson3 - not implemented in stan")
 
     y = get_ams(stationid)
     censor = np.nanmin(y) - 1
@@ -122,7 +131,10 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     # Set STAN
     stan_nwarm = 10000
     stan_nsamples = 10000
-    stan_nchains = 5
+    if marginal_name == "GeneralizedPareto":
+        stan_nchains = 10
+    else:
+        stan_nchains = 5
 
     # Prepare sampling data
     sv = sample.StanSamplingVariable(marginal, y, censor,
