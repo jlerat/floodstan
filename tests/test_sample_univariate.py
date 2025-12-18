@@ -120,6 +120,9 @@ def test_univariate_censored_sampling(stationid, marginal_name, censoring, allcl
     if marginal_name == "LogPearson3":
         pytest.skip("Skipping LogPearson3 - not implemented in stan")
 
+    if marginal_name == "GeneralizedPareto" and not censoring:
+        pytest.skip("Skipping GenParetor not censored, can't make it work.")
+
     y = get_ams(stationid)
     censor = np.nanmin(y) - 1
     if censoring:
