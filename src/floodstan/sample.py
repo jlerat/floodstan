@@ -1,4 +1,5 @@
 import sys
+import math
 from pathlib import Path
 import logging
 
@@ -563,4 +564,132 @@ class StanSamplingDataset():
             "i13": self.i13.tolist(),
             "i23": self.i23.tolist()
             })
+        return dd
+
+
+class StanHierarchicalDataset():
+    def __init__(self, marginal, y, pcensor, areas, coords):
+        self.set_y(y, pcensor)
+
+        self.set_priors()
+
+        if areas.shape != (self.M, ):
+            errmsg = f"Expected areas of shape ({self.M},)."
+            raise ValueError(errmsg)
+        self.areas = areas
+
+        if coords.shape != (self.M, 2):
+            errmsg = f"Expected coords of shape ({self.M}, 2)."
+            raise ValueError(errmsg)
+        self.coords = coords
+
+        self.marginal = marginal.clone()
+
+
+    def set_y(self, y, pcensor):
+        self.pcensor = pcensor
+
+        y = np.array(y)
+        self.y = y
+
+        N, M = y.shape
+        self.N = N
+        self.M = M
+
+        # Compute censoring thresholds
+        self.ycensors = np.nanpercentile(y, self.pcensor * 100,
+                                          axis=0)
+        # Identify valid and censored data
+        Nobs = np.zeros(M, dtype=int)
+        idx_obs = np.zeros((M, N), dtype=int)
+        Ncens = np.zeros(M, dtype=int)
+
+        for i in range(M):
+            cens = self.ycensors[i]
+            icases, data, censor = univariate2cases(y[:, i], cens)
+            self.y[:, i] = data
+            self.ycensors[i] = censor
+            Nobs[i] = icases.i11.sum()
+            idx_obs[i, :Nobs[i]] = np.where(icases.i11)[0] + 1
+            Ncens[i] = icases.i21.sum()
+
+        self.Nobs = Nobs
+        self.idx_obs = idx_obs
+        self.Ncens = Ncens
+
+    def set_priors(self):
+        self.rho_lower = [1.] * 3
+        self.rho_upper = [500.] * 3
+        self.rho_prior = [[50., 50.]] * 3
+
+        self.alpha_lower = [0.] * 3
+        self.alpha_upper = [10.] * 3
+        self.alpha_prior = [[0., 1.], [0., 1.], [0., 0.1]]
+
+        self.sigma_lower = [0.] * 3
+        self.sigma_upper = [10.] * 3
+        self.sigma_prior = [[0., 1.], [0., 1.], [0., 0.1]]
+
+        self.beta0_lower = [-20, -20, -2]
+        self.beta0_upper = [20, 20, 2]
+        # .. sort of uniform priors for beta0[3] (shape parameter)
+        self.beta0_prior = [[1., 10.], [1., 10.], [0., 100.]]
+
+        self.beta1_lower = [0, 0, -2]
+        self.beta1_upper = [2, 2, 2]
+        # .. sort of uniform priors
+        self.beta1_prior = [[1., 100.], [1., 100.], [0., 100.]]
+
+    def inits(self):
+        M = self.M
+
+        yloglocn = np.zeros(M)
+        ylogscale = np.zeros(M)
+        for i in range(M):
+            no = self.Nobs[i]
+            io = self.idx_obs[i, :no]
+            yi = self.y[io - 1, i]
+            yloglocn[i] = math.log(yi.mean())
+            ylogscale[i] = math.log(yi.std())
+
+        dd = {
+            "yloglocn": yloglocn,
+            "ylogscale": ylogscale,
+            "yshape1": np.random.uniform(1e-3, 1e-2, M),
+            "u_beta0": np.random.uniform(0, 1, 3),
+            "u_beta1": np.random.uniform(0, 1, 2),
+            "u_rho": np.random.uniform(0, 1, 3),
+            "u_alpha": np.random.uniform(0, 1, 3),
+            "u_sigma": np.random.uniform(0, 1, 3)
+        }
+        return dd
+
+    def to_dict(self):
+        dd = {
+            "N": self.N,
+            "M": self.M,
+            "areas": self.areas,
+            "coords": self.coords,
+            "ymarginal": MARGINAL_NAMES[self.marginal.name],
+            "Nobs": self.Nobs,
+            "idx_obs": self.idx_obs,
+            "Ncens": self.Ncens,
+            "y": self.y.T,
+            "ycensors": self.ycensors,
+            "rho_lower": self.rho_lower,
+            "rho_upper": self.rho_upper,
+            "rho_prior": self.rho_prior,
+            "alpha_lower": self.alpha_lower,
+            "alpha_upper": self.alpha_upper,
+            "alpha_prior": self.alpha_prior,
+            "sigma_lower": self.sigma_lower,
+            "sigma_upper": self.sigma_upper,
+            "sigma_prior": self.sigma_prior,
+            "beta0_lower": self.beta0_lower,
+            "beta0_upper": self.beta0_upper,
+            "beta1_lower": self.beta1_lower,
+            "beta1_upper": self.beta1_upper,
+            "beta0_prior": self.beta0_prior,
+            "beta1_prior": self.beta1_prior
+            }
         return dd

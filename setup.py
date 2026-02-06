@@ -18,7 +18,8 @@ from wheel.bdist_wheel import bdist_wheel
 MODEL_DIR = "src/floodstan/stan"
 
 MODELS = ["univariate_censored", "bivariate_censored",
-          "gls_spatial", "test_marginal", "test_copula",
+          "gls_spatial", "hierarchical_censored",
+          "test_marginal", "test_copula",
           "test_glsfun"]
 
 CMDSTAN_VERSION = "2.37.0"

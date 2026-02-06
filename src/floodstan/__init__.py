@@ -187,6 +187,7 @@ def load_stan_model(name: str,
 univariate_censored_sampling = load_stan_model("univariate_censored_sampling")
 bivariate_censored_sampling = load_stan_model("bivariate_censored_sampling")
 gls_spatial_sampling = load_stan_model("gls_spatial_sampling")
+hierarchical_censored_sampling = load_stan_model("hierarchical_censored_sampling")
 
 # Stan test functions
 stan_test_marginal = load_stan_model("stan_test_marginal")
