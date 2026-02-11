@@ -124,9 +124,6 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     # Sample
     smp = hierarchical_censored_sampling(**kw)
     df = smp.draws_pd()
-
-    import pdb; pdb.set_trace()
-
     diag = report.process_stan_diagnostic(smp.diagnose())
 
     for f in fout.glob("*.*"):
@@ -150,4 +147,69 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     rep = rep.filter(regex="DESIGN", axis=0)
     rep = rep.filter(regex="MEAN|PREDICTIVE", axis=1)
     assert rep.notnull().all().all()
+
+
+def test_hierarchical_censored_sampling_big(allclose):
+    marginal = marginals.factory("GEV")
+    pcensor = 0.3
+
+    y, areas, coords = get_data()
+    y_big = []
+    areas_big = []
+    coords_big = []
+    for repeat in range(40):
+        err = np.random.uniform(0.8, 1.2, size=y.shape)
+        y_big.append(y * err)
+
+        err = np.random.uniform(0.8, 1.2, size=areas.shape)
+        areas_big.append(areas * err)
+
+        err = np.random.uniform(0.8, 1.2, size=coords.shape)
+        coords_big.append(coords* err)
+
+    y_big = np.column_stack(y_big)
+    areas_big = np.concatenate(areas_big)
+    coords_big = np.row_stack(coords_big)
+
+    # Set STAN
+    stan_nwarm = 10000
+    stan_nsamples = 10000
+    stan_nchains = 5
+
+    # Prepare sampling data
+    hv = sample.StanHierarchicalDataset(marginal, y_big, pcensor,
+                                        areas_big, coords_big)
+    stan_data = hv.to_dict()
+    stan_inits = hv.inits()
+
+    # Clean output folder
+    fname = f"hierarchical_big_{marginal.name}"
+    fout = FTESTS / "sampling" / fname
+    fout.mkdir(parents=True, exist_ok=True)
+    for f in fout.glob("*.*"):
+        f.unlink()
+
+    # Sample arguments
+    kw = dict(data=stan_data,
+              seed=SEED,
+              iter_sampling=stan_nsamples // stan_nchains,
+              output_dir=fout,
+              inits=stan_inits,
+              chains=stan_nchains,
+              parallel_chains=stan_nchains,
+              iter_warmup=stan_nwarm)
+
+    # Sample
+    smp = hierarchical_censored_sampling(**kw)
+    df = smp.draws_pd()
+    diag = report.process_stan_diagnostic(smp.diagnose())
+
+    for f in fout.glob("*.*"):
+        f.unlink()
+    fout.rmdir()
+
+    # Test diag
+    assert diag["effsamplesz"] == "satisfactory"
+    assert diag["rhat"] == "satisfactory"
+
 
