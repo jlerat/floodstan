@@ -585,7 +585,6 @@ class StanHierarchicalDataset():
 
         self.marginal = marginal.clone()
 
-
     def set_y(self, y, pcensor):
         self.pcensor = pcensor
 
@@ -598,7 +597,7 @@ class StanHierarchicalDataset():
 
         # Compute censoring thresholds
         self.ycensors = np.nanpercentile(y, self.pcensor * 100,
-                                          axis=0)
+                                         axis=0)
         # Identify valid and censored data
         Nobs = np.zeros(M, dtype=int)
         idx_obs = np.zeros((M, N), dtype=int)

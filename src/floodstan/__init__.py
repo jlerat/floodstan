@@ -185,11 +185,17 @@ def load_stan_model(name: str,
 
 # Stan sampler
 univariate_censored_sampling = load_stan_model("univariate_censored_sampling")
+
 bivariate_censored_sampling = load_stan_model("bivariate_censored_sampling")
+
 gls_spatial_sampling = load_stan_model("gls_spatial_sampling")
-hierarchical_censored_sampling = load_stan_model("hierarchical_censored_sampling")
+
+name = "hierarchical_censored_sampling"
+hierarchical_censored_sampling = load_stan_model(name)
 
 # Stan test functions
 stan_test_marginal = load_stan_model("stan_test_marginal")
+
 stan_test_copula = load_stan_model("stan_test_copula")
+
 stan_test_glsfun = load_stan_model("stan_test_glsfun")

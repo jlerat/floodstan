@@ -78,6 +78,7 @@ venv.bak/
 !**/stan/*.*
 **/stan/*.hpp
 **/stan/*.exe
+**/stan/*.o
 
 # Others
 actions-runner/
