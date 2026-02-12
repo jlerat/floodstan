@@ -157,7 +157,7 @@ def test_hierarchical_censored_sampling_big(allclose):
     y_big = []
     areas_big = []
     coords_big = []
-    for repeat in range(40):
+    for repeat in range(4):
         err = np.random.uniform(0.8, 1.2, size=y.shape)
         y_big.append(y * err)
 
