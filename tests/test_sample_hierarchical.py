@@ -136,23 +136,26 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
 
     # Test divergence
     prc = diag["divergence_proportion"]
-    print(f"\n{stationid}-{marginal_name}-{censoring} : Divergence proportion = {prc}\n")
+    print(f"\n{marginal_name}-{censoring} : Divergence proportion = {prc}\n")
     if not marginal.name in ["LogPearson3", "GeneralizedPareto",
                              "GeneralizedLogistic"]:
         thresh = 50
         assert prc < thresh
 
     # Test report
-    rep, _ = report.ams_report(marginal, df)
-    rep = rep.filter(regex="DESIGN", axis=0)
-    rep = rep.filter(regex="MEAN|PREDICTIVE", axis=1)
-    assert rep.notnull().all().all()
+    for i in range(stan_data["M"]):
+        pp = df.filter(regex=f"\\[{i + 1}\\]$", axis=1)
+        rep, _ = report.ams_report(marginal, pp)
+        rep = rep.filter(regex="DESIGN", axis=0)
+        rep = rep.filter(regex="MEAN|PREDICTIVE", axis=1)
+        assert rep.notnull().all().all()
 
 
 def test_hierarchical_censored_sampling_big(allclose):
     marginal = marginals.factory("GEV")
     pcensor = 0.3
 
+    # Generate random data
     y, areas, coords = get_data()
     y_big = []
     areas_big = []

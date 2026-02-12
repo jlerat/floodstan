@@ -75,7 +75,8 @@ def _prepare_design_aris(design_aris, truncated_probability):
 def _detect_params_columns(params):
     params_columns = OrderedDict()
     for pname in PARAMETERS:
-        cc = [cn for cn in params.columns if re.search(f"{pname}$", cn)]
+        pat = f"^(|[a-z]){pname}($|\\[)"
+        cc = [cn for cn in params.columns if re.search(pat, cn)]
 
         if len(cc) == 0:
             raise ValueError(f"No column in params refers to {pname}")
