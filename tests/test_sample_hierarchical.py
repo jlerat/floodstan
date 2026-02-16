@@ -127,6 +127,13 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     stan_data = hv.to_dict()
     stan_inits = hv.inits()
 
+    stan_args = {
+        "adapt_delta": 0.95,
+        "max_treedepth": 13,
+        "step_size": 0.1
+        }
+
+
     # Clean output folder
     fname = f"hierarchical_{marginal_name}_{censoring}"
     fout = FTESTS / "sampling" / fname
@@ -143,6 +150,7 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
               chains=stan_nchains,
               parallel_chains=stan_nchains,
               iter_warmup=stan_nwarm)
+    kw.update(stan_args)
 
     # Sample
     smp = hierarchical_censored_sampling(**kw)
@@ -209,6 +217,12 @@ def test_hierarchical_censored_sampling_big(allclose):
     stan_data = hv.to_dict()
     stan_inits = hv.inits()
 
+    stan_args = {
+        "adapt_delta": 0.95,
+        "max_treedepth": 13,
+        "step_size": 0.1
+        }
+
     # Clean output folder
     fname = f"hierarchical_big_{marginal.name}"
     fout = FTESTS / "sampling" / fname
@@ -225,6 +239,7 @@ def test_hierarchical_censored_sampling_big(allclose):
               chains=stan_nchains,
               parallel_chains=stan_nchains,
               iter_warmup=stan_nwarm)
+    kw.update(stan_args)
 
     # Sample
     smp = hierarchical_censored_sampling(**kw)
