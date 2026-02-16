@@ -83,7 +83,7 @@ transformed data {
 
 parameters {
    // Marginal parameters
-   vector[M] yloglocn;        
+   vector[M] yasinhlocn;        
    vector[M] ylogscale;        
    vector[M] yshape1;        
 
@@ -98,7 +98,7 @@ parameters {
 }
 
 transformed parameters {
-   vector[M] ylocn = exp(yloglocn);
+   vector[M] ylocn = sinh(yasinhlocn);
    vector[M] yscale = exp(ylogscale);
 
     
@@ -151,7 +151,7 @@ model {
     }
 
     // Likelihood
-    yloglocn ~ multi_normal_cholesky(beta0[1] + beta1[1] * log_areas, Llocn);
+    yasinhlocn ~ multi_normal_cholesky(beta0[1] + beta1[1] * log_areas, Llocn);
     ylogscale ~ multi_normal_cholesky(beta0[2] + beta1[2] * log_areas, Llogs);
     yshape1 ~ multi_normal_cholesky(beta0[3] * ones, Lshp);
 
