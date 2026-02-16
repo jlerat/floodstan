@@ -61,22 +61,44 @@ def test_stan_sampling_variable(allclose):
                                         areas, coords)
 
     stan_data = hv.to_dict()
+
     assert len(stan_data) == 25
     N = stan_data["N"]
     M = stan_data["M"]
-    assert stan_data["y"].shape == (M, N)
-    assert stan_data["idx_obs"].shape == (M, N)
+
+    assert len(stan_data["y"]) == M
+    for y in stan_data["y"]:
+        assert len(y) == N
+
+    assert len(stan_data["idx_obs"]) == M
+    for idx in stan_data["idx_obs"]:
+        assert len(idx) == N
 
     for i in range(M):
         no = stan_data["Nobs"][i]
-        ii = stan_data["idx_obs"][i][:no] - 1
-        yi = stan_data["y"][i]
+        ii = np.array(stan_data["idx_obs"][i][:no]) - 1
+        yi = np.array(stan_data["y"][i])
         cens = stan_data["ycensors"][i]
         assert (yi >= cens).sum() == no
         assert np.all(yi[ii] >= cens)
 
     inits = hv.inits()
-    assert len(inits) == 8
+    assert len(inits) == 10
+    for init in inits:
+        assert len(init) == 8
+
+    # Check we can save data to json
+    ftmp =  FTESTS / "hierarchical_data.json"
+    if ftmp.exists():
+        ftmp.unlink()
+
+    with ftmp.open("w") as fo:
+        json.dump(stan_data, fo, indent=4)
+    ftmp.unlink()
+
+    with ftmp.open("w") as fo:
+        json.dump(inits, fo, indent=4)
+    ftmp.unlink()
 
 
 @pytest.mark.parametrize("marginal_name",
@@ -100,7 +122,8 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
 
     # Prepare sampling data
     hv = sample.StanHierarchicalDataset(marginal, y, pcensor,
-                                        areas, coords)
+                                        areas, coords,
+                                        ninits=stan_nchains)
     stan_data = hv.to_dict()
     stan_inits = hv.inits()
 
@@ -181,7 +204,8 @@ def test_hierarchical_censored_sampling_big(allclose):
 
     # Prepare sampling data
     hv = sample.StanHierarchicalDataset(marginal, y_big, pcensor,
-                                        areas_big, coords_big)
+                                        areas_big, coords_big,
+                                        ninits=stan_nchains)
     stan_data = hv.to_dict()
     stan_inits = hv.inits()
 

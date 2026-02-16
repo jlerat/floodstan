@@ -568,7 +568,13 @@ class StanSamplingDataset():
 
 
 class StanHierarchicalDataset():
-    def __init__(self, marginal, y, pcensor, areas, coords):
+    def __init__(self, marginal, y, pcensor,
+                 areas, coords,
+                 ninits=NCHAINS_DEFAULT):
+
+        self.marginal = marginal.clone()
+        self.ninits = ninits
+
         self.set_y(y, pcensor)
 
         self.set_priors()
@@ -583,9 +589,10 @@ class StanHierarchicalDataset():
             raise ValueError(errmsg)
         self.coords = coords
 
-        self.marginal = marginal.clone()
-
     def set_y(self, y, pcensor):
+        marginal = self.marginal
+        ninits = self.ninits
+
         self.pcensor = pcensor
 
         y = np.array(y)
@@ -596,25 +603,31 @@ class StanHierarchicalDataset():
         self.M = M
 
         # Compute censoring thresholds
-        self.ycensors = np.nanpercentile(y, self.pcensor * 100,
-                                         axis=0)
+        ycensors_raw = np.nanpercentile(y, self.pcensor * 100,
+                                        axis=0)
         # Identify valid and censored data
-        Nobs = np.zeros(M, dtype=int)
+        Nobs = []
         idx_obs = np.zeros((M, N), dtype=int)
-        Ncens = np.zeros(M, dtype=int)
+        Ncens = []
+        initial_parameters = []
+        ycensors = []
 
         for i in range(M):
-            cens = self.ycensors[i]
-            icases, data, censor = univariate2cases(y[:, i], cens)
-            self.y[:, i] = data
-            self.ycensors[i] = censor
-            Nobs[i] = icases.i11.sum()
-            idx_obs[i, :Nobs[i]] = np.where(icases.i11)[0] + 1
-            Ncens[i] = icases.i21.sum()
+            sv = StanSamplingVariable(marginal, y[:, i],
+                                      censor=ycensors_raw[i],
+                                      ninits=ninits)
+            self.y[:, i] = sv.data
+            ycensors.append(float(sv.censor))
+            Nobs.append(int(sv.is_obs.sum()))
+            idx_obs[i, :Nobs[i]] = np.where(sv.is_obs)[0] + 1
+            Ncens.append(int(sv.is_cens.sum()))
+            initial_parameters.append(sv.initial_parameters)
 
         self.Nobs = Nobs
         self.idx_obs = idx_obs
         self.Ncens = Ncens
+        self.ycensors = ycensors
+        self._initial_parameters = initial_parameters
 
     def set_priors(self):
         self.rho_lower = [1.] * 3
@@ -642,38 +655,41 @@ class StanHierarchicalDataset():
     def inits(self):
         M = self.M
 
-        yloglocn = np.zeros(M)
-        ylogscale = np.zeros(M)
-        for i in range(M):
-            no = self.Nobs[i]
-            io = self.idx_obs[i, :no]
-            yi = self.y[io - 1, i]
-            yloglocn[i] = math.log(yi.mean())
-            ylogscale[i] = math.log(yi.std())
+        params = []
+        for k in range(self.ninits):
+            yloglocn, ylogscale, yshape1 = [], [], []
+            for i in range(M):
+                pp = self._initial_parameters[i][k]
+                yloglocn.append(float(math.log(pp["ylocn"])))
+                ylogscale.append(float(pp["ylogscale"]))
+                yshape1.append(float(pp["yshape1"]))
 
-        dd = {
-            "yloglocn": yloglocn,
-            "ylogscale": ylogscale,
-            "yshape1": np.random.uniform(1e-3, 1e-2, M),
-            "u_beta0": np.random.uniform(0, 1, 3),
-            "u_beta1": np.random.uniform(0, 1, 2),
-            "u_rho": np.random.uniform(0, 1, 3),
-            "u_alpha": np.random.uniform(0, 1, 3),
-            "u_sigma": np.random.uniform(0, 1, 3)
-        }
-        return dd
+            dd = {
+                "yloglocn": yloglocn,
+                "ylogscale": ylogscale,
+                "yshape1": yshape1,
+                "u_beta0": np.random.uniform(0, 1, 3).tolist(),
+                "u_beta1": np.random.uniform(0, 1, 2).tolist(),
+                "u_rho": np.random.uniform(0, 1, 3).tolist(),
+                "u_alpha": np.random.uniform(0, 1, 3).tolist(),
+                "u_sigma": np.random.uniform(0, 1, 3).tolist()
+            }
+
+            params.append(dd)
+
+        return params
 
     def to_dict(self):
         dd = {
             "N": self.N,
             "M": self.M,
-            "areas": self.areas,
-            "coords": self.coords,
+            "areas": self.areas.tolist(),
+            "coords": self.coords.tolist(),
             "ymarginal": MARGINAL_NAMES[self.marginal.name],
             "Nobs": self.Nobs,
-            "idx_obs": self.idx_obs,
+            "idx_obs": self.idx_obs.tolist(),
             "Ncens": self.Ncens,
-            "y": self.y.T,
+            "y": self.y.T.tolist(),
             "ycensors": self.ycensors,
             "rho_lower": self.rho_lower,
             "rho_upper": self.rho_upper,
