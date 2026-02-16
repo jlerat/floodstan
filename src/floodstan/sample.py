@@ -579,11 +579,13 @@ class StanHierarchicalDataset():
 
         self.set_priors()
 
+        areas = np.array(areas)
         if areas.shape != (self.M, ):
             errmsg = f"Expected areas of shape ({self.M},)."
             raise ValueError(errmsg)
         self.areas = areas
 
+        coords = np.array(coords)
         if coords.shape != (self.M, 2):
             errmsg = f"Expected coords of shape ({self.M}, 2)."
             raise ValueError(errmsg)
