@@ -55,11 +55,11 @@ transformed data {
     vector[M] ones = rep_vector(1., M);
 
     // Compute diff to ensure that lower < upper
-    vector[M] rho_diff;
-    vector[M] alpha_diff;
-    vector[M] sigma_diff;
-    vector[M] beta0_diff;
-    vector[M] beta1_diff;
+    vector[3] rho_diff;
+    vector[3] alpha_diff;
+    vector[3] sigma_diff;
+    vector[3] beta0_diff;
+    vector[3] beta1_diff;
 
     real<lower=1e-3> diff = 2e-3;
 
