@@ -128,9 +128,7 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     stan_inits = hv.inits()
 
     stan_args = {
-        "adapt_delta": 0.95,
-        "max_treedepth": 13,
-        "step_size": 0.1
+        "adapt_delta": 0.9,
         }
 
 
@@ -218,9 +216,7 @@ def test_hierarchical_censored_sampling_big(allclose):
     stan_inits = hv.inits()
 
     stan_args = {
-        "adapt_delta": 0.95,
-        "max_treedepth": 13,
-        "step_size": 0.1
+        "adapt_delta": 0.9,
         }
 
     # Clean output folder
