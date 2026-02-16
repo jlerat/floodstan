@@ -666,15 +666,16 @@ class StanHierarchicalDataset():
                 ylogscale.append(float(pp["ylogscale"]))
                 yshape1.append(float(pp["yshape1"]))
 
+            x0, x1 = 0.3, 0.7
             dd = {
                 "yasinhlocn": yasinhlocn,
                 "ylogscale": ylogscale,
                 "yshape1": yshape1,
-                "u_beta0": np.random.uniform(0, 1, 3).tolist(),
-                "u_beta1": np.random.uniform(0, 1, 2).tolist(),
-                "u_rho": np.random.uniform(0, 1, 3).tolist(),
-                "u_alpha": np.random.uniform(0, 1, 3).tolist(),
-                "u_sigma": np.random.uniform(0, 1, 3).tolist()
+                "u_beta0": np.random.uniform(x0, x1, 3).tolist(),
+                "u_beta1": np.random.uniform(x0, x1, 2).tolist(),
+                "u_rho": np.random.uniform(x0, x1, 3).tolist(),
+                "u_alpha": np.random.uniform(x0, x1, 3).tolist(),
+                "u_sigma": np.random.uniform(x0, x1, 3).tolist()
             }
 
             params.append(dd)
