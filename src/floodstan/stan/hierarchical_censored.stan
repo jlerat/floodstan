@@ -17,7 +17,7 @@ data {
     int<lower=1, upper=8> ymarginal; 
 
     // Missing and censored data indexes
-    array[M] int<lower=5,upper=N> Nobs;
+    array[M] int<lower=2,upper=N> Nobs;
     array[M, N] int<lower=0,upper=N> idx_obs;
     
     array[M] int<lower=0,upper=N> Ncens;
