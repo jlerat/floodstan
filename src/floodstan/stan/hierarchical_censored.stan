@@ -90,6 +90,10 @@ parameters {
    vector[M] ylogscale;        
    vector<lower=yshape1_lower, upper=yshape1_upper>[M] yshape1;        
 
+   vector[M] yasinhlocn_hprior;        
+   vector[M] ylogscale_hprior;        
+   vector<lower=yshape1_lower, upper=yshape1_upper>[M] yshape1_hprior;        
+
    // Normalised GP parameter
    vector<lower=0, upper=1>[3] u_rho;
    vector<lower=0, upper=1>[3] u_alpha;
@@ -103,7 +107,9 @@ parameters {
 transformed parameters {
    vector[M] ylocn = sinh(yasinhlocn);
    vector[M] yscale = exp(ylogscale);
-
+   
+   vector[M] ylocn_hprior = sinh(yasinhlocn_hprior);
+   vector[M] yscale_hprior = exp(ylogscale_hprior);
     
    vector[3] rho;
    vector[3] alpha;
@@ -179,5 +185,10 @@ model {
           if(ncens > 0)
              target += ncens * marginal_lcdf(ycensors[ista] | ymarginal, loc, scale, shape);
     }
+
+    // Likelihood for hierarchical priors
+    yasinhlocn_hprior ~ multi_normal_cholesky(beta0[1] + beta1[1] * log_areas, Llocn);
+    ylogscale_hprior ~ multi_normal_cholesky(beta0[2] + beta1[2] * log_areas, Llogs);
+    yshape1_hprior ~ multi_normal_cholesky(beta0[3] * ones, Lshp);
 }
 
