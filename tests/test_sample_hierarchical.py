@@ -62,7 +62,7 @@ def test_stan_sampling_variable(allclose):
 
     stan_data = hv.to_dict()
 
-    assert len(stan_data) == 25
+    assert len(stan_data) == 27
     N = stan_data["N"]
     M = stan_data["M"]
 
@@ -128,9 +128,8 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     stan_inits = hv.inits()
 
     stan_args = {
-        "adapt_delta": 0.9,
+        "adapt_delta": 0.9
         }
-
 
     # Clean output folder
     fname = f"hierarchical_{marginal_name}_{censoring}"
@@ -166,10 +165,8 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     # Test divergence
     prc = diag["divergence_proportion"]
     print(f"\n{marginal_name}-{censoring} : Divergence proportion = {prc}\n")
-    if not marginal.name in ["LogPearson3", "GeneralizedPareto",
-                             "GeneralizedLogistic"]:
-        thresh = 50
-        assert prc < thresh
+    thresh = 50
+    assert prc < thresh
 
     # Test report
     for i in range(stan_data["M"]):
