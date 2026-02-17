@@ -104,8 +104,8 @@ def load_stan_model(name: str,
             kwargs["fixed_param"] = True
             kwargs["show_progress"] = False
         else:
-            if "inits" not in kwargs:
-                errmess = "Expected inits argument"
+            if "inits" not in kwargs and method == "mcmc":
+                errmess = "Expected inits argument for mcmc sampling"
                 raise ValueError(errmess)
 
             # .. set defaults as per package variables
@@ -138,24 +138,20 @@ def load_stan_model(name: str,
                     kwargs.pop(argn, None)
 
             # Check inits is of the right size
-            ninits = len(kwargs["inits"])
-            if ninits != 1 and not isinstance(kwargs["inits"], dict):
-                if method in ["variational", "laplace", "optimize"]:
-                    if ninits != 1:
-                        errmess = "Expected 1 initial "\
-                                  + f"parameter sets, got {ninits}."
-                        raise ValueError(errmess)
-                else:
-                    if ninits != kwargs["chains"]:
-                        nchains = kwargs["chains"]
-                        errmess = f"Expected 1 or {nchains} initial "\
-                                  + f"parameter sets, got {ninits}."
-                        raise ValueError(errmess)
-
-            if method == "laplace":
-                inits = kwargs["inits"]
-                kwargs.pop("inits")
-                kwargs["opt_args"] = {"inits": inits}
+            if "inits" in kwargs:
+                ninits = len(kwargs["inits"])
+                if ninits != 1 and not isinstance(kwargs["inits"], dict):
+                    if method in ["variational", "laplace", "optimize"]:
+                        if ninits != 1:
+                            errmess = "Expected 1 initial "\
+                                      + f"parameter sets, got {ninits}."
+                            raise ValueError(errmess)
+                    else:
+                        if ninits != kwargs["chains"]:
+                            nchains = kwargs["chains"]
+                            errmess = f"Expected 1 or {nchains} initial "\
+                                      + f"parameter sets, got {ninits}."
+                            raise ValueError(errmess)
 
         if "output_dir" in kwargs:
             fout = Path(kwargs["output_dir"])

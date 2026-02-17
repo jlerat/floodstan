@@ -570,10 +570,14 @@ class StanSamplingDataset():
 class StanHierarchicalDataset():
     def __init__(self, marginal, y, pcensor,
                  areas, coords,
+                 yshape1_lower=-0.5,
+                 yshape1_upper=0.5,
                  ninits=NCHAINS_DEFAULT):
 
         self.marginal = marginal.clone()
         self.ninits = ninits
+        self.yshape1_lower = yshape1_lower
+        self.yshape1_upper = yshape1_upper
 
         self.set_y(y, pcensor)
 
@@ -623,7 +627,15 @@ class StanHierarchicalDataset():
             Nobs.append(int(sv.is_obs.sum()))
             idx_obs[i, :Nobs[i]] = np.where(sv.is_obs)[0] + 1
             Ncens.append(int(sv.is_cens.sum()))
-            initial_parameters.append(sv.initial_parameters)
+
+            inits = sv.initial_parameters
+            ys0 = self.yshape1_lower
+            ys1 = self.yshape1_upper
+            for ii in range(len(inits)):
+                yshape1 = inits[ii]["yshape1"]
+                inits[ii]["yshape1"] = min(ys1, max(ys0, yshape1))
+
+            initial_parameters.append(inits)
 
         self.Nobs = Nobs
         self.idx_obs = idx_obs
@@ -633,21 +645,21 @@ class StanHierarchicalDataset():
 
     def set_priors(self):
         self.rho_lower = [1.] * 3
-        self.rho_upper = [500.] * 3
+        self.rho_upper = [200.] * 3
         self.rho_prior = [[50., 50.]] * 3
 
-        self.alpha_lower = [0.] * 3
-        self.alpha_upper = [10.] * 3
-        self.alpha_prior = [[0., 1.], [0., 1.], [0., 0.1]]
+        self.alpha_lower = [0.01] * 3
+        self.alpha_upper = [50.] * 3
+        self.alpha_prior = [[0., 1.], [0., 1.], [0., 1.]]
 
-        self.sigma_lower = [0.] * 3
-        self.sigma_upper = [10.] * 3
-        self.sigma_prior = [[0., 1.], [0., 1.], [0., 0.1]]
+        self.sigma_lower = [0.01] * 3
+        self.sigma_upper = [50.] * 3
+        self.sigma_prior = [[0., 1.], [0., 1.], [0., 1.]]
 
         self.beta0_lower = [-20, -20, -2]
         self.beta0_upper = [20, 20, 2]
         # .. sort of uniform priors for beta0[3] (shape parameter)
-        self.beta0_prior = [[1., 10.], [1., 10.], [0., 100.]]
+        self.beta0_prior = [[1., 10.], [1., 10.], [0., 10.]]
 
         self.beta1_lower = [0, 0, -2]
         self.beta1_upper = [2, 2, 2]
@@ -694,6 +706,8 @@ class StanHierarchicalDataset():
             "Ncens": self.Ncens,
             "y": self.y.T.tolist(),
             "ycensors": self.ycensors,
+            "yshape1_lower": self.yshape1_lower,
+            "yshape1_upper": self.yshape1_upper,
             "rho_lower": self.rho_lower,
             "rho_upper": self.rho_upper,
             "rho_prior": self.rho_prior,
