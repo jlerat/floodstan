@@ -29,15 +29,18 @@ data {
     vector[M] ycensors; 
 
     // Priors
-    vector[3] rho_lower;
+    real yshape1_lower;
+    real<lower=yshape1_lower> yshape1_upper;
+
+    vector<lower=0.1>[3] rho_lower;
     vector[3] rho_upper;
     array[3] vector[2] rho_prior;
 
-    vector[3] alpha_lower;
+    vector<lower=0.01>[3] alpha_lower;
     vector[3] alpha_upper;
     array[3] vector[2] alpha_prior;
 
-    vector[3] sigma_lower;
+    vector<lower=0.01>[3] sigma_lower;
     vector[3] sigma_upper;
     array[3] vector[2] sigma_prior;
    
@@ -85,7 +88,7 @@ parameters {
    // Marginal parameters
    vector[M] yasinhlocn;        
    vector[M] ylogscale;        
-   vector[M] yshape1;        
+   vector<lower=yshape1_lower, upper=yshape1_upper>[M] yshape1;        
 
    // Normalised GP parameter
    vector<lower=0, upper=1>[3] u_rho;
