@@ -649,22 +649,22 @@ class StanHierarchicalDataset():
         self.rho_prior = [[50., 50.]] * 3
 
         self.alpha_lower = [0.01] * 3
-        self.alpha_upper = [50.] * 3
-        self.alpha_prior = [[0., 1.], [0., 1.], [0., 1.]]
+        self.alpha_upper = [2.] * 3
+        self.alpha_prior = [[0., 1.], [0., 1.], [0., 0.1]]
 
         self.sigma_lower = [0.01] * 3
-        self.sigma_upper = [50.] * 3
-        self.sigma_prior = [[0., 1.], [0., 1.], [0., 1.]]
+        self.sigma_upper = [2.] * 3
+        self.sigma_prior = [[0., 1.], [0., 1.], [0., 0.1]]
 
         self.beta0_lower = [-20, -20, -2]
         self.beta0_upper = [20, 20, 2]
         # .. sort of uniform priors for beta0[3] (shape parameter)
-        self.beta0_prior = [[1., 10.], [1., 10.], [0., 10.]]
+        self.beta0_prior = [[0., 10.], [0., 10.], [0., 10.]]
 
-        self.beta1_lower = [0, 0, -2]
+        self.beta1_lower = [0, 0, 0]
         self.beta1_upper = [2, 2, 2]
-        # .. sort of uniform priors
-        self.beta1_prior = [[1., 100.], [1., 100.], [0., 100.]]
+        # .. sort of uniform priors .. beta[3] not used.
+        self.beta1_prior = [[0., 10.], [0., 10.], [0., 10.]]
 
     def inits(self):
         M = self.M
