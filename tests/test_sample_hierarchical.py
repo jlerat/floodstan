@@ -62,7 +62,7 @@ def test_stan_sampling_variable(allclose):
 
     stan_data = hv.to_dict()
 
-    assert len(stan_data) == 27
+    assert len(stan_data) == 24
     N = stan_data["N"]
     M = stan_data["M"]
 
@@ -85,7 +85,7 @@ def test_stan_sampling_variable(allclose):
     inits = hv.inits()
     assert len(inits) == 10
     for init in inits:
-        assert len(init) == 8
+        assert len(init) == 7
 
     # Check we can save data to json
     ftmp =  FTESTS / "hierarchical_data.json"

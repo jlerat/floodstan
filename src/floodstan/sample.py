@@ -42,6 +42,17 @@ LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
 LOGGER_DATE_FORMAT = "%y-%m-%d %H:%M"
 
 
+def log_moments(means, stds):
+    """ location and scale of lognormal distribution
+        given their moments in raw space.
+    """
+    means, stds = np.array(means), np.array(stds)
+    u = 1 + (stds / means)**2
+    mu = np.log(means / np.sqrt(u))
+    sig = np.sqrt(np.log(u))
+    return np.column_stack([mu, sig]).tolist()
+
+
 def get_logger(level="INFO", flog=None, stan_logger=True):
     """ Get logger object.
 
@@ -644,20 +655,20 @@ class StanHierarchicalDataset():
         self._initial_parameters = initial_parameters
 
     def set_priors(self):
-        self.rho_lower = [1.] * 3
-        self.rho_upper = [200.] * 3
-        self.rho_prior = [[50., 50.]] * 3
+        self.logrho_lower = [math.log(1.)] * 3
+        self.logrho_upper = [math.log(500.)] * 3
+        # lognormal prior with mean and std given
+        # in raw space (i.e. km for rho)
+        means, stds = [50] * 3, [20] * 3
+        self.logrho_prior = log_moments(means, stds)
 
-        self.alpha_lower = [0.01] * 3
-        self.alpha_upper = [2.] * 3
-        self.alpha_prior = [[0., 1.], [0., 1.], [0., 0.1]]
+        self.logalpha_lower = [0.01] * 3
+        self.logalpha_upper = [2.] * 3
+        means, stds = [1, 1, 0.1], [0.8, 0.8, 0.08]
+        self.logalpha_prior = log_moments(means, stds)
 
-        self.sigma_lower = [0.01] * 3
-        self.sigma_upper = [2.] * 3
-        self.sigma_prior = [[0., 1.], [0., 1.], [0., 0.1]]
-
-        self.beta0_lower = [-20, -20, -2]
-        self.beta0_upper = [20, 20, 2]
+        self.beta0_lower = [-20, -20, -1]
+        self.beta0_upper = [20, 20, 1]
         # .. sort of uniform priors for beta0[3] (shape parameter)
         self.beta0_prior = [[0., 10.], [0., 10.], [0., 10.]]
 
@@ -685,9 +696,8 @@ class StanHierarchicalDataset():
                 "yshape1": yshape1,
                 "u_beta0": np.random.uniform(x0, x1, 3).tolist(),
                 "u_beta1": np.random.uniform(x0, x1, 2).tolist(),
-                "u_rho": np.random.uniform(x0, x1, 3).tolist(),
-                "u_alpha": np.random.uniform(x0, x1, 3).tolist(),
-                "u_sigma": np.random.uniform(x0, x1, 3).tolist()
+                "u_logrho": np.random.uniform(x0, x1, 3).tolist(),
+                "u_logalpha": np.random.uniform(x0, x1, 3).tolist()
             }
 
             params.append(dd)
@@ -708,15 +718,12 @@ class StanHierarchicalDataset():
             "ycensors": self.ycensors,
             "yshape1_lower": self.yshape1_lower,
             "yshape1_upper": self.yshape1_upper,
-            "rho_lower": self.rho_lower,
-            "rho_upper": self.rho_upper,
-            "rho_prior": self.rho_prior,
-            "alpha_lower": self.alpha_lower,
-            "alpha_upper": self.alpha_upper,
-            "alpha_prior": self.alpha_prior,
-            "sigma_lower": self.sigma_lower,
-            "sigma_upper": self.sigma_upper,
-            "sigma_prior": self.sigma_prior,
+            "logrho_lower": self.logrho_lower,
+            "logrho_upper": self.logrho_upper,
+            "logrho_prior": self.logrho_prior,
+            "logalpha_lower": self.logalpha_lower,
+            "logalpha_upper": self.logalpha_upper,
+            "logalpha_prior": self.logalpha_prior,
             "beta0_lower": self.beta0_lower,
             "beta0_upper": self.beta0_upper,
             "beta1_lower": self.beta1_lower,
