@@ -117,7 +117,7 @@ transformed parameters {
    }
 
    vector[3] rho = exp(logrho);
-   vector[3] alpha = exp(alpha);
+   vector[3] alpha = exp(logalpha);
 }
 
 model {
