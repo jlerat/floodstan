@@ -82,10 +82,6 @@ parameters {
    vector[M] ylogscale;        
    vector<lower=yshape1_lower, upper=yshape1_upper>[M] yshape1;        
 
-   vector[M] yasinhlocn_hprior;        
-   vector[M] ylogscale_hprior;        
-   vector<lower=yshape1_lower, upper=yshape1_upper>[M] yshape1_hprior;        
-
    // Normalised GP parameter
    vector<lower=0, upper=1>[3] u_logrho;
    vector<lower=0, upper=1>[3] u_logalpha;
@@ -99,9 +95,6 @@ transformed parameters {
    vector[M] ylocn = sinh(yasinhlocn);
    vector[M] yscale = exp(ylogscale);
    
-   vector[M] ylocn_hprior = sinh(yasinhlocn_hprior);
-   vector[M] yscale_hprior = exp(ylogscale_hprior);
-    
    vector[3] logrho;
    vector[3] logalpha;
    vector[3] beta0;
@@ -124,13 +117,9 @@ model {
     // See https://mc-stan.org/docs/stan-users-guide/gaussian-processes.html#fit-gp.section
 
     // Covariance - Exponential kernel
-    matrix [M, M] Klocn = gp_exponential_cov(coords, alpha[1], rho[1]);
-    matrix [M, M] Klogs = gp_exponential_cov(coords, alpha[2], rho[2]);
-    matrix [M, M] Kshp = gp_exponential_cov(coords, alpha[3], rho[3]);
-
-    matrix[M, M] Llocn = cholesky_decompose(Klocn);
-    matrix[M, M] Llogs = cholesky_decompose(Klogs);
-    matrix[M, M] Lshp = cholesky_decompose(Kshp);
+    matrix [M, M] Llocn = cholesky_decompose(gp_exponential_cov(coords, alpha[1], rho[1]));
+    matrix [M, M] Llogs = cholesky_decompose(gp_exponential_cov(coords, alpha[2], rho[2]));
+    matrix [M, M] Lshp =  cholesky_decompose(gp_exponential_cov(coords, alpha[3], rho[3]));
 
     // Priors
     for(iv in 1:3){
@@ -169,10 +158,27 @@ model {
           if(ncens > 0)
              target += ncens * marginal_lcdf(ycensors[ista] | ymarginal, loc, scale, shape);
     }
+}
 
-    // Likelihood for hierarchical priors
-    yasinhlocn_hprior ~ multi_normal_cholesky(beta0[1] + beta1[1] * logareas, Llocn);
-    ylogscale_hprior ~ multi_normal_cholesky(beta0[2] + beta1[2] * logareas, Llogs);
-    yshape1_hprior ~ multi_normal_cholesky(beta0[3] * ones, Lshp);
+generated quantities {
+    // Sample from hierarchical prior
+    vector[M] ylocn_hprior;
+    vector[M] ylogscale_hprior;
+    vector[M] yshape1_hprior;
+    {
+        // Covariance matrix and arcsinh transformed location paramters 
+        // are declared as 'local' variables to avoid storing them in 
+        // the output files
+        matrix [M, M] Llocn = cholesky_decompose(gp_exponential_cov(coords, alpha[1], rho[1]));
+        matrix [M, M] Llogs = cholesky_decompose(gp_exponential_cov(coords, alpha[2], rho[2]));
+        matrix [M, M] Lshp =  cholesky_decompose(gp_exponential_cov(coords, alpha[3], rho[3]));
+
+        vector[M] yasinhlocn_hprior = multi_normal_cholesky_rng(beta0[1] + beta1[1] * logareas, Llocn);
+        ylocn_hprior = sinh(yasinhlocn_hprior);
+
+        ylogscale_hprior = multi_normal_cholesky_rng(beta0[2] + beta1[2] * logareas, Llogs);
+        yshape1_hprior = multi_normal_cholesky_rng(beta0[3] * ones, Lshp);
+    }
+
 }
 
