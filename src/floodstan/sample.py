@@ -581,8 +581,8 @@ class StanSamplingDataset():
 class StanHierarchicalDataset():
     def __init__(self, marginal, y, pcensor,
                  areas, coords,
-                 yshape1_lower=-0.5,
-                 yshape1_upper=0.5,
+                 yshape1_lower=-1.0,
+                 yshape1_upper=1.0,
                  ninits=NCHAINS_DEFAULT):
 
         self.marginal = marginal.clone()
@@ -662,8 +662,8 @@ class StanHierarchicalDataset():
         means, stds = [50] * 3, [20] * 3
         self.logrho_prior = log_moments(means, stds)
 
-        self.logalpha_lower = [0.01] * 3
-        self.logalpha_upper = [2.] * 3
+        self.logalpha_lower = [math.log(0.02)] * 3
+        self.logalpha_upper = [math.log(10.)] * 3
         means, stds = [1, 1, 0.1], [0.8, 0.8, 0.08]
         self.logalpha_prior = log_moments(means, stds)
 
