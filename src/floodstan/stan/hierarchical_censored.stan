@@ -32,48 +32,26 @@ data {
     real yshape1_lower;
     real<lower=yshape1_lower> yshape1_upper;
 
-    vector<lower=-4>[3] logrho_lower;
-    vector<upper=8>[3] logrho_upper;
-    array[3] vector[2] logrho_prior;
+    real rho_lower;
+    real<lower=rho_lower> rho_upper;
+    vector[2] rho_prior;
 
-    vector<lower=-4>[3] logalpha_lower;
-    vector[3] logalpha_upper;
-    array[3] vector[2] logalpha_prior;
+    real alpha_lower;
+    real<lower=alpha_lower> alpha_upper;
+    array[3] vector[2] alpha_prior;
 
     vector[3] beta0_lower;
     vector[3] beta0_upper;
     array[3] vector[2] beta0_prior;
 
-    vector[3] beta1_lower;
-    vector[3] beta1_upper;
+    vector[2] beta1_lower;
+    vector[2] beta1_upper;
     array[3] vector[2] beta1_prior;
 }  
 
 transformed data {
     vector[M] logareas = log(areas);
     vector[M] ones = rep_vector(1., M);
-
-    // Compute diff to ensure that lower < upper
-    vector[3] logrho_diff;
-    vector[3] logalpha_diff;
-    vector[3] beta0_diff;
-    vector[3] beta1_diff;
-
-    real<lower=1e-3> diff = 2e-3;
-
-    for(iv in 1:3) {
-        diff = logrho_upper[iv] - logrho_lower[iv];
-        logrho_diff[iv] = diff;
-        
-        diff = logalpha_upper[iv] - logalpha_lower[iv];
-        logalpha_diff[iv] = diff;
-        
-        diff = beta0_upper[iv] - beta0_lower[iv];
-        beta0_diff[iv] = diff;
-
-        diff = beta1_upper[iv] - beta1_lower[iv];
-        beta1_diff[iv] = diff;
-    }
 }
 
 parameters {
@@ -83,8 +61,8 @@ parameters {
    vector<lower=yshape1_lower, upper=yshape1_upper>[M] yshape1;        
 
    // Normalised GP parameter
-   vector<lower=0, upper=1>[3] u_logrho;
-   vector<lower=0, upper=1>[3] u_logalpha;
+   real<lower=rho_lower, upper=rho_upper> rho;
+   vector<lower=alpha_lower, upper=alpha_upper>[3] alpha;
    
    // Normalised regression parameters
    vector<lower=0, upper=1>[3] u_beta0;
@@ -95,39 +73,25 @@ transformed parameters {
    vector[M] ylocn = sinh(yasinhlocn);
    vector[M] yscale = exp(ylogscale);
    
-   vector[3] logrho;
-   vector[3] logalpha;
-   vector[3] beta0;
-   vector[2] beta1;
-
-   for(iv in 1:3) {
-        logrho[iv] = logrho_lower[iv] + logrho_diff[iv] * u_logrho[iv];
-        logalpha[iv] = logalpha_lower[iv] + logalpha_diff[iv] * u_logalpha[iv];
-        
-        beta0[iv] = beta0_lower[iv] + beta0_diff[iv] * u_beta0[iv];
-        if(iv < 3)
-            beta1[iv] = beta1_lower[iv] + beta1_diff[iv] * u_beta1[iv];
-   }
-
-   vector[3] rho = exp(logrho);
-   vector[3] alpha = exp(logalpha);
+   vector[3] beta0 = beta0_lower + (beta0_upper - beta0_lower) .* u_beta0;
+   vector[2] beta1 = beta1_lower + (beta1_upper - beta1_lower) .* u_beta1;
 }
 
 model {
     // See https://mc-stan.org/docs/stan-users-guide/gaussian-processes.html#fit-gp.section
 
     // Covariance - Exponential kernel
-    matrix [M, M] Llocn = cholesky_decompose(gp_exponential_cov(coords, alpha[1], rho[1]));
-    matrix [M, M] Llogs = cholesky_decompose(gp_exponential_cov(coords, alpha[2], rho[2]));
-    matrix [M, M] Lshp =  cholesky_decompose(gp_exponential_cov(coords, alpha[3], rho[3]));
+    matrix [M, M] L = cholesky_decompose(gp_exponential_cov(coords, 1., rho));
+    matrix [M, M] Llocn = alpha[1] * L;
+    matrix [M, M] Llogs = alpha[2] * L;
+    matrix [M, M] Lshp = alpha[3] * L;
 
     // Priors
+    rho ~ normal(rho_prior[1], rho_prior[2]);
+
     for(iv in 1:3){
-        logrho[iv] ~ normal(logrho_prior[iv][1], logrho_prior[iv][2]);
-        logalpha[iv] ~ normal(logalpha_prior[iv][1], logalpha_prior[iv][2]);
-
+        alpha[iv] ~ normal(alpha_prior[iv][1], alpha_prior[iv][2]);
         beta0[iv] ~ normal(beta0_prior[iv][1], beta0_prior[iv][2]);
-
         if(iv < 3) 
             beta1[iv] ~ normal(beta1_prior[iv][1], beta1_prior[iv][2]);
     }
@@ -169,9 +133,10 @@ generated quantities {
         // Covariance matrix and arcsinh transformed location paramters 
         // are declared as 'local' variables to avoid storing them in 
         // the output files
-        matrix [M, M] Llocn = cholesky_decompose(gp_exponential_cov(coords, alpha[1], rho[1]));
-        matrix [M, M] Llogs = cholesky_decompose(gp_exponential_cov(coords, alpha[2], rho[2]));
-        matrix [M, M] Lshp =  cholesky_decompose(gp_exponential_cov(coords, alpha[3], rho[3]));
+        matrix [M, M] L = cholesky_decompose(gp_exponential_cov(coords, 1., rho[1]));
+        matrix [M, M] Llocn = alpha[1] * L;
+        matrix [M, M] Llogs = alpha[2] * L;
+        matrix [M, M] Lshp =  alpha[3] * L;
 
         vector[M] yasinhlocn_hprior = multi_normal_cholesky_rng(beta0[1] + beta1[1] * logareas, Llocn);
         ylocn_hprior = sinh(yasinhlocn_hprior);
@@ -179,6 +144,5 @@ generated quantities {
         ylogscale_hprior = multi_normal_cholesky_rng(beta0[2] + beta1[2] * logareas, Llogs);
         yshape1_hprior = multi_normal_cholesky_rng(beta0[3] * ones, Lshp);
     }
-
 }
 
