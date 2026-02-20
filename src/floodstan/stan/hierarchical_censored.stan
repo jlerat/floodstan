@@ -133,7 +133,7 @@ generated quantities {
         // Covariance matrix and arcsinh transformed location paramters 
         // are declared as 'local' variables to avoid storing them in 
         // the output files
-        matrix [M, M] L = cholesky_decompose(gp_exponential_cov(coords, 1., rho[1]));
+        matrix [M, M] L = cholesky_decompose(gp_exponential_cov(coords, 1., rho));
         matrix [M, M] Llocn = alpha[1] * L;
         matrix [M, M] Llogs = alpha[2] * L;
         matrix [M, M] Lshp =  alpha[3] * L;
