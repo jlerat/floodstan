@@ -46,7 +46,7 @@ data {
 
     vector[2] beta1_lower;
     vector[2] beta1_upper;
-    array[3] vector[2] beta1_prior;
+    array[2] vector[2] beta1_prior;
 }  
 
 transformed data {
@@ -61,7 +61,7 @@ parameters {
    vector<lower=yshape1_lower, upper=yshape1_upper>[M] yshape1;        
 
    // Normalised GP parameter
-   real<lower=rho_lower, upper=rho_upper> rho;
+   vector<lower=rho_lower, upper=rho_upper>[3] rho;
    vector<lower=alpha_lower, upper=alpha_upper>[3] alpha;
    
    // Normalised regression parameters
@@ -81,10 +81,9 @@ model {
     // See https://mc-stan.org/docs/stan-users-guide/gaussian-processes.html#fit-gp.section
 
     // Covariance - Exponential kernel
-    matrix [M, M] L = cholesky_decompose(gp_exponential_cov(coords, 1., rho));
-    matrix [M, M] Llocn = alpha[1] * L;
-    matrix [M, M] Llogs = alpha[2] * L;
-    matrix [M, M] Lshp = alpha[3] * L;
+    matrix [M, M] Llocn = cholesky_decompose(gp_exponential_cov(coords, 1., rho[1]));
+    matrix [M, M] Llogs = cholesky_decompose(gp_exponential_cov(coords, 1., rho[2]));
+    matrix [M, M] Lshp = cholesky_decompose(gp_exponential_cov(coords, 1., rho[3]));
 
     // Priors
     rho ~ normal(rho_prior[1], rho_prior[2]);
@@ -133,10 +132,9 @@ generated quantities {
         // Covariance matrix and arcsinh transformed location paramters 
         // are declared as 'local' variables to avoid storing them in 
         // the output files
-        matrix [M, M] L = cholesky_decompose(gp_exponential_cov(coords, 1., rho));
-        matrix [M, M] Llocn = alpha[1] * L;
-        matrix [M, M] Llogs = alpha[2] * L;
-        matrix [M, M] Lshp =  alpha[3] * L;
+        matrix [M, M] Llocn = cholesky_decompose(gp_exponential_cov(coords, 1., rho[1]));
+        matrix [M, M] Llogs = cholesky_decompose(gp_exponential_cov(coords, 1., rho[2]));
+        matrix [M, M] Lshp = cholesky_decompose(gp_exponential_cov(coords, 1., rho[3]));
 
         vector[M] yasinhlocn_hprior = multi_normal_cholesky_rng(beta0[1] + beta1[1] * logareas, Llocn);
         ylocn_hprior = sinh(yasinhlocn_hprior);

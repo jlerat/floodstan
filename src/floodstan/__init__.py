@@ -21,7 +21,8 @@ NWARM_DEFAULT = 10000
 SEED_DEFAULT = 5446
 
 # Possible method invoked
-STAN_METHODS = ["mcmc", "variational", "laplace", "optimize"]
+STAN_METHODS = ["mcmc", "variational", "laplace",
+                "optimize", "diagnose"]
 
 # on Windows specifically, we should point cmdstanpy to the repackaged
 # CmdStan if it exists. This lets cmdstanpy handle the TBB path for us.
@@ -111,7 +112,7 @@ def load_stan_model(name: str,
             # .. set defaults as per package variables
             kwargs["seed"] = kwargs.get("seed", SEED_DEFAULT)
 
-            if method == "mcmc":
+            if method in "mcmc":
                 kwargs["chains"] = kwargs.get("chains", NCHAINS_DEFAULT)
                 kwargs["iter_warmup"] = kwargs.get("iter_warmup",
                                                    NWARM_DEFAULT)
@@ -137,6 +138,12 @@ def load_stan_model(name: str,
                 for argn in argnames:
                     kwargs.pop(argn, None)
 
+            elif method == "diagnose":
+                kwargs = {
+                    "inits": kwargs["inits"],
+                    "data": kwargs["data"]
+                }
+
             # Check inits is of the right size
             if "inits" in kwargs:
                 ninits = len(kwargs["inits"])
@@ -146,14 +153,14 @@ def load_stan_model(name: str,
                             errmess = "Expected 1 initial "\
                                       + f"parameter sets, got {ninits}."
                             raise ValueError(errmess)
-                    else:
+                    elif method == "mcmc":
                         if ninits != kwargs["chains"]:
                             nchains = kwargs["chains"]
                             errmess = f"Expected 1 or {nchains} initial "\
                                       + f"parameter sets, got {ninits}."
                             raise ValueError(errmess)
 
-        if "output_dir" in kwargs:
+        if "output_dir" in kwargs and method != "diagnose":
             fout = Path(kwargs["output_dir"])
             if not fout.exists():
                 errmess = "Output directory does not exist."
@@ -174,6 +181,8 @@ def load_stan_model(name: str,
                 smp = model.laplace_sample(**kwargs)
             elif method == "optimize":
                 smp = model.optimize(**kwargs)
+            elif method == "diagnose":
+                smp = model.diagnose(**kwargs)
             return smp
 
     return fun

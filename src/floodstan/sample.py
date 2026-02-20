@@ -581,18 +581,14 @@ class StanSamplingDataset():
 class StanHierarchicalDataset():
     def __init__(self, marginal, y, pcensor,
                  areas, coords,
-                 yshape1_lower=-1.0,
-                 yshape1_upper=1.0,
                  ninits=NCHAINS_DEFAULT):
 
         self.marginal = marginal.clone()
         self.ninits = ninits
-        self.yshape1_lower = yshape1_lower
-        self.yshape1_upper = yshape1_upper
-
-        self.set_y(y, pcensor)
 
         self.set_priors()
+
+        self.set_y(y, pcensor)
 
         areas = np.array(areas)
         if areas.shape != (self.M, ):
@@ -655,22 +651,25 @@ class StanHierarchicalDataset():
         self._initial_parameters = initial_parameters
 
     def set_priors(self):
+        self.yshape1_lower = -2
+        self.yshape1_upper = 0.5
+
         self.rho_lower = 1.
         self.rho_upper = 500.
         self.rho_prior = [50, 20]
 
-        self.alpha_lower = 0.01
+        self.alpha_lower = 0.1
         self.alpha_upper = 5.
-        self.alpha_prior = [[1, 0.8]] * 2 + [[0.2, 0.16]]
+        self.alpha_prior = [[1, 0.5]] * 2 + [[0.2, 0.1]]
 
         self.beta0_lower = [-20, -20, -1]
         self.beta0_upper = [20, 20, 1]
-        # .. sort of uniform priors for beta0[3] (shape parameter)
-        self.beta0_prior = [[0., 10.], [0., 10.], [0., 10.]]
+        # .. sort of uniform priors
+        self.beta0_prior = [[0., 100.], [0., 100.], [0., 10.]]
 
         self.beta1_lower = [0, 0]
         self.beta1_upper = [2, 2]
-        # .. sort of uniform priors .. beta[3] not used.
+        # .. sort of uniform priors
         self.beta1_prior = [[0., 10.], [0., 10.]]
 
     def inits(self):
@@ -699,7 +698,7 @@ class StanHierarchicalDataset():
             u_beta1 = (beta1 - bl) / (bu - bl)
 
             # Initial for rho
-            rho = np.random.uniform(10, 80)
+            rho = np.random.uniform(10, 80, size=3)
 
             # Initial for alpha
             alpha = np.random.uniform(0.5, 2, size=3)
