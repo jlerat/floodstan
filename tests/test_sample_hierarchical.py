@@ -151,10 +151,16 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     smp = hierarchical_censored_sampling(**kw)
     df = smp.draws_pd()
 
-    yshape1 = df.filter(regex="^yshape1\\[", axis=1)
-
     print(f"\n{marginal_name}-{censoring}")
+
+    yshape1 = df.filter(regex="^yshape1\\[", axis=1)
     print(f"\tShape std = {yshape1.mean().std():0.2f}")
+    rho = df.filter(regex="^rho\\[", axis=1)
+    rhom = rho.mean().values
+    print(f"\tRho mean = {rhom[0]} {rhom[1]} {rhom[2]}")
+    alpha = df.filter(regex="^alpha\\[", axis=1)
+    alpham = alpha.mean()
+    print(f"\tAlpha mean = {alpham[0]} {alpham[1]} {alpham[2]}")
 
     dd = smp.diagnose()
     diag = report.process_stan_diagnostic(dd)
