@@ -662,9 +662,9 @@ class StanHierarchicalDataset():
         means, stds = [50] * 3, [20] * 3
         self.logrho_prior = log_moments(means, stds)
 
-        self.logalpha_lower = [math.log(0.02)] * 3
+        self.logalpha_lower = [math.log(0.05)] * 3
         self.logalpha_upper = [math.log(10.)] * 3
-        means, stds = [1, 1, 0.1], [0.8, 0.8, 0.08]
+        means, stds = [1, 1, 0.2], [0.8, 0.8, 0.1]
         self.logalpha_prior = log_moments(means, stds)
 
         self.beta0_lower = [-20, -20, -1]
