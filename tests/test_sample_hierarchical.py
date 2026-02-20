@@ -127,9 +127,7 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     stan_data = hv.to_dict()
     stan_inits = hv.inits()
 
-    stan_args = {
-        "adapt_delta": 0.9
-        }
+    stan_args = {}
 
     # Clean output folder
     fname = f"hierarchical_{marginal_name}_{censoring}"
@@ -152,7 +150,15 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     # Sample
     smp = hierarchical_censored_sampling(**kw)
     df = smp.draws_pd()
-    diag = report.process_stan_diagnostic(smp.diagnose())
+
+    yshape1 = df.filter(regex="^yshape1\\[", axis=1)
+
+    print(f"\n{marginal_name}-{censoring}")
+    print(f"\tShape std = {yshape1.mean().std():0.2f}")
+
+    dd = smp.diagnose()
+    diag = report.process_stan_diagnostic(dd)
+    rhat = smp.summary().loc[:, "R_hat"]
 
     for f in fout.glob("*.*"):
         f.unlink()
@@ -161,10 +167,11 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     # Test diag
     assert diag["effsamplesz"] == "satisfactory"
     assert diag["rhat"] == "satisfactory"
+    print(f"\tR_hat = [{rhat.min():0.3f}, {rhat.max():0.3f}]")
 
     # Test divergence
     prc = diag["divergence_proportion"]
-    print(f"\n{marginal_name}-{censoring} : Divergence proportion = {prc}\n")
+    print(f"\tDivergence proportion = {prc}\n")
     thresh = 50
     assert prc < thresh
 
@@ -237,6 +244,7 @@ def test_hierarchical_censored_sampling_big(allclose):
     # Sample
     smp = hierarchical_censored_sampling(**kw)
     df = smp.draws_pd()
+
     diag = report.process_stan_diagnostic(smp.diagnose())
 
     for f in fout.glob("*.*"):
