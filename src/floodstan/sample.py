@@ -652,7 +652,7 @@ class StanHierarchicalDataset():
 
     def set_priors(self):
         self.yshape1_lower = -2
-        self.yshape1_upper = 0.5
+        self.yshape1_upper = 1.
 
         self.rho_lower = 1.
         self.rho_upper = 500.
@@ -709,7 +709,7 @@ class StanHierarchicalDataset():
                 "yshape1": yshape1,
                 "u_beta0": u_beta0.tolist(),
                 "u_beta1": u_beta1.tolist(),
-                "rho": rho,
+                "rho": rho.tolist(),
                 "alpha": alpha.tolist(),
             }
 
