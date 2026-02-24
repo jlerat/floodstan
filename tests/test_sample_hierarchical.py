@@ -131,7 +131,7 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     hv = sample.StanHierarchicalDataset(marginal, y, pcensor,
                                         areas, coords,
                                         ninits=stan_nchains)
-    stan_data = hv.to_dict([0.5] * 3)
+    stan_data = hv.to_dict([0.1] * 3)
     stan_inits = hv.inits()
     stan_args = hv.stan_sample_args
 
@@ -173,6 +173,9 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     dd = smp.diagnose()
     diag = report.process_stan_diagnostic(dd)
     rhat = smp.summary().loc[:, "R_hat"]
+    print(f"\tR_hat = [{rhat.min():0.3f}, {rhat.max():0.3f}]")
+    prc = diag["divergence_proportion"]
+    print(f"\tDivergence proportion = {prc}\n")
 
     for f in fout.glob("*.*"):
         f.unlink()
@@ -181,11 +184,8 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     # Test diag
     assert diag["effsamplesz"] == "satisfactory"
     assert diag["rhat"] == "satisfactory"
-    print(f"\tR_hat = [{rhat.min():0.3f}, {rhat.max():0.3f}]")
 
     # Test divergence
-    prc = diag["divergence_proportion"]
-    print(f"\tDivergence proportion = {prc}\n")
     thresh = 50
     assert prc < thresh
 
@@ -230,7 +230,7 @@ def test_hierarchical_censored_sampling_big(allclose):
     hv = sample.StanHierarchicalDataset(marginal, y_big, pcensor,
                                         areas_big, coords_big,
                                         ninits=stan_nchains)
-    stan_data = hv.to_dict([0.5] * 3)
+    stan_data = hv.to_dict([0.1] * 3)
     stan_inits = hv.inits()
     stan_args = hv.stan_sample_args
 
@@ -242,7 +242,7 @@ def test_hierarchical_censored_sampling_big(allclose):
         f.unlink()
 
     # Sample arguments
-    progress = True
+    progress = False
     kw = dict(data=stan_data,
               seed=SEED,
               iter_sampling=stan_nsamples // stan_nchains,
