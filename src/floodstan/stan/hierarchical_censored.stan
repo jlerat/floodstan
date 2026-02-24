@@ -5,12 +5,8 @@ functions {
     matrix gp_cov_cholesky(array[] vector coords, real sigma, real alpha, real rho){
         int M = size(coords);
         matrix [M, M] cov;
-        if (alpha > 1e-10) {
-            cov =  gp_exponential_cov(coords, alpha, rho);
-            return cholesky_decompose(add_diag(cov, sigma * sigma));
-        } else {
-            return sigma * identity_matrix(M);
-        }
+        cov =  gp_exponential_cov(coords, alpha, rho);
+        return cholesky_decompose(add_diag(cov, sigma * sigma));
     }    
 }
 
@@ -29,7 +25,6 @@ data {
     // Missing and censored data indexes
     array[M] int<lower=2,upper=N> Nobs;
     array[M, N] int<lower=0,upper=N> idx_obs;
-    
     array[M] int<lower=0,upper=N> Ncens;
 
     // Streamflow AMS data
