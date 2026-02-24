@@ -656,11 +656,11 @@ class StanHierarchicalDataset():
 
         self.rho_lower = 1.
         self.rho_upper = 500.
-        self.rho_prior = [50, 20]
+        self.rho_prior = [50, 50]
 
-        self.alpha_lower = 0.1
-        self.alpha_upper = 5.
-        self.alpha_prior = [[1, 0.5]] * 2 + [[0.2, 0.1]]
+        self.tau_lower = [0.01, 0.01, 0.1]
+        self.tau_upper = [10, 10, 1]
+        self.tau_prior = [[0., 2.], [0., 2.], [0.2, 0.2]]
 
         self.beta0_lower = [-20, -20, -1]
         self.beta0_upper = [20, 20, 1]
@@ -698,10 +698,10 @@ class StanHierarchicalDataset():
             u_beta1 = (beta1 - bl) / (bu - bl)
 
             # Initial for rho
-            rho = np.random.uniform(10, 80, size=3)
+            rho = np.random.uniform(50, 150, size=3)
 
             # Initial for alpha
-            alpha = np.random.uniform(0.5, 2, size=3)
+            u_tau = np.random.uniform(0.4, 0.6, size=3)
 
             dd = {
                 "yasinhlocn": yasinhlocn,
@@ -709,15 +709,22 @@ class StanHierarchicalDataset():
                 "yshape1": yshape1,
                 "u_beta0": u_beta0.tolist(),
                 "u_beta1": u_beta1.tolist(),
+                "u_tau": u_tau.tolist(),
                 "rho": rho.tolist(),
-                "alpha": alpha.tolist(),
             }
-
             params.append(dd)
 
         return params
 
-    def to_dict(self):
+    def to_dict(self, u_alpha):
+        if len(u_alpha) != 3:
+            errmsg = f"Expected u_alpha of length 3."
+            raise ValueError(errmsg)
+
+        if not all(u>0 and u<1 for u in u_alpha):
+            errmsg = f"Expected all u_alpha in ]0,1[."
+            raise ValueError(errmsg)
+
         dd = {
             "N": self.N,
             "M": self.M,
@@ -729,14 +736,13 @@ class StanHierarchicalDataset():
             "Ncens": self.Ncens,
             "y": self.y.T.tolist(),
             "ycensors": self.ycensors,
-            "yshape1_lower": self.yshape1_lower,
-            "yshape1_upper": self.yshape1_upper,
             "rho_lower": self.rho_lower,
             "rho_upper": self.rho_upper,
             "rho_prior": self.rho_prior,
-            "alpha_lower": self.alpha_lower,
-            "alpha_upper": self.alpha_upper,
-            "alpha_prior": self.alpha_prior,
+            "u_alpha": list(u_alpha),
+            "tau_lower": self.tau_lower,
+            "tau_upper": self.tau_upper,
+            "tau_prior": self.tau_prior,
             "beta0_lower": self.beta0_lower,
             "beta0_upper": self.beta0_upper,
             "beta1_lower": self.beta1_lower,
@@ -744,4 +750,12 @@ class StanHierarchicalDataset():
             "beta0_prior": self.beta0_prior,
             "beta1_prior": self.beta1_prior
             }
+
         return dd
+
+    @property
+    def stan_sample_args(self):
+        return {
+            "adapt_delta": 0.95,
+            "max_treedepth": 13
+            }

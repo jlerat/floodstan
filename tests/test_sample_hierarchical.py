@@ -60,9 +60,16 @@ def test_stan_sampling_variable(allclose):
     hv = sample.StanHierarchicalDataset(marginal, y, pcensor,
                                         areas, coords)
 
-    stan_data = hv.to_dict()
+    with pytest.raises(ValueError, match="Expected u_alpha"):
+        stan_data = hv.to_dict([0.5] * 4)
 
-    assert len(stan_data) == 24
+    with pytest.raises(ValueError, match="Expected all u_alpha"):
+        stan_data = hv.to_dict([1.5] * 3)
+
+    ua = [0.5] * 3
+    stan_data = hv.to_dict(ua)
+
+    assert len(stan_data) == 23
     N = stan_data["N"]
     M = stan_data["M"]
 
@@ -124,10 +131,9 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     hv = sample.StanHierarchicalDataset(marginal, y, pcensor,
                                         areas, coords,
                                         ninits=stan_nchains)
-    stan_data = hv.to_dict()
+    stan_data = hv.to_dict([0.5] * 3)
     stan_inits = hv.inits()
-
-    stan_args = {}
+    stan_args = hv.stan_sample_args
 
     # Clean output folder
     fname = f"hierarchical_{marginal_name}_{censoring}"
@@ -137,6 +143,7 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
         f.unlink()
 
     # Sample arguments
+    progress = False
     kw = dict(data=stan_data,
               seed=SEED,
               iter_sampling=stan_nsamples // stan_nchains,
@@ -144,6 +151,7 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
               inits=stan_inits,
               chains=stan_nchains,
               parallel_chains=stan_nchains,
+              show_progress=progress,
               iter_warmup=stan_nwarm)
     kw.update(stan_args)
 
@@ -151,7 +159,7 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     smp = hierarchical_censored_sampling(**kw)
     df = smp.draws_pd()
 
-    print(f"\n{marginal_name}-{censoring}")
+    print(f"\n[test hierarchical] {marginal_name}-{censoring}")
 
     yshape1 = df.filter(regex="^yshape1\\[", axis=1)
     print(f"\tShape std = {yshape1.mean().std():0.2f}")
@@ -214,20 +222,17 @@ def test_hierarchical_censored_sampling_big(allclose):
     coords_big = np.row_stack(coords_big)
 
     # Set STAN
-    stan_nwarm = 10000
-    stan_nsamples = 10000
+    stan_nwarm = 5000
+    stan_nsamples = 5000
     stan_nchains = 5
 
     # Prepare sampling data
     hv = sample.StanHierarchicalDataset(marginal, y_big, pcensor,
                                         areas_big, coords_big,
                                         ninits=stan_nchains)
-    stan_data = hv.to_dict()
+    stan_data = hv.to_dict([0.5] * 3)
     stan_inits = hv.inits()
-
-    stan_args = {
-        "adapt_delta": 0.9,
-        }
+    stan_args = hv.stan_sample_args
 
     # Clean output folder
     fname = f"hierarchical_big_{marginal.name}"
@@ -237,12 +242,14 @@ def test_hierarchical_censored_sampling_big(allclose):
         f.unlink()
 
     # Sample arguments
+    progress = True
     kw = dict(data=stan_data,
               seed=SEED,
               iter_sampling=stan_nsamples // stan_nchains,
               output_dir=fout,
               inits=stan_inits,
               chains=stan_nchains,
+              show_progress=progress,
               parallel_chains=stan_nchains,
               iter_warmup=stan_nwarm)
     kw.update(stan_args)
