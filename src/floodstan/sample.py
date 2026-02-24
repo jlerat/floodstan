@@ -718,11 +718,11 @@ class StanHierarchicalDataset():
 
     def to_dict(self, u_alpha):
         if len(u_alpha) != 3:
-            errmsg = f"Expected u_alpha of length 3."
+            errmsg = "Expected u_alpha of length 3."
             raise ValueError(errmsg)
 
-        if not all(u>0 and u<1 for u in u_alpha):
-            errmsg = f"Expected all u_alpha in ]0,1[."
+        if not all(u > 0 and u < 1 for u in u_alpha):
+            errmsg = "Expected all u_alpha in ]0,1[."
             raise ValueError(errmsg)
 
         dd = {
