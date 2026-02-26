@@ -131,7 +131,7 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     hv = sample.StanHierarchicalDataset(marginal, y, pcensor,
                                         areas, coords,
                                         ninits=stan_nchains)
-    stan_data = hv.to_dict([0.1] * 3)
+    stan_data = hv.to_dict([0.9] * 3)
     stan_inits = hv.inits()
     stan_args = hv.stan_sample_args
 
@@ -165,10 +165,10 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     print(f"\tShape std = {yshape1.mean().std():0.2f}")
     rho = df.filter(regex="^rho\\[", axis=1)
     rhom = rho.mean().values
-    print(f"\tRho mean = {rhom[0]} {rhom[1]} {rhom[2]}")
+    print(f"\tRho mean = {rhom[0]:0.2f} {rhom[1]:0.2f} {rhom[2]:0.2f}")
     alpha = df.filter(regex="^alpha\\[", axis=1)
     alpham = alpha.mean()
-    print(f"\tAlpha mean = {alpham[0]} {alpham[1]} {alpham[2]}")
+    print(f"\tAlpha mean = {alpham[0]:0.2f} {alpham[1]:0.2f} {alpham[2]:0.2f}")
 
     dd = smp.diagnose()
     diag = report.process_stan_diagnostic(dd)
@@ -230,7 +230,7 @@ def test_hierarchical_censored_sampling_big(allclose):
     hv = sample.StanHierarchicalDataset(marginal, y_big, pcensor,
                                         areas_big, coords_big,
                                         ninits=stan_nchains)
-    stan_data = hv.to_dict([0.5] * 3)
+    stan_data = hv.to_dict([0.9] * 3)
     stan_inits = hv.inits()
     stan_args = hv.stan_sample_args
 

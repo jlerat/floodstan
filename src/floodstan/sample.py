@@ -658,9 +658,9 @@ class StanHierarchicalDataset():
         self.rho_upper = 500.
         self.rho_prior = [50, 50]
 
-        self.tau_lower = [0.01, 0.01, 0.1]
-        self.tau_upper = [10, 10, 1]
-        self.tau_prior = [[0., 2.], [0., 2.], [0.2, 0.2]]
+        self.tau2_lower = [0.01, 0.01, 0.01]
+        self.tau2_upper = [10, 10, 1]
+        self.tau2_prior = [[0., 1.], [0., 1.], [0., 0.1]]
 
         self.beta0_lower = [-20, -20, -1]
         self.beta0_upper = [20, 20, 1]
@@ -701,7 +701,7 @@ class StanHierarchicalDataset():
             rho = np.random.uniform(50, 150, size=3)
 
             # Initial for alpha
-            u_tau = np.random.uniform(0.4, 0.6, size=3)
+            u_tau2 = np.random.uniform(0.4, 0.6, size=3)
 
             dd = {
                 "yasinhlocn": yasinhlocn,
@@ -709,20 +709,20 @@ class StanHierarchicalDataset():
                 "yshape1": yshape1,
                 "u_beta0": u_beta0.tolist(),
                 "u_beta1": u_beta1.tolist(),
-                "u_tau": u_tau.tolist(),
+                "u_tau2": u_tau2.tolist(),
                 "rho": rho.tolist(),
             }
             params.append(dd)
 
         return params
 
-    def to_dict(self, u_alpha):
-        if len(u_alpha) != 3:
-            errmsg = "Expected u_alpha of length 3."
+    def to_dict(self, u_alpha2):
+        if len(u_alpha2) != 3:
+            errmsg = "Expected u_alpha2 of length 3."
             raise ValueError(errmsg)
 
-        if not all(u > 0 and u < 1 for u in u_alpha):
-            errmsg = "Expected all u_alpha in ]0,1[."
+        if not all(u > 0 and u < 1 for u in u_alpha2):
+            errmsg = "Expected all u_alpha2 in ]0,1[."
             raise ValueError(errmsg)
 
         dd = {
@@ -739,10 +739,10 @@ class StanHierarchicalDataset():
             "rho_lower": self.rho_lower,
             "rho_upper": self.rho_upper,
             "rho_prior": self.rho_prior,
-            "u_alpha": list(u_alpha),
-            "tau_lower": self.tau_lower,
-            "tau_upper": self.tau_upper,
-            "tau_prior": self.tau_prior,
+            "u_alpha2": list(u_alpha2),
+            "tau2_lower": self.tau2_lower,
+            "tau2_upper": self.tau2_upper,
+            "tau2_prior": self.tau2_prior,
             "beta0_lower": self.beta0_lower,
             "beta0_upper": self.beta0_upper,
             "beta1_lower": self.beta1_lower,
