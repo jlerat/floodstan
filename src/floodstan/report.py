@@ -195,7 +195,8 @@ def ams_report(marginal, params=None, observed=None,
     # Initialise report data
     report_df = params.copy()
 
-    report_columns = []
+    other_columns = [cn for cn in params.columns if not cn in params_columns]
+    report_columns = other_columns.copy()
     if observed is not None:
         report_columns += [f"{obs_prefix}{hkey}_AEP[%]"
                            for hkey, _ in observed.items()]
@@ -203,6 +204,7 @@ def ams_report(marginal, params=None, observed=None,
                            for hkey, _ in observed.items()]
     report_columns += design_columns
     report_df.loc[:, report_columns] = np.nan
+    report_df.loc[:, other_columns] = params.loc[:, other_columns]
 
     # Prepare numpy array to store set values
     ndesign = len(design_columns)
