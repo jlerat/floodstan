@@ -195,7 +195,7 @@ def ams_report(marginal, params=None, observed=None,
     # Initialise report data
     report_df = params.copy()
 
-    other_columns = [cn for cn in params.columns if not cn in params_columns]
+    other_columns = [cn for cn in params.columns if cn not in params_columns]
     report_columns = other_columns.copy()
     if observed is not None:
         report_columns += [f"{obs_prefix}{hkey}_AEP[%]"
