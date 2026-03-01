@@ -65,7 +65,7 @@ transformed data {
 
 parameters {
    // Marginal parameters
-   vector[M] yasinhlocn;        
+   vector[M] yloglocn;        
    vector[M] ylogscale;        
    vector[M] yshape1;        
 
@@ -79,7 +79,7 @@ parameters {
 }
 
 transformed parameters {
-   vector[M] ylocn = sinh(yasinhlocn);
+   vector[M] ylocn = exp(yloglocn);
    vector[M] yscale = exp(ylogscale);
 
    vector[3] tau2 = tau2_lower + (tau2_upper - tau2_lower) .* u_tau2;
@@ -111,7 +111,7 @@ model {
     }
 
     // Likelihood
-    yasinhlocn ~ multi_normal_cholesky(beta0[1] + beta1[1] * logareas, Llocn);
+    yloglocn ~ multi_normal_cholesky(beta0[1] + beta1[1] * logareas, Llocn);
     ylogscale ~ multi_normal_cholesky(beta0[2] + beta1[2] * logareas, Llogs);
     yshape1 ~ multi_normal_cholesky(beta0[3] * ones, Lshp);
 
@@ -155,8 +155,8 @@ generated quantities {
         matrix [M, M] Llogs = gp_cov_cholesky(coords, sigma2[2], alpha2[2], rho[2]);
         matrix [M, M] Lshp = gp_cov_cholesky(coords, sigma2[3], alpha2[3], rho[3]);
 
-        vector[M] yasinhlocn_hprior = multi_normal_cholesky_rng(beta0[1] + beta1[1] * logareas, Llocn);
-        ylocn_hprior = sinh(yasinhlocn_hprior);
+        vector[M] yloglocn_hprior = multi_normal_cholesky_rng(beta0[1] + beta1[1] * logareas, Llocn);
+        ylocn_hprior = exp(yloglocn_hprior);
         ylogscale_hprior = multi_normal_cholesky_rng(beta0[2] + beta1[2] * logareas, Llogs);
         yshape1_hprior = multi_normal_cholesky_rng(beta0[3] * ones, Lshp);
     }

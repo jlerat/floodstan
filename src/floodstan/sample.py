@@ -677,10 +677,10 @@ class StanHierarchicalDataset():
 
         params = []
         for k in range(self.ninits):
-            yasinhlocn, ylogscale, yshape1 = [], [], []
+            yloglocn, ylogscale, yshape1 = [], [], []
             for i in range(M):
                 pp = self._initial_parameters[i][k]
-                yasinhlocn.append(float(math.asinh(pp["ylocn"])))
+                yloglocn.append(float(math.log(max(1e-2, pp["ylocn"]))))
                 ylogscale.append(float(pp["ylogscale"]))
                 yshape1.append(float(pp["yshape1"]))
 
@@ -704,7 +704,7 @@ class StanHierarchicalDataset():
             u_tau2 = np.random.uniform(0.4, 0.6, size=3)
 
             dd = {
-                "yasinhlocn": yasinhlocn,
+                "yloglocn": yloglocn,
                 "ylogscale": ylogscale,
                 "yshape1": yshape1,
                 "u_beta0": u_beta0.tolist(),
