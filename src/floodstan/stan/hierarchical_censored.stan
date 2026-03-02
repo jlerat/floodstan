@@ -51,6 +51,8 @@ data {
     vector<lower=0>[2] beta1_lower;
     vector[2] beta1_upper;
     array[2] vector[2] beta1_prior;
+
+    int<lower=0, upper=1> shape_has_hierarchical;
 }  
 
 transformed data {
@@ -113,8 +115,12 @@ model {
     // Likelihood
     yloglocn ~ multi_normal_cholesky(beta0[1] + beta1[1] * logareas, Llocn);
     ylogscale ~ multi_normal_cholesky(beta0[2] + beta1[2] * logareas, Llogs);
-    yshape1 ~ multi_normal_cholesky(beta0[3] * ones, Lshp);
 
+    if(shape_has_hierarchical == 1)
+        yshape1 ~ multi_normal_cholesky(beta0[3] * ones, Lshp);
+    else
+        yshape1 ~ normal(beta0_prior[3][1], beta0_prior[3][2]);
+        
     real loc;
     real scale;
     real shape;
@@ -158,7 +164,11 @@ generated quantities {
         vector[M] yloglocn_hprior = multi_normal_cholesky_rng(beta0[1] + beta1[1] * logareas, Llocn);
         ylocn_hprior = exp(yloglocn_hprior);
         ylogscale_hprior = multi_normal_cholesky_rng(beta0[2] + beta1[2] * logareas, Llogs);
-        yshape1_hprior = multi_normal_cholesky_rng(beta0[3] * ones, Lshp);
+
+        if(shape_has_hierarchical == 1)
+            yshape1_hprior = multi_normal_cholesky_rng(beta0[3] * ones, Lshp);
+        else
+            yshape1_hprior = to_vector(normal_rng(beta0_prior[3][1] * ones, beta0_prior[3][2]));
     }
 }
 

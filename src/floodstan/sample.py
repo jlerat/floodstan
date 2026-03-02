@@ -581,10 +581,12 @@ class StanSamplingDataset():
 class StanHierarchicalDataset():
     def __init__(self, marginal, y, pcensor,
                  areas, coords,
+                 shape_has_hierarchical=False,
                  ninits=NCHAINS_DEFAULT):
 
         self.marginal = marginal.clone()
         self.ninits = ninits
+        self.shape_has_hierarchical = shape_has_hierarchical
 
         self.set_priors()
 
@@ -665,7 +667,7 @@ class StanHierarchicalDataset():
         self.beta0_lower = [-20, -20, -1]
         self.beta0_upper = [20, 20, 1]
         # .. sort of uniform priors
-        self.beta0_prior = [[0., 100.], [0., 100.], [0., 10.]]
+        self.beta0_prior = [[0., 100.], [0., 100.], [0., 0.2]]
 
         self.beta1_lower = [0, 0]
         self.beta1_upper = [2, 2]
@@ -748,7 +750,8 @@ class StanHierarchicalDataset():
             "beta1_lower": self.beta1_lower,
             "beta1_upper": self.beta1_upper,
             "beta0_prior": self.beta0_prior,
-            "beta1_prior": self.beta1_prior
+            "beta1_prior": self.beta1_prior,
+            "shape_has_hierarchical": int(self.shape_has_hierarchical)
             }
 
         return dd

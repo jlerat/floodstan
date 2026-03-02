@@ -38,6 +38,8 @@ data {
     vector<lower=0>[2] beta1_lower;
     vector[2] beta1_upper;
     array[2] vector[2] beta1_prior;
+
+    int<lower=0, upper=1> shape_has_hierarchical;
 }  
 
 transformed data {
@@ -87,7 +89,11 @@ model {
     vector[3] tau = sqrt(tau2);
     yloglocn ~ normal(beta0[1] + beta1[1] * logareas, tau[1]);
     ylogscale ~ normal(beta0[2] + beta1[2] * logareas, tau[2]);
-    yshape1 ~ normal(beta0[3] * ones, tau[3]);
+
+    if(shape_has_hierarchical == 1)
+        yshape1 ~ normal(beta0[3] * ones, tau[3]);
+    else
+        yshape1 ~ normal(beta0_prior[3][1], beta0_prior[3][2]);
 
     real loc;
     real scale;
@@ -117,6 +123,11 @@ generated quantities {
     vector[3] tau = sqrt(tau2);
     array[M] real ylocn_hprior = normal_rng(beta0[1] + beta1[1] * logareas, tau[1]);
     array[M] real ylogscale_hprior = normal_rng(beta0[2] + beta1[2] * logareas, tau[2]);
-    array[M] real yshape1_hprior = normal_rng(beta0[3] * ones, tau[3]);
+
+    array[M] real yshape1_hprior;
+    if(shape_has_hierarchical == 1)
+        yshape1_hprior = normal_rng(beta0[3] * ones, tau[3]);
+    else
+        yshape1_hprior = normal_rng(beta0_prior[3][1]*ones, beta0_prior[3][2]);
 }
 

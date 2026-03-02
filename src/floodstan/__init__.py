@@ -22,7 +22,7 @@ SEED_DEFAULT = 5446
 
 # Possible method invoked
 STAN_METHODS = ["mcmc", "variational", "laplace",
-                "optimize", "diagnose"]
+                "optimize", "diagnose", "model"]
 
 # on Windows specifically, we should point cmdstanpy to the repackaged
 # CmdStan if it exists. This lets cmdstanpy handle the TBB path for us.
@@ -72,6 +72,9 @@ def load_stan_model(name: str,
             )
         except shutil.SameFileError:
             pass
+
+    if method == "model":
+        return model
 
     def fun(*args, **kwargs):
         if method == "mcmc":

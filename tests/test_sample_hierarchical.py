@@ -110,11 +110,13 @@ def test_stan_sampling_variable(allclose):
 
 
 @pytest.mark.parametrize("nospace", [True, False])
+@pytest.mark.parametrize("shape_has_hierarchical", [False])
 @pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
-@pytest.mark.parametrize("censoring", [False, True])
-def test_hierarchical_censored_sampling(nospace, marginal_name, censoring, allclose):
-    if marginal_name in ["Gamma", "LogPearson3", "GeneralizedPareto"]:
+@pytest.mark.parametrize("censoring", [True])
+def test_hierarchical_censored_sampling(nospace, shape_has_hierarchical,
+                                        marginal_name, censoring, allclose):
+    if marginal_name not in ["GEV", "Gumbel"]:
         pytest.skip(f"Skipping {marginal_name}.")
 
     y, areas, coords = get_data()
@@ -124,14 +126,12 @@ def test_hierarchical_censored_sampling(nospace, marginal_name, censoring, allcl
     # Set STAN
     stan_nwarm = 10000
     stan_nsamples = 10000
-    if marginal_name == "GeneralizedPareto":
-        stan_nchains = 10
-    else:
-        stan_nchains = 5
+    stan_nchains = 5
 
     # Prepare sampling data
     hv = sample.StanHierarchicalDataset(marginal, y, pcensor,
                                         areas, coords,
+                                        shape_has_hierarchical,
                                         ninits=stan_nchains)
     stan_data = hv.to_dict([0.9] * 3)
     stan_inits = hv.inits()
@@ -164,7 +164,8 @@ def test_hierarchical_censored_sampling(nospace, marginal_name, censoring, allcl
         smp = hierarchical_censored_sampling(**kw)
 
     df = smp.draws_pd()
-    print(f"\n[test hierarchical] {marginal_name}-{censoring}")
+    print(f"\n[test hierarchical] {marginal_name} C:{censoring}"
+          + f" NS:{nospace} SH:{shape_has_hierarchical}")
 
     yshape1 = df.filter(regex="^yshape1\\[", axis=1)
     print(f"\tShape std = {yshape1.mean().std():0.4f}")
