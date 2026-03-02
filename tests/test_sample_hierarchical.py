@@ -70,7 +70,10 @@ def test_stan_sampling_variable(allclose):
     ua = [0.5] * 3
     stan_data = hv.to_dict(ua)
 
-    assert len(stan_data) == 23
+    assert len(stan_data) == 24
+
+    assert not stan_data["shape_has_hierarchical"]
+
     N = stan_data["N"]
     M = stan_data["M"]
 
