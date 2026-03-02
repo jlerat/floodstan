@@ -1,13 +1,6 @@
 functions {
 
     #include marginal.stanfunctions
-
-    matrix gp_cov_cholesky(array[] vector coords, real sigma2, real alpha2, real rho){
-        int M = size(coords);
-        matrix [M, M] cov;
-        cov =  gp_exponential_cov(coords, sqrt(alpha2), rho);
-        return cholesky_decompose(add_diag(cov, sigma2));
-    }    
 }
 
 data {
@@ -34,16 +27,10 @@ data {
     vector[M] ycensors; 
 
     // Priors
-    real<lower=0> rho_lower;
-    real<lower=rho_lower> rho_upper;
-    vector[2] rho_prior;
-
     vector<lower=0>[3] tau2_lower;
     vector[3] tau2_upper;
     array[3] vector[2] tau2_prior;
    
-    vector<lower=0, upper=1>[3] u_alpha2;
-
     vector[3] beta0_lower;
     vector[3] beta0_upper;
     array[3] vector[2] beta0_prior;
@@ -69,10 +56,8 @@ parameters {
    vector[M] ylogscale;        
    vector[M] yshape1;        
 
-   // Normalised GP parameter
-   vector<lower=rho_lower, upper=rho_upper>[3] rho;
    vector<lower=0, upper=1>[3] u_tau2;
-   
+
    // Normalised regression parameters
    vector<lower=0, upper=1>[3] u_beta0;
    vector<lower=0, upper=1>[2] u_beta1;
@@ -85,23 +70,11 @@ transformed parameters {
    vector[3] tau2 = tau2_lower + (tau2_upper - tau2_lower) .* u_tau2;
    vector[3] beta0 = beta0_lower + (beta0_upper - beta0_lower) .* u_beta0;
    vector[2] beta1 = beta1_lower + (beta1_upper - beta1_lower) .* u_beta1;
-   
-   vector[3] sigma2 = tau2 .* (1 - u_alpha2);
-   vector[3] alpha2 = tau2 .* u_alpha2;
 }
 
 
 model {
-    // See https://mc-stan.org/docs/stan-users-guide/gaussian-processes.html#fit-gp.section
-
-    // Covariance - Exponential kernel
-    matrix [M, M] Llocn = gp_cov_cholesky(coords, sigma2[1], alpha2[1], rho[1]);
-    matrix [M, M] Llogs = gp_cov_cholesky(coords, sigma2[2], alpha2[2], rho[2]);
-    matrix [M, M] Lshp = gp_cov_cholesky(coords, sigma2[3], alpha2[3], rho[3]);
-
-    // Priors
-    rho ~ normal(rho_prior[1], rho_prior[2]);
-
+   // Priors
     for(iv in 1:3){
         tau2[iv] ~ normal(tau2_prior[iv][1], tau2_prior[iv][2]);
 
@@ -111,9 +84,10 @@ model {
     }
 
     // Likelihood
-    yloglocn ~ multi_normal_cholesky(beta0[1] + beta1[1] * logareas, Llocn);
-    ylogscale ~ multi_normal_cholesky(beta0[2] + beta1[2] * logareas, Llogs);
-    yshape1 ~ multi_normal_cholesky(beta0[3] * ones, Lshp);
+    vector[3] tau = sqrt(tau2);
+    yloglocn ~ normal(beta0[1] + beta1[1] * logareas, tau[1]);
+    ylogscale ~ normal(beta0[2] + beta1[2] * logareas, tau[2]);
+    yshape1 ~ normal(beta0[3] * ones, tau[3]);
 
     real loc;
     real scale;
@@ -139,26 +113,10 @@ model {
 }
 
 generated quantities {
-    // Square root parameters
-    vector[3] sigma = sqrt(sigma2);
-    vector[3] alpha = sqrt(alpha2);
-
     // Sample from hierarchical prior
-    vector[M] ylocn_hprior;
-    vector[M] ylogscale_hprior;
-    vector[M] yshape1_hprior;
-    {
-        // Covariance matrix and arcsinh transformed location paramters 
-        // are declared as 'local' variables to avoid storing them in 
-        // the output files
-        matrix [M, M] Llocn = gp_cov_cholesky(coords, sigma2[1], alpha2[1], rho[1]);
-        matrix [M, M] Llogs = gp_cov_cholesky(coords, sigma2[2], alpha2[2], rho[2]);
-        matrix [M, M] Lshp = gp_cov_cholesky(coords, sigma2[3], alpha2[3], rho[3]);
-
-        vector[M] yloglocn_hprior = multi_normal_cholesky_rng(beta0[1] + beta1[1] * logareas, Llocn);
-        ylocn_hprior = exp(yloglocn_hprior);
-        ylogscale_hprior = multi_normal_cholesky_rng(beta0[2] + beta1[2] * logareas, Llogs);
-        yshape1_hprior = multi_normal_cholesky_rng(beta0[3] * ones, Lshp);
-    }
+    vector[3] tau = sqrt(tau2);
+    array[M] real ylocn_hprior = normal_rng(beta0[1] + beta1[1] * logareas, tau[1]);
+    array[M] real ylogscale_hprior = normal_rng(beta0[2] + beta1[2] * logareas, tau[2]);
+    array[M] real yshape1_hprior = normal_rng(beta0[3] * ones, tau[3]);
 }
 

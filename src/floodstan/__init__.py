@@ -198,6 +198,9 @@ gls_spatial_sampling = load_stan_model("gls_spatial_sampling")
 name = "hierarchical_censored_sampling"
 hierarchical_censored_sampling = load_stan_model(name)
 
+name = "hierarchical_censored_nospace_sampling"
+hierarchical_censored_nospace_sampling = load_stan_model(name)
+
 # Stan test functions
 stan_test_marginal = load_stan_model("stan_test_marginal")
 

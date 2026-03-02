@@ -19,6 +19,7 @@ MODEL_DIR = "src/floodstan/stan"
 
 MODELS = ["univariate_censored", "bivariate_censored",
           "gls_spatial", "hierarchical_censored",
+          "hierarchical_censored_nospace",
           "test_marginal", "test_copula",
           "test_glsfun"]
 

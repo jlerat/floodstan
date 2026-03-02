@@ -26,6 +26,7 @@ from floodstan import copulas
 from floodstan import report
 from floodstan import load_stan_model
 from floodstan import hierarchical_censored_sampling
+from floodstan import hierarchical_censored_nospace_sampling
 
 from utils import get_stationids, get_ams, get_info
 from utils import FTESTS
@@ -108,10 +109,11 @@ def test_stan_sampling_variable(allclose):
     ftmp.unlink()
 
 
+@pytest.mark.parametrize("nospace", [True, False])
 @pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)
 @pytest.mark.parametrize("censoring", [False, True])
-def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
+def test_hierarchical_censored_sampling(nospace, marginal_name, censoring, allclose):
     if marginal_name in ["Gamma", "LogPearson3", "GeneralizedPareto"]:
         pytest.skip(f"Skipping {marginal_name}.")
 
@@ -156,19 +158,24 @@ def test_hierarchical_censored_sampling(marginal_name, censoring, allclose):
     kw.update(stan_args)
 
     # Sample
-    smp = hierarchical_censored_sampling(**kw)
-    df = smp.draws_pd()
+    if nospace:
+        smp = hierarchical_censored_nospace_sampling(**kw)
+    else:
+        smp = hierarchical_censored_sampling(**kw)
 
+    df = smp.draws_pd()
     print(f"\n[test hierarchical] {marginal_name}-{censoring}")
 
     yshape1 = df.filter(regex="^yshape1\\[", axis=1)
-    print(f"\tShape std = {yshape1.mean().std():0.2f}")
-    rho = df.filter(regex="^rho\\[", axis=1)
-    rhom = rho.mean().values
-    print(f"\tRho mean = {rhom[0]:0.2f} {rhom[1]:0.2f} {rhom[2]:0.2f}")
-    alpha = df.filter(regex="^alpha\\[", axis=1)
-    alpham = alpha.mean()
-    print(f"\tAlpha mean = {alpham[0]:0.2f} {alpham[1]:0.2f} {alpham[2]:0.2f}")
+    print(f"\tShape std = {yshape1.mean().std():0.4f}")
+    if not nospace:
+        rho = df.filter(regex="^rho\\[", axis=1)
+        rhom = rho.mean().values
+        print(f"\tRho mean = {rhom[0]:0.2f} {rhom[1]:0.2f} {rhom[2]:0.2f}")
+
+    tau = np.sqrt(df.filter(regex="^tau2\\[", axis=1))
+    taum = tau.mean()
+    print(f"\tTau mean = {taum[0]:0.2f} {taum[1]:0.2f} {taum[2]:0.2f}")
 
     dd = smp.diagnose()
     diag = report.process_stan_diagnostic(dd)
