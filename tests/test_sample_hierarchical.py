@@ -70,7 +70,7 @@ def test_stan_sampling_variable(allclose):
     ua = [0.5] * 3
     stan_data = hv.to_dict(ua)
 
-    assert len(stan_data) == 24
+    assert len(stan_data) == 15
 
     assert not stan_data["shape_has_hierarchical"]
 
@@ -96,7 +96,7 @@ def test_stan_sampling_variable(allclose):
     inits = hv.inits()
     assert len(inits) == 10
     for init in inits:
-        assert len(init) == 7
+        assert len(init) == 8
 
     # Check we can save data to json
     ftmp =  FTESTS / "hierarchical_data.json"
@@ -113,15 +113,11 @@ def test_stan_sampling_variable(allclose):
 
 
 @pytest.mark.parametrize("nospace", [True, False])
-@pytest.mark.parametrize("shape_has_hierarchical", [False])
-@pytest.mark.parametrize("marginal_name",
-                         marginals.MARGINAL_NAMES)
+@pytest.mark.parametrize("shape_has_hierarchical", [True, False])
+@pytest.mark.parametrize("marginal_name", ["GEV", "Gumbel"])
 @pytest.mark.parametrize("censoring", [True])
 def test_hierarchical_censored_sampling(nospace, shape_has_hierarchical,
                                         marginal_name, censoring, allclose):
-    if marginal_name not in ["GEV", "Gumbel"]:
-        pytest.skip(f"Skipping {marginal_name}.")
-
     y, areas, coords = get_data()
     pcensor = 0.3 if censoring else 0.
     marginal = marginals.factory(marginal_name)
@@ -148,7 +144,7 @@ def test_hierarchical_censored_sampling(nospace, shape_has_hierarchical,
         f.unlink()
 
     # Sample arguments
-    progress = False
+    progress = True
     kw = dict(data=stan_data,
               seed=SEED,
               iter_sampling=stan_nsamples // stan_nchains,

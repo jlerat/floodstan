@@ -29,6 +29,9 @@ STAN_VARIABLE_INITIAL_CDF_MIN = 1e-8
 # Maximum number of parameter sampled for initialisation
 NPARAMS_INITS_MAX = 1000
 
+# Maximum time allocated to inference (sec)
+TIMEOUT = 600
+
 # Special stan sampling arguments
 STAN_SAMPLE_ARGS = {
         "LogPearson3": {"adapt_delta": 0.999},
@@ -36,6 +39,8 @@ STAN_SAMPLE_ARGS = {
         "GeneralizedPareto": {"adapt_delta": 0.999},
         "GEV": {"adapt_delta": 0.99},
         }
+STAN_SAMPLE_ARGS = {k: v.update({"timeout": TIMEOUT})
+                    for k, v in STAN_SAMPLE_ARGS.items()}
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
@@ -281,7 +286,7 @@ class StanSamplingVariable():
         if marginal_name in STAN_SAMPLE_ARGS:
             return STAN_SAMPLE_ARGS[marginal_name]
         else:
-            return {}
+            return {"timeout": TIMEOUT}
 
     def set_data(self, data, censor):
         icases, data, censor = univariate2cases(data, censor)
@@ -638,12 +643,6 @@ class StanHierarchicalDataset():
             Ncens.append(int(sv.is_cens.sum()))
 
             inits = sv.initial_parameters
-            ys0 = self.yshape1_lower
-            ys1 = self.yshape1_upper
-            for ii in range(len(inits)):
-                yshape1 = inits[ii]["yshape1"]
-                inits[ii]["yshape1"] = min(ys1, max(ys0, yshape1))
-
             initial_parameters.append(inits)
 
         self.Nobs = Nobs
@@ -653,12 +652,9 @@ class StanHierarchicalDataset():
         self._initial_parameters = initial_parameters
 
     def set_priors(self):
-        self.yshape1_lower = -2
-        self.yshape1_upper = 1.
-
         self.rho_prior = [50, 50]
 
-        self.tau2_prior = [[0., 1.], [0., 1.], [0., 0.2]]
+        self.tau2_prior = [[0., 1.], [0., 1.], [0., 0.1]]
 
         self.beta0_prior = [[0., 10.], [0., 10.], [0., 0.2]]
 
@@ -675,32 +671,28 @@ class StanHierarchicalDataset():
                 ylogscale.append(float(pp["ylogscale"]))
                 yshape1.append(float(pp["yshape1"]))
 
-            # Initial for beta0
-            beta0 = np.random.uniform(0.5, 2, size=3)
-            beta0[2] = np.random.uniform(-0.2, 0.2)
-            bl = np.array(self.beta0_lower)
-            bu = np.array(self.beta0_upper)
-            u_beta0 = (beta0 - bl) / (bu - bl)
-
-            # Initial for beta1 (2 values only!)
-            beta1 = np.random.uniform(0.5, 2, size=2)
-            bl = np.array(self.beta1_lower)
-            bu = np.array(self.beta1_upper)
-            u_beta1 = (beta1 - bl) / (bu - bl)
+            # Initial for beta
+            beta0 = np.array([np.random.uniform(s * 0.25, s * 0.75)
+                              for ibeta, (_, s) in enumerate(self.tau2_prior)
+                              if ibeta < 2])
+            beta0_shape = np.random.uniform(0.1, 0.2)
+            beta1 = np.random.uniform(0.5, 1.5, size=2)
 
             # Initial for rho
             rho = np.random.uniform(50, 150, size=3)
 
-            # Initial for alpha
-            u_tau2 = np.random.uniform(0.4, 0.6, size=3)
+            # Initial for tau2
+            tau2 = np.array([np.random.uniform(s * 0.25, s * 0.75)
+                             for _, s in self.tau2_prior])
 
             dd = {
                 "yloglocn": yloglocn,
                 "ylogscale": ylogscale,
                 "yshape1": yshape1,
-                "u_beta0": u_beta0.tolist(),
-                "u_beta1": u_beta1.tolist(),
-                "u_tau2": u_tau2.tolist(),
+                "beta0": beta0.tolist(),
+                "beta0_shape": beta0_shape,
+                "beta1": beta1.tolist(),
+                "tau2": tau2.tolist(),
                 "rho": rho.tolist(),
             }
             params.append(dd)
@@ -727,8 +719,8 @@ class StanHierarchicalDataset():
             "Ncens": self.Ncens,
             "y": self.y.T.tolist(),
             "ycensors": self.ycensors,
-            "rho_prior": self.rho_prior,
             "u_alpha2": list(u_alpha2),
+            "rho_prior": self.rho_prior,
             "tau2_prior": self.tau2_prior,
             "beta0_prior": self.beta0_prior,
             "shape_has_hierarchical": int(self.shape_has_hierarchical)
@@ -740,5 +732,6 @@ class StanHierarchicalDataset():
     def stan_sample_args(self):
         return {
             "adapt_delta": 0.95,
-            "max_treedepth": 13
+            "max_treedepth": 13,
+            "timeout": TIMEOUT
             }
