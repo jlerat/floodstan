@@ -658,7 +658,6 @@ class StanHierarchicalDataset():
 
         self.beta0_prior = [[0., 10.], [0., 10.], [0., 0.2]]
 
-
     def inits(self):
         M = self.M
 
