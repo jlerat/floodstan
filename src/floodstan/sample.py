@@ -656,23 +656,12 @@ class StanHierarchicalDataset():
         self.yshape1_lower = -2
         self.yshape1_upper = 1.
 
-        self.rho_lower = 1.
-        self.rho_upper = 500.
         self.rho_prior = [50, 50]
 
-        self.tau2_lower = [0.01, 0.01, 0.01]
-        self.tau2_upper = [10, 10, 1]
-        self.tau2_prior = [[0., 1.], [0., 1.], [0., 0.1]]
+        self.tau2_prior = [[0., 1.], [0., 1.], [0., 0.2]]
 
-        self.beta0_lower = [-20, -20, -1]
-        self.beta0_upper = [20, 20, 1]
-        # .. sort of uniform priors
-        self.beta0_prior = [[0., 100.], [0., 100.], [0., 0.2]]
+        self.beta0_prior = [[0., 10.], [0., 10.], [0., 0.2]]
 
-        self.beta1_lower = [0, 0]
-        self.beta1_upper = [2, 2]
-        # .. sort of uniform priors
-        self.beta1_prior = [[0., 10.], [0., 10.]]
 
     def inits(self):
         M = self.M
@@ -738,19 +727,10 @@ class StanHierarchicalDataset():
             "Ncens": self.Ncens,
             "y": self.y.T.tolist(),
             "ycensors": self.ycensors,
-            "rho_lower": self.rho_lower,
-            "rho_upper": self.rho_upper,
             "rho_prior": self.rho_prior,
             "u_alpha2": list(u_alpha2),
-            "tau2_lower": self.tau2_lower,
-            "tau2_upper": self.tau2_upper,
             "tau2_prior": self.tau2_prior,
-            "beta0_lower": self.beta0_lower,
-            "beta0_upper": self.beta0_upper,
-            "beta1_lower": self.beta1_lower,
-            "beta1_upper": self.beta1_upper,
             "beta0_prior": self.beta0_prior,
-            "beta1_prior": self.beta1_prior,
             "shape_has_hierarchical": int(self.shape_has_hierarchical)
             }
 

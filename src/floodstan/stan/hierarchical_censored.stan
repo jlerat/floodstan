@@ -34,23 +34,13 @@ data {
     vector[M] ycensors; 
 
     // Priors
-    real<lower=0> rho_lower;
-    real<lower=rho_lower> rho_upper;
     vector[2] rho_prior;
 
-    vector<lower=0>[3] tau2_lower;
-    vector[3] tau2_upper;
     array[3] vector[2] tau2_prior;
    
     vector<lower=0, upper=1>[3] u_alpha2;
 
-    vector[3] beta0_lower;
-    vector[3] beta0_upper;
     array[3] vector[2] beta0_prior;
-
-    vector<lower=0>[2] beta1_lower;
-    vector[2] beta1_upper;
-    array[2] vector[2] beta1_prior;
 
     int<lower=0, upper=1> shape_has_hierarchical;
 }  
@@ -58,11 +48,6 @@ data {
 transformed data {
     vector[M] logareas = log(areas);
     vector[M] ones = rep_vector(1., M);
-
-    // Check that upper > lower
-    real<lower=1e-5> check_tau2 = min(tau2_upper - tau2_lower);
-    real<lower=1e-5> check_beta0 = min(beta0_upper - beta0_lower);
-    real<lower=1e-5> check_beta1 = min(beta1_upper - beta1_lower);
 }
 
 parameters {
@@ -72,22 +57,19 @@ parameters {
    vector[M] yshape1;        
 
    // Normalised GP parameter
-   vector<lower=rho_lower, upper=rho_upper>[3] rho;
-   vector<lower=0, upper=1>[3] u_tau2;
+   vector<lower=0>[3] rho;
+   vector<lower=0>[3] tau2;
    
-   // Normalised regression parameters
-   vector<lower=0, upper=1>[3] u_beta0;
-   vector<lower=0, upper=1>[2] u_beta1;
+   // regression parameters
+   vector[2] beta0;
+   real<lower=-2, upper=2> beta0_shape;
+   vector<lower=0, upper=2>[2] beta1;
 }
 
 transformed parameters {
    vector[M] ylocn = exp(yloglocn);
    vector[M] yscale = exp(ylogscale);
 
-   vector[3] tau2 = tau2_lower + (tau2_upper - tau2_lower) .* u_tau2;
-   vector[3] beta0 = beta0_lower + (beta0_upper - beta0_lower) .* u_beta0;
-   vector[2] beta1 = beta1_lower + (beta1_upper - beta1_lower) .* u_beta1;
-   
    vector[3] sigma2 = tau2 .* (1 - u_alpha2);
    vector[3] alpha2 = tau2 .* u_alpha2;
 }
@@ -106,10 +88,8 @@ model {
 
     for(iv in 1:3){
         tau2[iv] ~ normal(tau2_prior[iv][1], tau2_prior[iv][2]);
-
-        beta0[iv] ~ normal(beta0_prior[iv][1], beta0_prior[iv][2]);
-        if(iv < 3) 
-            beta1[iv] ~ normal(beta1_prior[iv][1], beta1_prior[iv][2]);
+        if(iv < 3)
+            beta0[iv] ~ normal(beta0_prior[iv][1], beta0_prior[iv][2]);
     }
 
     // Likelihood
@@ -117,7 +97,7 @@ model {
     ylogscale ~ multi_normal_cholesky(beta0[2] + beta1[2] * logareas, Llogs);
 
     if(shape_has_hierarchical == 1)
-        yshape1 ~ multi_normal_cholesky(beta0[3] * ones, Lshp);
+        yshape1 ~ multi_normal_cholesky(beta0_shape * ones, Lshp);
     else
         yshape1 ~ normal(beta0_prior[3][1], beta0_prior[3][2]);
         
@@ -166,7 +146,7 @@ generated quantities {
         ylogscale_hprior = multi_normal_cholesky_rng(beta0[2] + beta1[2] * logareas, Llogs);
 
         if(shape_has_hierarchical == 1)
-            yshape1_hprior = multi_normal_cholesky_rng(beta0[3] * ones, Lshp);
+            yshape1_hprior = multi_normal_cholesky_rng(beta0_shape * ones, Lshp);
         else
             yshape1_hprior = to_vector(normal_rng(beta0_prior[3][1] * ones, beta0_prior[3][2]));
     }
