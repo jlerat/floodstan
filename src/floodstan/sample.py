@@ -365,9 +365,22 @@ class StanSamplingVariable():
             niter += 1
 
         if len(inits) < ninits:
-            errmess = "Cannot find initial parameter "\
-                      + f"for variable {self.name}."
-            raise ValueError(errmess)
+            marginal.params_guess(data)
+            guess = marginal.params
+            inits = [guess + np.random.uniform(-1, 1) * 1e-6
+                     for i in range(ninits)]
+
+            for locn, logscale, shape1 in inits:
+                pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
+                                                    shape1, data, censor)
+                if pp is None:
+                    errmess = "Cannot find initial parameters "\
+                              + f"for variable {self.name}."
+                    raise ValueError(errmess)
+
+            nms = ["locn", "logscale", "shape1"]
+            n = self.name
+            inits = [{f"{n}{k}": v for k, v in zip(nms, p)} for p in inits]
 
         self._initial_parameters = inits
         self._initial_cdfs = cdfs
