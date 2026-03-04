@@ -367,20 +367,37 @@ class StanSamplingVariable():
         if len(inits) < ninits:
             marginal.params_guess(data)
             guess = marginal.params
-            inits = [guess + np.random.uniform(-1, 1) * 1e-6
-                     for i in range(ninits)]
 
-            for locn, logscale, shape1 in inits:
+            explore = [guess + np.random.uniform(-1, 1) * 1e-6
+                       for i in range(ninits)]
+
+            for locn, logscale, shape1 in explore:
+                # Check first attempt is ok
                 pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
                                                     shape1, data, censor)
-                if pp is None:
-                    errmess = "Cannot find initial parameters "\
-                              + f"for variable {self.name}."
-                    raise ValueError(errmess)
 
-            nms = ["locn", "logscale", "shape1"]
-            n = self.name
-            inits = [{f"{n}{k}": v for k, v in zip(nms, p)} for p in inits]
+                # Second attempt, getting desperate...
+                if pp is None:
+                    locn = np.nanmedian(data) + np.random.uniform(-1, 1) * 1e-6
+                    logscale = math.log(np.nanstd(data)
+                                        + np.random.uniform(-1, 1) * 1e-6)
+                    shape1 = 1e-2
+                    pp, cdf = are_marginal_params_valid(marginal, locn,
+                                                        logscale,
+                                                        shape1, data,
+                                                        censor)
+
+                # Finally storing
+                if pp is not None:
+                    n = self.name
+                    pp = {f"{n}{pn}": v for pn, v in pp.items()}
+                    inits.append(pp)
+                    cdfs.append(cdf)
+
+            if len(inits) < ninits:
+                errmess = "Cannot find initial parameters "\
+                          + f"for variable {self.name}."
+                raise ValueError(errmess)
 
         self._initial_parameters = inits
         self._initial_cdfs = cdfs
