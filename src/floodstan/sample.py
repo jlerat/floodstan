@@ -39,8 +39,8 @@ STAN_SAMPLE_ARGS = {
         "GeneralizedPareto": {"adapt_delta": 0.999},
         "GEV": {"adapt_delta": 0.99},
         }
-STAN_SAMPLE_ARGS = {k: v.update({"timeout": TIMEOUT})
-                    for k, v in STAN_SAMPLE_ARGS.items()}
+for k, v in STAN_SAMPLE_ARGS.items():
+    v.update({"timeout": TIMEOUT})
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"

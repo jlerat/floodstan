@@ -77,7 +77,12 @@ marginal = marginals.factory(marginal_name)
 # Step 2. Set censoring threhsold
 censor = np.percentile(ams, 30)
 
-# Step 3. Create sample data
+# Step 3. Fit distribution using LH moments
+# This is optional, but useful as a sanity check
+marginal.fit_lh_moments(ams, eta=2)
+lhparams = marginal.params
+
+# Step 4. Put together data for MCMC sampler
 # .. specify the number of MCM chains to define the number 
 #    of initial parameters
 nchains = 3
@@ -91,7 +96,7 @@ stan_inits = sv.initial_parameters
 # .. additional arguments to be passed to stan
 stan_args = sv.stan_sample_args
 
-# Step 4. Sample 10,000 parameters from posterior using stan
+# Step 5. Sample 10,000 parameters from posterior using stan
 nwarm = 10000
 nsamples = 10000
 
@@ -103,7 +108,7 @@ smp = univariate_censored_sampling(data=stan_data,
                                    inits=stan_inits,
                                    **stan_args)
 
-# Step 5. Process samples
+# Step 6. Process samples
 params = smp.draws_pd()
 
 # .. diagnostic report
@@ -115,7 +120,7 @@ for k in ["treedepth", "ebfmi", "rhat"]:
 # .. 
 rep, _ = report.ams_report(marginal, params)
 
-# Step 6. plot results
+# Step 7. plot results
 plt.close("all")
 fig, ax = plt.subplots(layout="constrained")
 
@@ -123,7 +128,14 @@ fig, ax = plt.subplots(layout="constrained")
 ptype = "gumbel"
 
 # .. plot data
-freqplots.plot_data(ax, ams, ptype)
+freqplots.plot_data(ax, ams, ptype, 
+                    label="Observed streamflow")
+
+# .. plot LH moment fit
+marginal.params = lhparams
+freqplots.plot_marginal_cdf(ax, marginal, ptype,
+                            color="tab:red", ls="--",
+                            label=f"{marginal.name} LH fit")
 
 # .. plot posterior
 df = rep.filter(regex="DESIGN", axis=0)
@@ -133,17 +145,19 @@ freqplots.plot_marginal_quantiles(ax, aris, quantiles, ptype,
                                   center_column="POSTERIOR_PREDICTIVE",
                                   q0_column="5%",
                                   q1_column="95%",
-                                  label=marginal.name,
+                                  label=f"{marginal.name} posterior",
                                   alpha=0.3,
                                   facecolor="tab:blue",
                                   edgecolor="k")
 
-# .. add AEP
+# .. add AEP and legend
 retp = [5, 10, 100, 500]
 aeps, xpos = freqplots.add_aep_to_xaxis(ax, ptype, retp)
 
 ax.set(xlabel="Gumbel reduced variate",
        ylabel="Annual Maximum Streamflow [m3.s-1]")
+
+ax.legend(loc=2)
 
 figure_file = "test_readme_freqplots.png"
 fig.savefig(figure_file)

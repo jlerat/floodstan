@@ -47,7 +47,7 @@ def test_readme():
                 fo.write(" "*4 + line)
 
         # Check python syntax
-        arg = f"--ignore=E302,W291,W293"
+        arg = f"--ignore=E302,W291,W293,E501"
         subprocess.run(["flake8", arg, str(ftest)],
                        capture_output=True,
                        check=True)
