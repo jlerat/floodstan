@@ -132,7 +132,7 @@ def test_hierarchical_censored_sampling(nospace, shape_has_hierarchical,
                                         areas, coords,
                                         shape_has_hierarchical,
                                         ninits=stan_nchains)
-    stan_data = hv.to_dict([0.9] * 3)
+    stan_data = hv.to_dict([0.99] * 3)
     stan_inits = hv.inits()
     stan_args = hv.stan_sample_args
 
@@ -144,7 +144,7 @@ def test_hierarchical_censored_sampling(nospace, shape_has_hierarchical,
         f.unlink()
 
     # Sample arguments
-    progress = True
+    progress = False
     kw = dict(data=stan_data,
               seed=SEED,
               iter_sampling=stan_nsamples // stan_nchains,
