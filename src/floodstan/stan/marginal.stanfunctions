@@ -18,15 +18,16 @@ real gev_lpdf(vector y, real tau, real alpha, real kappa){
     real y0 = tau + alpha / kappa;
     if(kappa < -GEV2Gumbel_trans) {
         real ymin = min(y);
+
+        // See https://discourse.mc-stan.org/t/generalized-extreme-value-distribution/40694/3
+        // https://discourse.mc-stan.org/t/aberrant-behavior-in-dynamically-bounded-parameters-reparameterized-gev-distribution/22726/6
         if(ymin < y0)
-            reject("[gev_lpdf] min(y) (", ymin, ") is lower than y0 (", y0, 
-                   ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
+            return negative_infinity();
     }
     else if (kappa > GEV2Gumbel_trans){
         real ymax = max(y);
         if(ymax > y0)
-            reject("[gev_lpdf] max(y) (", ymax, ") is greater than y0 (", y0,
-                   ") with tau=", tau, " alpha=", alpha, " kappa=", kappa);
+            return negative_infinity();
     }
     
     if(abs(kappa) > GEV2Gumbel_trans) {

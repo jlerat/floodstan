@@ -1,4 +1,5 @@
 import sys
+import math
 from pathlib import Path
 import logging
 
@@ -28,6 +29,9 @@ STAN_VARIABLE_INITIAL_CDF_MIN = 1e-8
 # Maximum number of parameter sampled for initialisation
 NPARAMS_INITS_MAX = 1000
 
+# Maximum time allocated to inference (sec)
+TIMEOUT = 600
+
 # Special stan sampling arguments
 STAN_SAMPLE_ARGS = {
         "LogPearson3": {"adapt_delta": 0.999},
@@ -35,10 +39,23 @@ STAN_SAMPLE_ARGS = {
         "GeneralizedPareto": {"adapt_delta": 0.999},
         "GEV": {"adapt_delta": 0.99},
         }
+for k, v in STAN_SAMPLE_ARGS.items():
+    v.update({"timeout": TIMEOUT})
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
 LOGGER_DATE_FORMAT = "%y-%m-%d %H:%M"
+
+
+def log_moments(means, stds):
+    """ location and scale of lognormal distribution
+        given their moments in raw space.
+    """
+    means, stds = np.array(means), np.array(stds)
+    u = 1 + (stds / means)**2
+    mu = np.log(means / np.sqrt(u))
+    sig = np.sqrt(np.log(u))
+    return np.column_stack([mu, sig]).tolist()
 
 
 def get_logger(level="INFO", flog=None, stan_logger=True):
@@ -269,7 +286,7 @@ class StanSamplingVariable():
         if marginal_name in STAN_SAMPLE_ARGS:
             return STAN_SAMPLE_ARGS[marginal_name]
         else:
-            return {}
+            return {"timeout": TIMEOUT}
 
     def set_data(self, data, censor):
         icases, data, censor = univariate2cases(data, censor)
@@ -348,9 +365,39 @@ class StanSamplingVariable():
             niter += 1
 
         if len(inits) < ninits:
-            errmess = "Cannot find initial parameter "\
-                      + f"for variable {self.name}."
-            raise ValueError(errmess)
+            marginal.params_guess(data)
+            guess = marginal.params
+
+            explore = [guess + np.random.uniform(-1, 1) * 1e-6
+                       for i in range(ninits)]
+
+            for locn, logscale, shape1 in explore:
+                # Check first attempt is ok
+                pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
+                                                    shape1, data, censor)
+
+                # Second attempt, getting desperate...
+                if pp is None:
+                    locn = np.nanmedian(data) + np.random.uniform(-1, 1) * 1e-6
+                    logscale = math.log(np.nanstd(data)
+                                        + np.random.uniform(-1, 1) * 1e-6)
+                    shape1 = 1e-2
+                    pp, cdf = are_marginal_params_valid(marginal, locn,
+                                                        logscale,
+                                                        shape1, data,
+                                                        censor)
+
+                # Finally storing
+                if pp is not None:
+                    n = self.name
+                    pp = {f"{n}{pn}": v for pn, v in pp.items()}
+                    inits.append(pp)
+                    cdfs.append(cdf)
+
+            if len(inits) < ninits:
+                errmess = "Cannot find initial parameters "\
+                          + f"for variable {self.name}."
+                raise ValueError(errmess)
 
         self._initial_parameters = inits
         self._initial_cdfs = cdfs
@@ -564,3 +611,156 @@ class StanSamplingDataset():
             "i23": self.i23.tolist()
             })
         return dd
+
+
+class StanHierarchicalDataset():
+    def __init__(self, marginal, y, pcensor,
+                 areas, coords,
+                 shape_has_hierarchical=False,
+                 ninits=NCHAINS_DEFAULT):
+
+        self.marginal = marginal.clone()
+        self.ninits = ninits
+        self.shape_has_hierarchical = shape_has_hierarchical
+
+        self.set_priors()
+
+        self.set_y(y, pcensor)
+
+        areas = np.array(areas)
+        if areas.shape != (self.M, ):
+            errmsg = f"Expected areas of shape ({self.M},)."
+            raise ValueError(errmsg)
+        self.areas = areas
+
+        coords = np.array(coords)
+        if coords.shape != (self.M, 2):
+            errmsg = f"Expected coords of shape ({self.M}, 2)."
+            raise ValueError(errmsg)
+        self.coords = coords
+
+    def set_y(self, y, pcensor):
+        marginal = self.marginal
+        ninits = self.ninits
+
+        self.pcensor = pcensor
+
+        y = np.array(y)
+        self.y = y
+
+        N, M = y.shape
+        self.N = N
+        self.M = M
+
+        # Compute censoring thresholds
+        ycensors_raw = np.nanpercentile(y, self.pcensor * 100,
+                                        axis=0)
+        # Identify valid and censored data
+        Nobs = []
+        idx_obs = np.zeros((M, N), dtype=int)
+        Ncens = []
+        initial_parameters = []
+        ycensors = []
+
+        for i in range(M):
+            sv = StanSamplingVariable(marginal, y[:, i],
+                                      censor=ycensors_raw[i],
+                                      ninits=ninits)
+            self.y[:, i] = sv.data
+            ycensors.append(float(sv.censor))
+            Nobs.append(int(sv.is_obs.sum()))
+            idx_obs[i, :Nobs[i]] = np.where(sv.is_obs)[0] + 1
+            Ncens.append(int(sv.is_cens.sum()))
+
+            inits = sv.initial_parameters
+            initial_parameters.append(inits)
+
+        self.Nobs = Nobs
+        self.idx_obs = idx_obs
+        self.Ncens = Ncens
+        self.ycensors = ycensors
+        self._initial_parameters = initial_parameters
+
+    def set_priors(self):
+        self.rho_prior = [50, 50]
+
+        self.tau2_prior = [[0., 1.], [0., 1.], [0., 0.1]]
+
+        self.beta0_prior = [[0., 10.], [0., 10.], [0., 0.2]]
+
+    def inits(self):
+        M = self.M
+
+        params = []
+        for k in range(self.ninits):
+            yloglocn, ylogscale, yshape1 = [], [], []
+            for i in range(M):
+                pp = self._initial_parameters[i][k]
+                yloglocn.append(float(math.log(max(1e-2, pp["ylocn"]))))
+                ylogscale.append(float(pp["ylogscale"]))
+                yshape1.append(float(pp["yshape1"]))
+
+            # Initial for beta
+            beta0 = np.array([np.random.uniform(s * 0.25, s * 0.75)
+                              for ibeta, (_, s) in enumerate(self.tau2_prior)
+                              if ibeta < 2])
+            beta0_shape = np.random.uniform(0.1, 0.2)
+            beta1 = np.random.uniform(0.5, 1.5, size=2)
+
+            # Initial for rho
+            rho = np.random.uniform(50, 150, size=3)
+
+            # Initial for tau2
+            tau2 = np.array([np.random.uniform(s * 0.25, s * 0.75)
+                             for _, s in self.tau2_prior])
+
+            dd = {
+                "yloglocn": yloglocn,
+                "ylogscale": ylogscale,
+                "yshape1": yshape1,
+                "beta0": beta0.tolist(),
+                "beta0_shape": beta0_shape,
+                "beta1": beta1.tolist(),
+                "tau2": tau2.tolist(),
+                "rho": rho.tolist(),
+            }
+            params.append(dd)
+
+        return params
+
+    def to_dict(self, u_alpha2):
+        if len(u_alpha2) != 3:
+            errmsg = "Expected u_alpha2 of length 3."
+            raise ValueError(errmsg)
+
+        if not all(u > 0 and u < 1 for u in u_alpha2):
+            errmsg = "Expected all u_alpha2 in ]0,1[."
+            raise ValueError(errmsg)
+
+        dd = {
+            "N": self.N,
+            "M": self.M,
+            "areas": self.areas.tolist(),
+            "coords": self.coords.tolist(),
+            "ymarginal": MARGINAL_NAMES[self.marginal.name],
+            "Nobs": self.Nobs,
+            "idx_obs": self.idx_obs.tolist(),
+            "Ncens": self.Ncens,
+            "y": self.y.T.tolist(),
+            "ycensors": self.ycensors,
+            "u_alpha2": list(u_alpha2),
+            "rho_prior": self.rho_prior,
+            "tau2_prior": self.tau2_prior,
+            "beta0_prior": self.beta0_prior,
+            "shape_has_hierarchical": int(self.shape_has_hierarchical)
+            }
+
+        return dd
+
+    @property
+    def stan_sample_args(self):
+        return {
+            "adapt_delta": 0.95,
+            "max_treedepth": 13,
+            "timeout": TIMEOUT
+            }

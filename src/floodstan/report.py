@@ -75,7 +75,8 @@ def _prepare_design_aris(design_aris, truncated_probability):
 def _detect_params_columns(params):
     params_columns = OrderedDict()
     for pname in PARAMETERS:
-        cc = [cn for cn in params.columns if re.search(f"{pname}$", cn)]
+        pat = f"^(|[a-z]){pname}($|\\[)"
+        cc = [cn for cn in params.columns if re.search(pat, cn)]
 
         if len(cc) == 0:
             raise ValueError(f"No column in params refers to {pname}")
@@ -194,7 +195,8 @@ def ams_report(marginal, params=None, observed=None,
     # Initialise report data
     report_df = params.copy()
 
-    report_columns = []
+    other_columns = [cn for cn in params.columns if cn not in params_columns]
+    report_columns = other_columns.copy()
     if observed is not None:
         report_columns += [f"{obs_prefix}{hkey}_AEP[%]"
                            for hkey, _ in observed.items()]
@@ -202,6 +204,7 @@ def ams_report(marginal, params=None, observed=None,
                            for hkey, _ in observed.items()]
     report_columns += design_columns
     report_df.loc[:, report_columns] = np.nan
+    report_df.loc[:, other_columns] = params.loc[:, other_columns]
 
     # Prepare numpy array to store set values
     ndesign = len(design_columns)

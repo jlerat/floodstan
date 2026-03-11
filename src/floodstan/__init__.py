@@ -21,7 +21,8 @@ NWARM_DEFAULT = 10000
 SEED_DEFAULT = 5446
 
 # Possible method invoked
-STAN_METHODS = ["mcmc", "variational", "laplace", "optimize"]
+STAN_METHODS = ["mcmc", "variational", "laplace",
+                "optimize", "diagnose", "model"]
 
 # on Windows specifically, we should point cmdstanpy to the repackaged
 # CmdStan if it exists. This lets cmdstanpy handle the TBB path for us.
@@ -72,6 +73,9 @@ def load_stan_model(name: str,
         except shutil.SameFileError:
             pass
 
+    if method == "model":
+        return model
+
     def fun(*args, **kwargs):
         if method == "mcmc":
             kwargs["show_progress"] = kwargs.get("show_progress", False)
@@ -104,14 +108,14 @@ def load_stan_model(name: str,
             kwargs["fixed_param"] = True
             kwargs["show_progress"] = False
         else:
-            if "inits" not in kwargs:
-                errmess = "Expected inits argument"
+            if "inits" not in kwargs and method == "mcmc":
+                errmess = "Expected inits argument for mcmc sampling"
                 raise ValueError(errmess)
 
             # .. set defaults as per package variables
             kwargs["seed"] = kwargs.get("seed", SEED_DEFAULT)
 
-            if method == "mcmc":
+            if method in "mcmc":
                 kwargs["chains"] = kwargs.get("chains", NCHAINS_DEFAULT)
                 kwargs["iter_warmup"] = kwargs.get("iter_warmup",
                                                    NWARM_DEFAULT)
@@ -137,27 +141,29 @@ def load_stan_model(name: str,
                 for argn in argnames:
                     kwargs.pop(argn, None)
 
+            elif method == "diagnose":
+                kwargs = {
+                    "inits": kwargs["inits"],
+                    "data": kwargs["data"]
+                }
+
             # Check inits is of the right size
-            ninits = len(kwargs["inits"])
-            if ninits != 1 and not isinstance(kwargs["inits"], dict):
-                if method in ["variational", "laplace", "optimize"]:
-                    if ninits != 1:
-                        errmess = "Expected 1 initial "\
-                                  + f"parameter sets, got {ninits}."
-                        raise ValueError(errmess)
-                else:
-                    if ninits != kwargs["chains"]:
-                        nchains = kwargs["chains"]
-                        errmess = f"Expected 1 or {nchains} initial "\
-                                  + f"parameter sets, got {ninits}."
-                        raise ValueError(errmess)
+            if "inits" in kwargs:
+                ninits = len(kwargs["inits"])
+                if ninits != 1 and not isinstance(kwargs["inits"], dict):
+                    if method in ["variational", "laplace", "optimize"]:
+                        if ninits != 1:
+                            errmess = "Expected 1 initial "\
+                                      + f"parameter sets, got {ninits}."
+                            raise ValueError(errmess)
+                    elif method == "mcmc":
+                        if ninits != kwargs["chains"]:
+                            nchains = kwargs["chains"]
+                            errmess = f"Expected 1 or {nchains} initial "\
+                                      + f"parameter sets, got {ninits}."
+                            raise ValueError(errmess)
 
-            if method == "laplace":
-                inits = kwargs["inits"]
-                kwargs.pop("inits")
-                kwargs["opt_args"] = {"inits": inits}
-
-        if "output_dir" in kwargs:
+        if "output_dir" in kwargs and method != "diagnose":
             fout = Path(kwargs["output_dir"])
             if not fout.exists():
                 errmess = "Output directory does not exist."
@@ -178,6 +184,8 @@ def load_stan_model(name: str,
                 smp = model.laplace_sample(**kwargs)
             elif method == "optimize":
                 smp = model.optimize(**kwargs)
+            elif method == "diagnose":
+                smp = model.diagnose(**kwargs)
             return smp
 
     return fun
@@ -185,10 +193,20 @@ def load_stan_model(name: str,
 
 # Stan sampler
 univariate_censored_sampling = load_stan_model("univariate_censored_sampling")
+
 bivariate_censored_sampling = load_stan_model("bivariate_censored_sampling")
+
 gls_spatial_sampling = load_stan_model("gls_spatial_sampling")
+
+name = "hierarchical_censored_sampling"
+hierarchical_censored_sampling = load_stan_model(name)
+
+name = "hierarchical_censored_nospace_sampling"
+hierarchical_censored_nospace_sampling = load_stan_model(name)
 
 # Stan test functions
 stan_test_marginal = load_stan_model("stan_test_marginal")
+
 stan_test_copula = load_stan_model("stan_test_copula")
+
 stan_test_glsfun = load_stan_model("stan_test_glsfun")

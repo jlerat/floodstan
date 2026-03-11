@@ -49,9 +49,14 @@ def test_report(stationid, marginal_name, allclose):
     y = get_ams(stationid)
     params = univariate_bootstrap(marginal, y, nboot=1000)
 
+    # Add random variable
+    params.loc[:, "bidule"] = np.random.uniform(0, 1, len(params))
+
     # Run report without obs
     rep, _ = report.ams_report(marginal, params)
-    assert rep.shape == (12, 15)
+    assert rep.shape == (13, 15)
+
+    assert rep.loc["bidule"].isnull().sum() == 2
 
     pred = rep.POSTERIOR_PREDICTIVE.filter(regex="DESIGN")
     assert pred.notnull().all()
@@ -63,7 +68,7 @@ def test_report(stationid, marginal_name, allclose):
         years = np.arange(y1, y2 + 1)
         obs = {year: y[year] for year in years}
         rep, _ = report.ams_report(marginal, params, obs)
-        assert rep.shape == (12 + 2 * len(obs), 15)
+        assert rep.shape == (13 + 2 * len(obs), 15)
 
 
 @pytest.mark.parametrize("nobs", [10, 100])
