@@ -180,6 +180,7 @@ def test_hierarchical_censored_sampling(nospace, shape_has_hierarchical,
     dd = smp.diagnose()
     diag = report.process_stan_diagnostic(dd)
     rhat = smp.summary().loc[:, "R_hat"]
+    print(f"\tR_hat = [{rhat.min():0.3f}, {rhat.max():0.3f}]")
 
     for f in fout.glob("*.*"):
         f.unlink()
@@ -187,8 +188,8 @@ def test_hierarchical_censored_sampling(nospace, shape_has_hierarchical,
 
     # Test diag
     assert diag["effsamplesz"] == "satisfactory"
-    assert rhat.max < 1.1
-    print(f"\tR_hat = [{rhat.min():0.3f}, {rhat.max():0.3f}]")
+    # .. a bit less stringent than rhat < 1.05
+    assert rhat.max() < 1.055
 
     # Test divergence
     prc = diag["divergence_proportion"]
