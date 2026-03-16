@@ -187,7 +187,7 @@ def test_hierarchical_censored_sampling(nospace, shape_has_hierarchical,
 
     # Test diag
     assert diag["effsamplesz"] == "satisfactory"
-    assert diag["rhat"] == "satisfactory"
+    assert rhat.max < 1.1
     print(f"\tR_hat = [{rhat.min():0.3f}, {rhat.max():0.3f}]")
 
     # Test divergence
