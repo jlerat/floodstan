@@ -1,5 +1,5 @@
 # floodstan
-
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17239321.svg)](https://doi.org/10.5281/zenodo.17239321)
 [![Build floodstan](https://github.com/jlerat/floodstan/actions/workflows/python-package-conda.yml/badge.svg)](https://github.com/jlerat/floodstan/actions/workflows/python-package-conda.yml)
 ![Coverage](https://gist.githubusercontent.com/jlerat/bb84e324c247a6b312120d908e72a140/raw/coverage_badge.svg)
 
