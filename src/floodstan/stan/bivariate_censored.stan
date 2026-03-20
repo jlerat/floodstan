@@ -165,8 +165,8 @@ model {
   ylogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]) T[logscale_lower, logscale_upper];
   yshape1 ~ normal(yshape1_prior[1], yshape1_prior[2]) T[shape1_lower, shape1_upper];
 
-  zlocn ~ normal(ylocn_prior[1], ylocn_prior[2]) T[locn_lower, locn_upper];
-  zlogscale ~ normal(ylogscale_prior[1], ylogscale_prior[2]) T[logscale_lower, logscale_upper];
+  zlocn ~ normal(zlocn_prior[1], zlocn_prior[2]) T[locn_lower, locn_upper];
+  zlogscale ~ normal(zlogscale_prior[1], zlogscale_prior[2]) T[logscale_lower, logscale_upper];
   zshape1 ~ normal(zshape1_prior[1], zshape1_prior[2]) T[shape1_lower, shape1_upper];
 
   rho ~ normal(rho_prior[1], rho_prior[2]) T[rho_lower, rho_upper];
