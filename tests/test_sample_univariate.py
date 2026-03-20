@@ -35,7 +35,7 @@ from utils import FTESTS
 SEED = 5446
 np.random.seed(SEED)
 
-LOGGER = sample.get_logger(stan_logger=False)
+LOGGER = sample.get_logger(use_stan_logger=False)
 
 
 @pytest.mark.parametrize("marginal_name",
@@ -69,8 +69,6 @@ def test_stan_sampling_variable(stationid, marginal_name, allclose):
 
     i11 = np.where(y>=censor)[0]+1
     assert allclose(sv.i11, i11)
-
-    assert sv.sampled_parameters.shape[0] == sample.NPARAMS_INITS_MAX
 
     dd = sv.to_dict()
 

@@ -41,7 +41,7 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
         pytest.skip("LogPearson3 is not numerically stable in stan")
 
     stationids = get_stationids()
-    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    LOGGER = sample.get_logger(level="INFO", use_stan_logger=False)
     nboot = 100
     y = get_ams(stationid)
     N = len(y)
@@ -156,7 +156,7 @@ def test_marginals_vs_stan(marginal_name, stationid, allclose):
 def test_copulas_vs_stan(copula, allclose):
     rng = np.random.default_rng(SEED)
     uv, N = get_uv()
-    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    LOGGER = sample.get_logger(level="INFO", use_stan_logger=False)
 
     cop = copulas.factory(copula)
 

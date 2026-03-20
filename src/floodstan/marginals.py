@@ -32,6 +32,8 @@ PARAMETERS = ["locn", "logscale", "shape1"]
 # Bounds
 PRIOR_SCALE_MIN = 1e-3
 
+CDF_MIN = 1e-8
+
 # In stan, infinity = 1e10
 LOCN_LOWER = -1e10
 LOCN_UPPER = 1e10
@@ -55,31 +57,6 @@ UNINFORMATIVE_PRIOR_LOWER = -1e10
 UNINFORMATIVE_PRIOR_UPPER = 1e10
 UNINFORMATIVE_PRIOR_LOC = 0.
 UNINFORMATIVE_PRIOR_SCALE = 1e10
-
-
-def _comb(n, i):
-    """ Function much faster than scipy.comb """
-    n = float(n)  # To avoid overflow if i == 8
-    if i > n:
-        return 0
-    elif i == 0:
-        return 1
-    elif i == 1:
-        return n
-    elif i == 2:
-        return n * (n - 1) / 2
-    elif i == 3:
-        return n * (n - 1) * (n - 2) / 6
-    elif i == 4:
-        return n*(n-1)*(n-2)*(n-3)/24
-    elif i == 5:
-        return n*(n-1)*(n-2)*(n-3)*(n-4)/120
-    elif i == 6:
-        return n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)/720
-    elif i == 7:
-        return n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)*(n-6)/5040
-    elif i == 8:
-        return n*(n-1)*(n-2)*(n-3)*(n-4)*(n-5)*(n-6)*(n-7)/40320
 
 
 def _check_param_value(x, lower=-np.inf, upper=np.inf, name=None):
@@ -132,13 +109,13 @@ def lh_moments(data, eta=0, compute_lam4=True):
 
     for i in range(1, nval+1):
         # Compute C factors (save time by reusing data)
-        Cim1e0 = _comb(i-1, eta)
-        Cim1e1 = _comb(i-1, eta+1)
-        Cim1e2 = _comb(i-1, eta+2)
+        Cim1e0 = math.comb(i-1, eta)
+        Cim1e1 = math.comb(i-1, eta+1)
+        Cim1e2 = math.comb(i-1, eta+2)
 
         Cnmi1 = nval-i
-        Cnmi2 = _comb(nval-i, 2)
-        Cnmi3 = _comb(nval-i, 3)
+        Cnmi2 = math.comb(nval-i, 2)
+        Cnmi3 = math.comb(nval-i, 3)
 
         # Compute components of moments
         d = data_sorted[i-1]
@@ -147,14 +124,14 @@ def lh_moments(data, eta=0, compute_lam4=True):
         v3 += (Cim1e2 - 2 * Cim1e1 * Cnmi1 + Cim1e0 * Cnmi2) * d
 
         if compute_lam4:
-            v4 += (_comb(i - 1, eta + 3) - 3 * Cim1e2 * Cnmi1
+            v4 += (math.comb(i - 1, eta + 3) - 3 * Cim1e2 * Cnmi1
                    + 3 * Cim1e1 * Cnmi2 - Cim1e0 * Cnmi3) * d
 
-    lam1 = v1/_comb(nval, eta+1)
-    lam2 = v2/_comb(nval, eta+2)/2
-    lam3 = v3/_comb(nval, eta+3)/3
+    lam1 = v1/math.comb(nval, eta+1)
+    lam2 = v2/math.comb(nval, eta+2)/2
+    lam3 = v3/math.comb(nval, eta+3)/3
     if compute_lam4:
-        lam4 = v4/_comb(nval, eta+4)/4
+        lam4 = v4/math.comb(nval, eta+4)/4
     else:
         lam4 = np.nan
 
@@ -578,6 +555,26 @@ class FloodFreqDistribution():
 
         return -opt.fun, opt.x, dobs, ncens
 
+    def valid_cdf(self, data, censor=-np.inf):
+        """ Check cdf of data and censor are valid  """
+        cdf = self.cdf(data)
+        cdf[data < censor] = np.nan
+        cdf[np.isnan(data)] = np.nan
+        cdf_min = np.nanmin(cdf)
+        cdf_max = np.nanmax(cdf)
+        if cdf_min < CDF_MIN or cdf_max > 1 - CDF_MIN:
+            errmsg = "cdf is invalid,"\
+                + f" cdf_min={cdf_min:0.2e}"\
+                + f" cdf_max={cdf_max:0.2e}"
+            raise ValueError(errmsg)
+
+        cdf_censor = self.cdf(censor) if ~np.isinf(censor) else 0.5
+        if cdf_censor < CDF_MIN or cdf_censor > 1 - CDF_MIN \
+                or np.isnan(cdf_censor):
+            errmsg = "censor is invalid,"\
+                + f" cdf_censor={cdf_censor:0.2e}"
+            raise ValueError(errmsg)
+
 
 class Normal(FloodFreqDistribution):
     def __init__(self):
@@ -920,7 +917,7 @@ class LogPearson3(FloodFreqDistribution):
             self.logscale = math.log((logx-self.locn).std(ddof=1))
 
         # Use guess param value as prior loc for shape
-        self.shape1_prior_loc = self.shape1
+        self.shape1_prior.loc = self.shape1
 
     def rvs(self, size):
         kw = self.get_scipy_params()

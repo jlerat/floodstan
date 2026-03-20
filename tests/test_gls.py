@@ -80,7 +80,7 @@ def test_kernel(kernel, allclose):
     rho = 1
     alpha = 2
     sigma = 3
-    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    LOGGER = sample.get_logger(level="INFO", use_stan_logger=False)
 
     K = gls.kernel_covariance(w, rho, alpha, sigma,
                               kernel)
@@ -132,7 +132,7 @@ def test_QR(kernel, allclose):
     rho = 1
     alpha = 2
     sigma = 3
-    LOGGER = sample.get_logger(level="INFO", stan_logger=False)
+    LOGGER = sample.get_logger(level="INFO", use_stan_logger=False)
 
     # Compute QR decomposition
     Q_ast, R_ast = gls.get_QR_matrices(x)

@@ -4,7 +4,6 @@ from pathlib import Path
 import logging
 
 import numpy as np
-import pandas as pd
 from scipy.stats import kendalltau
 
 from floodstan import NCHAINS_DEFAULT
@@ -24,8 +23,6 @@ COPULA_NAMES_STAN = ["Gaussian", "Clayton", "Gumbel"]
 
 CENSOR_DEFAULT = -1e10
 
-STAN_VARIABLE_INITIAL_CDF_MIN = 1e-8
-
 # Maximum number of parameter sampled for initialisation
 NPARAMS_INITS_MAX = 1000
 
@@ -34,13 +31,23 @@ TIMEOUT = 600
 
 # Special stan sampling arguments
 STAN_SAMPLE_ARGS = {
-        "LogPearson3": {"adapt_delta": 0.999},
-        "GeneralizedLogistic": {"adapt_delta": 0.999},
-        "GeneralizedPareto": {"adapt_delta": 0.999},
-        "GEV": {"adapt_delta": 0.99},
+        "LogPearson3": {
+            "adapt_delta": 0.999,
+            "timeout": TIMEOUT
+            },
+        "GeneralizedLogistic": {
+            "adapt_delta": 0.999,
+            "timeout": TIMEOUT
+            },
+        "GeneralizedPareto": {
+            "adapt_delta": 0.999,
+            "timeout": TIMEOUT
+            },
+        "GEV": {
+            "adapt_delta": 0.99,
+            "timeout": TIMEOUT
+            },
         }
-for k, v in STAN_SAMPLE_ARGS.items():
-    v.update({"timeout": TIMEOUT})
 
 # Logging
 LOGGER_FORMAT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
@@ -58,7 +65,7 @@ def log_moments(means, stds):
     return np.column_stack([mu, sig]).tolist()
 
 
-def get_logger(level="INFO", flog=None, stan_logger=True):
+def get_logger(level="INFO", flog=None, use_stan_logger=True):
     """ Get logger object.
 
     Parameters
@@ -71,34 +78,33 @@ def get_logger(level="INFO", flog=None, stan_logger=True):
     stan_logger : bool
         Use stan logger or not (to remove all stan messages)
     """
-    if stan_logger:
-        LOGGER = logging.getLogger("cmdstanpy")
+    if use_stan_logger:
+        logger = logging.getLogger("cmdstanpy")
     else:
-        STAN_LOGGER = logging.getLogger("cmdstanpy")
-        STAN_LOGGER.disabled = True
-        LOGGER = logging.getLogger(Path(__file__).resolve().stem)
+        stan_logger = logging.getLogger("cmdstanpy")
+        stan_logger.disabled = True
+        logger = logging.getLogger(Path(__file__).resolve().stem)
 
     # Set logging level
     if level not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
         raise ValueError(f"{level} not a valid level")
 
-    LOGGER.setLevel(getattr(logging, level))
+    logger.setLevel(getattr(logging, level))
 
     # Set logging format
     ft = logging.Formatter(LOGGER_FORMAT, LOGGER_DATE_FORMAT)
 
     # log to console
-    LOGGER.handlers = []
     if flog is None:
         sh = logging.StreamHandler(sys.stdout)
         sh.setFormatter(ft)
-        LOGGER.addHandler(sh)
+        logger.addHandler(sh)
     else:
         fh = logging.FileHandler(flog)
         fh.setFormatter(ft)
-        LOGGER.addHandler(fh)
+        logger.addHandler(fh)
 
-    return LOGGER
+    return logger
 
 
 def _check_prior(values):
@@ -109,52 +115,13 @@ def _check_prior(values):
     return values
 
 
-def are_marginal_params_valid(marginal, locn, logscale, shape1, data, censor):
-    try:
-        marginal.locn = locn
-        marginal.logscale = logscale
-        if marginal.has_shape:
-            marginal.shape1 = shape1
-    except Exception:
-        return None, None
-
-    # Check prior
-    for pn in PARAMETERS:
-        prior = getattr(marginal, f"{pn}_prior")
-        v = marginal[pn]
-        if v < prior.lower or v > prior.upper:
-            return None, None
-
-    # Check likelihood
-    cdf = marginal.cdf(data)
-    cdf[data < censor] = np.nan
-    cdf[np.isnan(data)] = np.nan
-    cdf_min = np.nanmin(cdf)
-    cdf_max = np.nanmax(cdf)
-    cdf_censor = marginal.cdf(censor)
-
-    cmin = STAN_VARIABLE_INITIAL_CDF_MIN
-    isok = (cdf_min >= cmin) & (cdf_max <= 1 - cmin)
-    isok &= (cdf_censor >= cmin) & (cdf_censor <= 1 - cmin)
-
-    if isok:
-        dd = {"locn": marginal.locn,
-              "logscale": marginal.logscale,
-              "shape1": marginal.shape1
-              }
-        return dd, cdf
-
-    return None, None
-
-
 class StanSamplingVariable():
     def __init__(self,
                  marginal,
                  data,
                  censor=CENSOR_DEFAULT,
                  name="y",
-                 ninits=NCHAINS_DEFAULT,
-                 nparams_sampled=None):
+                 ninits=NCHAINS_DEFAULT):
         self._name = str(name)
         if len(self._name) != 1:
             errmess = "Expected one character in name."
@@ -176,18 +143,8 @@ class StanSamplingVariable():
         self._initial_parameters = []
         self._initial_cdfs = []
 
-        # Parameters sampled for initial and potentially prior
-        nparams_sampled = NPARAMS_INITS_MAX if nparams_sampled is None\
-            else nparams_sampled
-
-        # Importance sampling
-        self.nparams_sampled = nparams_sampled
-        self._sampled_parameters = []
-        self._sampled_parameters_valid = []
-
         self.set_data(data, censor)
         self.set_guess_parameters()
-        self.set_sampled_parameters()
         self.set_initial_parameters()
 
     @property
@@ -223,20 +180,6 @@ class StanSamplingVariable():
             errmess = "Guess parameters have not been set."
             raise ValueError(errmess)
         return self._guess_parameters
-
-    @property
-    def sampled_parameters(self):
-        if len(self._sampled_parameters) == 0:
-            errmess = "Importance parameters have not been set."
-            raise ValueError(errmess)
-        return self._sampled_parameters
-
-    @property
-    def sampled_parameters_valid(self):
-        if len(self._sampled_parameters_valid) == 0:
-            errmess = "Importance parameters have not been set."
-            raise ValueError(errmess)
-        return self._sampled_parameters_valid
 
     @property
     def initial_parameters(self):
@@ -320,26 +263,6 @@ class StanSamplingVariable():
                 f"{name}shape1": dist.shape1
                 }
 
-    def set_sampled_parameters(self):
-        nsamples = self.nparams_sampled
-
-        # Get guess parameters
-        n = self.name
-        p0 = np.array([self.guess_parameters[f"{n}{pn}"]
-                       for pn in PARAMETERS])
-
-        # Perturb guess parameters
-        eps = np.random.normal(scale=2e-1, size=(nsamples, 3))
-        params = pd.DataFrame(p0[None, :] + eps, columns=PARAMETERS)
-        params.loc[:, "locn"] = p0[0] * (1 + eps[:, 0])
-
-        # Sample closer to 0 to avoid problems with suppoer
-        params.loc[:, "shape1"] = \
-            p0[2] * np.random.uniform(0, 1.0, size=nsamples)
-
-        self._sampled_parameters = params
-        self._sampled_parameters_valid = -np.ones(len(params))
-
     def set_initial_parameters(self):
         ninits = self.ninits
         niter = 0
@@ -347,57 +270,40 @@ class StanSamplingVariable():
         marginal = self.marginal
         data = self.data
         censor = self.censor
-        params = self.sampled_parameters
 
-        while len(inits) < ninits and niter < len(params):
-            locn, logscale, shape1 = params.iloc[niter]
-            pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
-                                                shape1, data, censor)
-            if pp is None:
-                self._sampled_parameters_valid[niter] = 0
-            else:
-                n = self.name
-                pp = {f"{n}{pn}": v for pn, v in pp.items()}
-                inits.append(pp)
-                cdfs.append(cdf)
-                self._sampled_parameters_valid[niter] = 1
+        # Get guess parameters
+        vname = self.name
+        p0 = np.array([self.guess_parameters[f"{vname}{pn}"]
+                       for pn in PARAMETERS])
+        pmed = np.array([np.nanmedian(data), np.nanstd(data), 1e-3])
+
+        while len(inits) < ninits and niter < NPARAMS_INITS_MAX:
+            # Switch to median params if cannot find proper parameters
+            pref = p0 if niter < NPARAMS_INITS_MAX / 2 else pmed
+
+            # Perturb guess parameters
+            params = pref.copy()
+            params[0] = p0[0] * np.random.normal(loc=1, scale=2e-1)
+            params[1] = p0[1] + np.random.normal(scale=2e-1)
+            params[2] = p0[2] * np.random.uniform(0, 0.5)
+
+            try:
+                marginal.params = params
+                marginal.valid_cdf(data, censor)
+                candidate = {f"{vname}{pn}": v for pn, v in
+                             zip(PARAMETERS, params)}
+                inits.append(candidate)
+                cdfs.append(marginal.cdf(data))
+
+            except ValueError:
+                pass
 
             niter += 1
 
         if len(inits) < ninits:
-            marginal.params_guess(data)
-            guess = marginal.params
-
-            explore = [guess + np.random.uniform(-1, 1) * 1e-6
-                       for i in range(ninits)]
-
-            for locn, logscale, shape1 in explore:
-                # Check first attempt is ok
-                pp, cdf = are_marginal_params_valid(marginal, locn, logscale,
-                                                    shape1, data, censor)
-
-                # Second attempt, getting desperate...
-                if pp is None:
-                    locn = np.nanmedian(data) + np.random.uniform(-1, 1) * 1e-6
-                    logscale = math.log(np.nanstd(data)
-                                        + np.random.uniform(-1, 1) * 1e-6)
-                    shape1 = 1e-2
-                    pp, cdf = are_marginal_params_valid(marginal, locn,
-                                                        logscale,
-                                                        shape1, data,
-                                                        censor)
-
-                # Finally storing
-                if pp is not None:
-                    n = self.name
-                    pp = {f"{n}{pn}": v for pn, v in pp.items()}
-                    inits.append(pp)
-                    cdfs.append(cdf)
-
-            if len(inits) < ninits:
-                errmess = "Cannot find initial parameters "\
-                          + f"for variable {self.name}."
-                raise ValueError(errmess)
+            errmess = "Cannot find initial parameters "\
+                      + f"for variable {self.name}."
+            raise ValueError(errmess)
 
         self._initial_parameters = inits
         self._initial_cdfs = cdfs
@@ -442,6 +348,7 @@ class StanSamplingDataset():
             raise ValueError(errmess)
 
         # .. changing names to y and z (Stan code requirement)
+        # .. THIS IS FRAGILE!!
         stan_variables[0].name = names[0]
         stan_variables[1].name = names[1]
         if len(set([sv.N for sv in stan_variables])) != 1:
@@ -545,7 +452,7 @@ class StanSamplingDataset():
                 for pn, value in vs.initial_parameters[i].items():
                     init[pn] = value
 
-                cdfs.append(vs.initial_cdfs[ivs])
+                cdfs.append(vs.initial_cdfs[i])
 
             cdfs = np.column_stack(cdfs)
             notnan = ~np.any(np.isnan(cdfs), axis=1)
@@ -558,18 +465,19 @@ class StanSamplingDataset():
             rhos = rhos.clip(copula.rho_lower + 0.02,
                              copula.rho_upper - 0.02)
             niter = 0
-            while True and niter < NPARAMS_INITS_MAX:
+            found = False
+            while niter < NPARAMS_INITS_MAX:
                 rho = rhos[niter]
                 niter += 1
 
                 # Check likelihood
                 copula.rho = rho
                 copula_pdfs = copula.pdf(cdfs)
-                isok = np.all(~np.isnan(copula_pdfs))
-                if isok:
+                if np.all(~np.isnan(copula_pdfs)):
+                    found = True
                     break
 
-            if np.isnan(rho):
+            if np.isnan(rho) or not found:
                 errmess = "Cannot initialise parameters for dataset."
                 raise ValueError(errmess)
 

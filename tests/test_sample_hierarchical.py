@@ -34,7 +34,7 @@ from utils import FTESTS
 SEED = 5446
 np.random.seed(SEED)
 
-LOGGER = sample.get_logger(stan_logger=False)
+LOGGER = sample.get_logger(use_stan_logger=False)
 
 def get_data():
     sids = ["203010", "203014", "203024", "203004", "203002"]
