@@ -562,6 +562,7 @@ class FloodFreqDistribution():
         cdf[np.isnan(data)] = np.nan
         cdf_min = np.nanmin(cdf)
         cdf_max = np.nanmax(cdf)
+
         if cdf_min < CDF_MIN or cdf_max > 1 - CDF_MIN:
             errmsg = "cdf is invalid,"\
                 + f" cdf_min={cdf_min:0.2e}"\

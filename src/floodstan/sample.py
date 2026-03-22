@@ -285,7 +285,7 @@ class StanSamplingVariable():
             params = pref.copy()
             params[0] = p0[0] * np.random.normal(loc=1, scale=2e-1)
             params[1] = p0[1] + np.random.normal(scale=2e-1)
-            params[2] = p0[2] * np.random.uniform(0, 0.5)
+            params[2] = p0[2] * np.random.uniform(0, 0.2)
 
             try:
                 marginal.params = params
@@ -293,7 +293,11 @@ class StanSamplingVariable():
                 candidate = {f"{vname}{pn}": v for pn, v in
                              zip(PARAMETERS, params)}
                 inits.append(candidate)
-                cdfs.append(marginal.cdf(data))
+
+                cdf = marginal.cdf(data)
+                cdf[data < censor] = np.nan
+                cdf[np.isnan(data)] = np.nan
+                cdfs.append(cdf)
 
             except ValueError:
                 pass
