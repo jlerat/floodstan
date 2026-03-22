@@ -165,6 +165,25 @@ def test_marginals_properties(marginal_name, allclose):
     assert allclose(expected, y)
 
 
+@pytest.mark.parametrize("marginal_name",
+                         marginals.MARGINAL_NAMES)
+def test_valid_cdf(marginal_name, allclose):
+    streamflow = get_ams("203014")
+    dist = marginals.factory(marginal_name)
+    dist.params_guess(streamflow)
+
+    x0, x1 = dist.support
+    if any(~np.isinf(s) for s in [x0, x1]):
+        if ~np.isinf(x0):
+            censor = x0 - 1
+        else:
+            censor = x1 + 1
+        with pytest.raises(ValueError, match="censor is invalid"):
+            dist.valid_cdf(streamflow, censor)
+    else:
+        dist.valid_cdf(streamflow, 0)
+
+
 
 @pytest.mark.parametrize("marginal_name",
                          marginals.MARGINAL_NAMES)

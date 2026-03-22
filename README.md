@@ -59,7 +59,7 @@ from floodstan import freqplots, report
 
 # Turn off stan logging which can be quite verbose
 # Important for debugging though.
-_ = sample.get_logger(stan_logger=False)
+_ = sample.get_logger(use_stan_logger=False)
 
 # Example of annual maximum streamflow data
 ams = np.array([427.3, 7.2, 54.2, 382.5, 448.8, 386.1, 913.9, 535.1, 

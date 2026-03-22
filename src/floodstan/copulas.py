@@ -83,22 +83,22 @@ class Copula():
             raise ValueError(errmsg)
 
     def pdf(self, uv):
-        return NotImplementedError()
+        raise NotImplementedError()
 
     def logpdf(self, uv):
         return np.log(self.pdf(uv))
 
     def conditional_density(self, ucond, v):
-        return NotImplementedError()
+        raise NotImplementedError()
 
     def cdf(self, uv):
-        return NotImplementedError()
+        raise NotImplementedError()
 
     def logcdf(self, uv):
         return np.log(self.cdf(uv))
 
     def ppf_conditional(self, ucond, q):
-        return NotImplementedError()
+        raise NotImplementedError()
 
     def sample(self, nsamples, seed=5446):
         # Latin hypercube sampling of uniform distributions
@@ -243,9 +243,6 @@ class GaussianCopula(Copula):
     def __init__(self):
         super(GaussianCopula, self).__init__("Gaussian")
         self._rho = np.nan
-        # rho max reduced to pass conditional density tests
-        self.rho_upper = 0.92
-
         # rho max reduced to pass conditional density tests
         self.rho_upper = 0.92
 

@@ -31,7 +31,7 @@ np.random.seed(SEED)
 
 STATIONIDS = get_stationids()
 
-LOGGER = sample.get_logger(stan_logger=False)
+LOGGER = sample.get_logger(use_stan_logger=False)
 
 
 @pytest.mark.parametrize("distname",
@@ -81,7 +81,7 @@ def test_stan_sampling_dataset(distname, allclose):
 @pytest.mark.parametrize("censoring", [False, True])
 @pytest.mark.parametrize("distname", ["GEV"])
 def test_bivariate_sampling_satisfactory(distname, copula, censoring, allclose):
-    LOGGER = sample.get_logger(stan_logger=True)
+    LOGGER = sample.get_logger(use_stan_logger=True)
 
     marginal = marginals.factory(distname)
 
@@ -150,7 +150,7 @@ def test_bivariate_sampling_satisfactory(distname, copula, censoring, allclose):
 
 
 def test_bivariate_sampling_problem(allclose):
-    LOGGER = sample.get_logger(stan_logger=True)
+    LOGGER = sample.get_logger(use_stan_logger=True)
 
     stan_nwarm = 10000
     stan_nsamples = 10000
@@ -201,7 +201,7 @@ def test_bivariate_sampling_problem(allclose):
 
 @pytest.mark.parametrize("varname", ["y", "z"])
 def test_bivariate_sampling_not_enough_data(varname, allclose):
-    LOGGER = sample.get_logger(stan_logger=True)
+    LOGGER = sample.get_logger(use_stan_logger=True)
 
     marginal = marginals.factory("GEV")
 
@@ -251,7 +251,7 @@ def test_bivariate_sampling_not_enough_data(varname, allclose):
 def test_bivariate_sampling_generalizedlogistic(allclose):
     pytest.skip("Taking too long. Needs fixing.")
 
-    LOGGER = sample.get_logger(stan_logger=True)
+    LOGGER = sample.get_logger(use_stan_logger=True)
 
     fd = FTESTS / "data" / "bivariate_GeneralizedLogistic" / "stan_args.json"
     with fd.open("r") as fo:
