@@ -33,11 +33,12 @@ dependencies = [
     "scipy>=1.13.0",
     "pandas>=2.0.0",
     "matplotlib>=3.10.9",
-    "hydrodiy"
+    "hydrodiy",
 ]
 
 [dependency-groups]
 dev = [
+    "statsmodels>=0.14.6",
     "anybadge>=1.16.0",
     "ruff>=0.15.12",
     "pytest>=8.3.5",
