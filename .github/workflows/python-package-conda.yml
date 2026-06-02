@@ -31,6 +31,7 @@ jobs:
 
       - name: Install CmdStan
         run: |
+          uv add cmdstanpy
           uv run python -c "
           import cmdstanpy, os, glob
           if not glob.glob(os.path.expanduser('~/.cmdstan/cmdstan-2.39.0')):
