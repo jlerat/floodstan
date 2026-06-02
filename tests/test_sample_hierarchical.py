@@ -174,7 +174,7 @@ def test_hierarchical_censored_sampling(nospace, shape_has_hierarchical,
         print(f"\tRho mean = {rhom[0]:0.2f} {rhom[1]:0.2f} {rhom[2]:0.2f}")
 
     tau = np.sqrt(df.filter(regex="^tau2\\[", axis=1))
-    taum = tau.mean()
+    taum = tau.mean().values
     print(f"\tTau mean = {taum[0]:0.2f} {taum[1]:0.2f} {taum[2]:0.2f}")
 
     dd = smp.diagnose()
@@ -232,7 +232,7 @@ def test_hierarchical_censored_sampling_big(allclose):
     # Set STAN
     stan_nwarm = 5000
     stan_nsamples = 5000
-    stan_nchains = 5
+    stan_nchains = 10
 
     # Prepare sampling data
     hv = sample.StanHierarchicalDataset(marginal, y_big, pcensor,
