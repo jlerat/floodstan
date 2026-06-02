@@ -23,9 +23,6 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
-      - name : Install floodstan package 
-        run: uv sync --locked --all-extras --dev
-
       - name: Cache CmdStan
         uses: actions/cache@v4
         with:
@@ -41,6 +38,9 @@ jobs:
           else:
               print('CmdStan 2.35.0 already cached')
           "
+
+      - name : Install floodstan package 
+        run: uv sync --locked --all-extras --dev
 
       - name: Lint with ruff
         run: |
