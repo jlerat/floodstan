@@ -30,7 +30,7 @@ jobs:
           key: cmdstan-${{ runner.os }}-2.39.0
 
       - name: Install CmdStan
-        run:
+        run: |
           if [ ! -d ~/.cmdstan/cmdstan-2.39.0 ]; then
             uvx --from cmdstanpy install_cmdstan --version 2.39.0
           else
