@@ -30,15 +30,12 @@ jobs:
           key: cmdstan-${{ runner.os }}-2.39.0
 
       - name: Install CmdStan
-        run: |
-          uv add cmdstanpy
-          uv run python -c "
-          import cmdstanpy, os, glob
-          if not glob.glob(os.path.expanduser('~/.cmdstan/cmdstan-2.39.0')):
-              cmdstanpy.install_cmdstan(version='2.39.0')
-          else:
-              print('CmdStan 2.35.0 already cached')
-          "
+        run:
+          if [ ! -d ~/.cmdstan/cmdstan-2.39.0 ]; then
+            uvx --from cmdstanpy install_cmdstan --version 2.39.0
+          else
+            echo "CmdStan 2.35.0 already cached, skipping install"
+          fi
 
       - name : Install floodstan package 
         run: uv sync --locked --all-extras --dev
