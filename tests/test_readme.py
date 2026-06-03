@@ -36,7 +36,12 @@ def test_readme():
             snipet.append(line)
 
     # Run snipets
+    tested = 0
     for snipet in snipets:
+        if len(snipet) == 0:
+            continue
+
+        tested += 1
         code = snipet[1:-1]
         ftest = FTESTS / "test_readme_snipet.py"
         with ftest.open("w") as fo:
@@ -56,3 +61,4 @@ def test_readme():
                        capture_output=True,
                        check=True)
 
+    assert tested > 0
