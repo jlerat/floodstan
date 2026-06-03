@@ -24,7 +24,7 @@ jobs:
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
       - name: Cache CmdStan
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cmdstan
           key: cmdstan-${{ runner.os }}-2.39.0
@@ -63,13 +63,13 @@ jobs:
                 "https://api.github.com/gists/${{ secrets.COVERAGE_GIST_ID }}"
 
       - name: Upload pytest test log files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-logs
           path: tests/*.log
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-coverage
           path: htmlcov/*.*
