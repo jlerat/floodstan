@@ -63,6 +63,12 @@ def load_stan_model(name: str,
         warnings.warn(warnmess)
 
         stan_file = sf_folder / f"{stan_name}.stan"
+
+        if not stan_file.exists():
+            warnmess = "File {stan_file} does not exist. Can't load model."
+            warnings.warn(warnmess)
+            return None
+
         model = cmdstanpy.CmdStanModel(stan_file=stan_file,
                                        stanc_options={"O1": True})
         try:
