@@ -39,8 +39,25 @@ Stan models are provided in the [stan](src/floodstan/stan) folder, including:
 * Stan model to perform bivariate inference: [bivariate\_censored.stan](src/floodstan/stan/bivariate_censored.stan)
 
 # Installation
-- Create a suitable python environment. We recommend using [miniconda](https://docs.conda.io/projects/miniconda/en/latest/) combined with the environment specification provided in the [env\_floodstan.yml](env_floodstan.yml) file in this repository.
-- Git clone this repository and run `pip install .`
+- Git clone this repository locally.
+
+- Move to the repository folder.
+
+- If using the [uv](https://docs.astral.sh/uv) python package manager (recommended), run the following commands:
+1. Install cmdstan from source
+```
+uvx --from cmdstanpy install_cmdstan --version 2.39.0
+```
+2. Install the floodstan package in the local venv
+```
+uv sync --locked
+```
+
+- Otherwise, a [conda](https://docs.conda.io/projects/miniconda/en/latest/) environment can be created using the [env\_floodstan.yml](env_floodstan.yml) file in this repository. Once created, 
+the floodstan package can be installed by running
+```
+pip install .
+```
 
 # Basic use
 
