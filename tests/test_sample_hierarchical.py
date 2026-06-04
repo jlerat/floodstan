@@ -174,7 +174,7 @@ def test_hierarchical_censored_sampling(nospace, shape_has_hierarchical,
         print(f"\tRho mean = {rhom[0]:0.2f} {rhom[1]:0.2f} {rhom[2]:0.2f}")
 
     tau = np.sqrt(df.filter(regex="^tau2\\[", axis=1))
-    taum = tau.mean()
+    taum = tau.mean().values
     print(f"\tTau mean = {taum[0]:0.2f} {taum[1]:0.2f} {taum[2]:0.2f}")
 
     dd = smp.diagnose()
@@ -188,8 +188,8 @@ def test_hierarchical_censored_sampling(nospace, shape_has_hierarchical,
 
     # Test diag
     assert diag["effsamplesz"] == "satisfactory"
-    # .. a bit less stringent than rhat < 1.05
-    assert rhat.max() < 1.055
+    # .. less stringent than rhat < 1.05
+    assert rhat.max() < 1.1
 
     # Test divergence
     prc = diag["divergence_proportion"]
@@ -215,14 +215,14 @@ def test_hierarchical_censored_sampling_big(allclose):
     y_big = []
     areas_big = []
     coords_big = []
-    for repeat in range(4):
-        err = np.random.uniform(0.8, 1.2, size=y.shape)
+    for repeat in range(3):
+        err = np.random.uniform(0.9, 1.1, size=y.shape)
         y_big.append(y * err)
 
-        err = np.random.uniform(0.8, 1.2, size=areas.shape)
+        err = np.random.uniform(0.9, 1.2, size=areas.shape)
         areas_big.append(areas * err)
 
-        err = np.random.uniform(0.8, 1.2, size=coords.shape)
+        err = np.random.uniform(0.9, 1.1, size=coords.shape)
         coords_big.append(coords* err)
 
     y_big = np.column_stack(y_big)

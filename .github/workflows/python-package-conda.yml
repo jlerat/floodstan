@@ -13,99 +13,63 @@ jobs:
       run:
         shell: bash -l {0}
     steps:
-      - uses: actions/checkout@v2
-      
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v3
+      - uses: actions/checkout@v6
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.10'
-     
-      - name: Add conda to system path
+          python-version-file: "pyproject.toml"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Cache CmdStan
+        uses: actions/cache@v5
+        with:
+          path: ~/.cmdstan
+          key: cmdstan-${{ runner.os }}-2.39.0
+
+      - name: Install CmdStan
         run: |
-          # $CONDA is an environment variable pointing to the root of the miniconda directory
-          echo $CONDA/bin >> $GITHUB_PATH
-      
-      - name: Create conda environment if needed
+          if [ ! -d ~/.cmdstan/cmdstan-2.39.0 ]; then
+            uvx --from cmdstanpy install_cmdstan --version 2.39.0
+          else
+            echo "CmdStan 2.35.0 already cached, skipping install"
+          fi
+
+      - name : Install floodstan package 
+        run: uv sync --locked --all-extras --dev
+
+      - name: Lint with ruff
         run: |
-           source $CONDA/etc/profile.d/conda.sh || true
-           conda env create -f env_floodstan.yml || true
-
-      - name : Install hydrodiy package in conda env 
-        run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_floodstan
-          echo "Conda env: "
-          conda info --envs | grep '*' | sed 's/.*\* //g'
-
-          cd $GITHUB_WORKSPACE
-          mkdir -p src
-          cd src
-          git clone https://github.com/csiro-hydroinformatics/hydrodiy.git
-          cd hydrodiy
-          
-          echo "--- hydrodiy install : located in $PWD ---"
-          # .. create a tmp directory for pip install
-          mkdir -p tmp
-          export TMPDIR=tmp
-
-          python -m pip uninstall -y hydrodiy || true
-          python -m pip install -e .
-
-      - name : Install floodstan package in conda env 
-        run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_floodstan
-          echo "Conda env: "
-          conda info --envs | grep '*' | sed 's/.*\* //g'
-
-          cd $GITHUB_WORKSPACE
-          echo "--- floodstan install : located in $PWD ---"
-          # .. use tmp directory big enough
-          export TMPDIR=$RCONDA/tmp
-          
-          python -m pip uninstall -y floodstan || true
-          python -m pip install -e .
-
-      - name: Lint with flake8
-        run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_floodstan
-          echo "Conda env: "
-          conda info --envs | grep '*' | sed 's/.*\* //g'
-
-          cd $GITHUB_WORKSPACE
-          flake8 src/floodstan
+          uv run ruff check src/floodstan
 
       - name: Run tests
         run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_floodstan
-          echo "Conda env: "
-          conda info --envs | grep '*' | sed 's/.*\* //g'
-
-          cd $GITHUB_WORKSPACE
-          echo "--- floodstan test : located in $PWD ---"
-          pytest --durations=10 --ignore=src/hydrodiy --cov=floodstan --cov-report=xml --cov-report=html --cov-report=term-missing tests
-      
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: pytest-coverage
-          path: htmlcov/*.*
-
+          set -e
+          uv run --locked pytest --durations=10 --cov=floodstan --cov-report=xml --cov-report=html -cov-report=term-missing tests
+ 
       - name: Parse coverage report and create badge
         run: |
-          source $CONDA/etc/profile.d/conda.sh
-          conda activate env_floodstan
-          echo "Conda env: "
-          conda info --envs | grep '*' | sed 's/.*\* //g'
-
-          python -c "import xml.etree.ElementTree as ET; from anybadge import Badge; cov = float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100; covbadge = Badge('Coverage', value=f'{cov:0.0f}%', thresholds={60:'red', 70:'orange', 80:'lightgreen', 90:'green'}); covbadge.write_badge('coverage_badge.svg', True)"
+          uv run python -c "import xml.etree.ElementTree as ET; from anybadge import Badge; cov = float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100; covbadge = Badge('Coverage', value=f'{cov:0.0f}%', thresholds={60:'red', 70:'orange', 80:'lightgreen', 90:'green'}); covbadge.write_badge('coverage_badge.svg', True)"
 
       - name: Update gist badge
         run: |
+          set -e
           sed 's/\"/\\\"/g' coverage_badge.svg > coverage_badge.txt
           echo "{\"files\": {\"coverage_badge.svg\": {\"content\": \"$(cat coverage_badge.txt)\"}}}" > coverage_badge.json
           curl -X PATCH -H "Authorization: token ${{ secrets.COVERAGE_GIST_TOKEN }}" \
                 -d @coverage_badge.json \
                 "https://api.github.com/gists/${{ secrets.COVERAGE_GIST_ID }}"
+
+      - name: Upload pytest test log files
+        uses: actions/upload-artifact@v7
+        with:
+          name: pytest-logs
+          path: tests/*.log
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: pytest-coverage
+          path: htmlcov/*.*

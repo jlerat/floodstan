@@ -36,7 +36,12 @@ def test_readme():
             snipet.append(line)
 
     # Run snipets
+    tested = 0
     for snipet in snipets:
+        if len(snipet) == 0:
+            continue
+
+        tested += 1
         code = snipet[1:-1]
         ftest = FTESTS / "test_readme_snipet.py"
         with ftest.open("w") as fo:
@@ -47,8 +52,7 @@ def test_readme():
                 fo.write(" "*4 + line)
 
         # Check python syntax
-        arg = f"--ignore=E302,W291,W293,E501"
-        subprocess.run(["flake8", arg, str(ftest)],
+        subprocess.run(["uv", "run", "ruff", "check", str(ftest)],
                        capture_output=True,
                        check=True)
 
@@ -57,3 +61,4 @@ def test_readme():
                        capture_output=True,
                        check=True)
 
+    assert tested > 0
