@@ -55,7 +55,7 @@ Repository = "https://github.com/jlerat/floodstan"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"*" = ["*.pyx", "*.pxd", "*.c", "*.h", "*.stan"]
+"*" = ["*.pyx", "*.pxd", "*.c", "*.h", "*.stan", "*.stanfunctions"]
 
 [tool.uv]
 no-build-isolation-package = ["floodstan"]
