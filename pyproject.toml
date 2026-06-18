@@ -1,9 +1,9 @@
 [build-system]
 requires = [
     "wheel",
-    "setuptools >= 64",
-    "cython >= 3.0.10",
-    "numpy >= 1.26.4",
+    "setuptools >= 82",
+    "cython >= 3.2.5",
+    "numpy >= 2.4.6",
     "cmdstanpy >= 1.2.5"
 ]
 build-backend = "setuptools.build_meta"
@@ -14,7 +14,8 @@ version = "2.2"
 authors = [{name = "Julien Lerat, CSIRO Environment", email="julien.lerat@csiro.au"}]
 description = "Flood frequency analysis using Stan"
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["flood frequency analysis", "flood", "hydrology"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -24,15 +25,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Scientific/Engineering :: Hydrology"
 ]    
-requires-python = ">= 3.10"
+requires-python = ">= 3.11"
 dependencies = [
-    "setuptools",
-    "cython >= 3.0.10",
-    "numpy>=1.26.4",
-    "cmdstanpy>=1.2.5",
-    "scipy>=1.13.0",
-    "pandas>=2.0.0",
-    "matplotlib>=3.10.9",
+    "setuptools >= 82",
+    "cython >= 3.2.5",
+    "numpy >= 2.4.6",
+    "cmdstanpy >= 1.2.5",
+    "scipy >= 1.17.1",
+    "pandas >= 3.0.3",
+    "matplotlib >= 3.11.0",
     "hydrodiy",
 ]
 
