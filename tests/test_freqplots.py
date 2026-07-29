@@ -54,15 +54,27 @@ def test_cdf_to_reduced_variate_gumbel(allclose):
     assert allclose(rv, expected, rtol=0, atol=1e-2)
 
 
-def test_plot_data():
+@pytest.mark.parametrize("ptype",
+                         freqplots.PLOT_TYPES)
+def test_plot_data(ptype):
     streamflow = get_ams("203014")
-    for plot_type in freqplots.PLOT_TYPES:
-        plt.close("all")
-        fig, ax = plt.subplots()
-        freqplots.plot_data(ax, streamflow, plot_type)
-        freqplots.add_aep_to_xaxis(ax, plot_type)
-        fp = FIMG / f"freqlots_data_{plot_type}.png"
-        fig.savefig(fp)
+    plt.close("all")
+    fig, ax = plt.subplots()
+    freqplots.plot_data(ax, streamflow, ptype)
+    freqplots.add_aep_to_xaxis(ax, ptype)
+    fp = FIMG / f"freqlots_data_{ptype}.png"
+    fig.savefig(fp)
+
+
+def test_plot_aep():
+    streamflow = get_ams("203014")
+    plt.close("all")
+    fig, ax = plt.subplots()
+    plot_type = "gumbel"
+    freqplots.plot_data(ax, streamflow, plot_type)
+    freqplots.add_aep_to_xaxis(ax, plot_type, ytxt=0.9)
+    fp = FIMG / f"freqlots_data_{plot_type}.png"
+    fig.savefig(fp)
 
 
 @pytest.mark.parametrize("ptype",
