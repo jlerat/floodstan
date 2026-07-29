@@ -85,6 +85,7 @@ def xaxis_label(ax, plot_type):
 
 def add_aep_to_xaxis(ax, plot_type, full_line=True,
                      return_periods=[5, 10, 50, 100, 200],
+                     ytxt=0.,
                      kwargs_plot=None, kwargs_text=None):
     """ Add annual exceedance probabilities (AEP) to x axis.
 
@@ -96,6 +97,8 @@ def add_aep_to_xaxis(ax, plot_type, full_line=True,
         Plot type. See fplots.PLOT_TYPES.
     return_periods : list
         List of reference return periods to plot.
+    ytxt : float
+        y coordinate of labels in ax coordinates (i.e. in [0, 1]).
     """
     aeps = 1. / np.array(return_periods) * 100
     xpos = cdf_to_reduced_variate(1 - aeps / 100, plot_type)
@@ -115,11 +118,11 @@ def add_aep_to_xaxis(ax, plot_type, full_line=True,
         kwargs_text = kwt
 
     # Handle non-linear axis transforms
-    delta = 0.02
     y0, y1 = ax.get_ylim()
     fun = (ax.transAxes + ax.transData.inverted()).transform
+    delta = 0.02
     _, y0d1 = fun((0, delta))
-    _, y0d2 = fun((0, 2 * delta))
+    _, y0d2 = fun((0, ytxt + 2 * delta))
 
     for retper, aep, x in zip(return_periods, aeps, xpos):
         ax.plot([x, x], [y0, y0d1], **kwp)

@@ -34,7 +34,7 @@ jobs:
           if [ ! -d ~/.cmdstan/cmdstan-2.39.0 ]; then
             uvx --from cmdstanpy install_cmdstan --version 2.39.0
           else
-            echo "CmdStan 2.35.0 already cached, skipping install"
+            echo "CmdStan 2.39.0 already cached, skipping install"
           fi
 
       - name : Install floodstan package 

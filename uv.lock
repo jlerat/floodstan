@@ -407,7 +407,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "pandas", specifier = ">=3.0.3" },
     { name = "scipy", specifier = ">=1.17.1" },
-    { name = "setuptools" },
+    { name = "setuptools", specifier = ">=82" },
 ]
 
 [package.metadata.requires-dev]
